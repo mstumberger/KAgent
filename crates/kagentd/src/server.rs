@@ -1,0 +1,184 @@
+//! HTTP server: router, Host check, bearer auth, static web/dist.
+
+use std::sync::Arc;
+
+use axum::extract::Request;
+use axum::http::StatusCode;
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{any, get, post, put};
+use axum::Router;
+use serde_json::json;
+
+use crate::api;
+use crate::ws;
+use crate::AppState;
+
+/// Constant-time token compare (no early exit on mismatch).
+pub fn token_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+pub fn error_body(code: &str, message: impl Into<String>) -> String {
+    json!({"error": {"code": code, "message": message.into()}}).to_string()
+}
+
+pub struct HttpError(pub StatusCode, pub &'static str, pub String);
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (
+            self.0,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            error_body(self.1, self.2),
+        )
+            .into_response()
+    }
+}
+
+pub type ApiResult<T> = Result<T, HttpError>;
+
+pub fn bad_request(msg: impl Into<String>) -> HttpError {
+    HttpError(StatusCode::BAD_REQUEST, "invalid_input", msg.into())
+}
+pub fn not_found(msg: impl Into<String>) -> HttpError {
+    HttpError(StatusCode::NOT_FOUND, "not_found", msg.into())
+}
+
+async fn host_check(req: Request, next: Next) -> Response {
+    let ok = req
+        .headers()
+        .get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .is_some_and(|h| h == "127.0.0.1:7878" || h == "localhost:7878");
+    if !ok {
+        return (
+            StatusCode::MISDIRECTED_REQUEST,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            error_body("misdirected", "Host header must be 127.0.0.1:7878 or localhost:7878"),
+        )
+            .into_response();
+    }
+    next.run(req).await
+}
+
+async fn bearer_auth(state: axum::extract::State<Arc<AppState>>, req: Request, next: Next) -> Response {
+    let token = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "));
+    match token {
+        Some(t) if token_eq(t, &state.token) => next.run(req).await,
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            error_body("unauthorized", "missing or wrong bearer token"),
+        )
+            .into_response(),
+    }
+}
+
+pub fn router(state: Arc<AppState>) -> Router {
+    let api_routes = Router::new()
+        .route("/state", get(api::get_state))
+        .route("/settings", put(api::put_settings))
+        .route("/providers/templates", get(api::provider_templates))
+        .route("/providers", get(api::list_providers).post(api::add_provider))
+        .route("/providers/order", put(api::provider_order))
+        .route("/providers/{id}", put(api::update_provider).delete(api::delete_provider))
+        .route("/providers/{id}/fetch-models", post(api::fetch_models))
+        .route("/providers/{id}/test", post(api::test_provider))
+        .route("/models", get(api::list_models))
+        .route("/tools", get(api::list_tools))
+        .route("/tools/{name}/call", post(api::call_tool))
+        .route("/sessions", get(api::list_sessions).post(api::create_session))
+        .route("/sessions/{id}", get(api::get_session).delete(api::delete_session))
+        .route("/sessions/{id}/messages", post(api::post_message))
+        .route("/sessions/{id}/cancel", post(api::cancel_session))
+        .route("/approvals/{id}", post(api::resolve_approval))
+        .route("/stop-all", post(api::stop_all))
+        .route("/system", get(api::get_system))
+        .route("/doctor", get(api::get_doctor))
+        .route("/audit", get(api::get_audit))
+        .route("/audit/verify", get(api::verify_audit))
+        .route("/alerts", get(crate::watch::http::list))
+        .route("/alerts/{id}/ack", post(crate::watch::http::ack))
+        .route("/alerts/{id}/investigate", post(crate::watch::http::investigate))
+        .route("/net", get(crate::net::tools::http::status))
+        .route("/net/router", put(crate::net::tools::http::configure))
+        .route("/net/devices", get(crate::net::tools::http::devices))
+        .route("/net/top", get(crate::net::tools::http::top))
+        .route("/net/unblock", post(crate::net::tools::http::unblock))
+        .route("/sentinel", get(crate::sentinel::http::status))
+        .route("/sentinel/honeytokens", post(crate::sentinel::http::honeytokens))
+        .route("/sentinel/rebaseline", post(crate::sentinel::http::rebaseline))
+        .route("/changes", get(api::list_changes))
+        .route("/changes/{id}/undo", post(api::undo_change))
+        .route("/tasks", get(crate::tasks::http::list).post(crate::tasks::http::add))
+        .route("/tasks/{id}", put(crate::tasks::http::update).delete(crate::tasks::http::delete))
+        .route("/tasks/{id}/run", post(crate::tasks::http::run))
+        .route("/ui/report", post(crate::ui::http::report))
+        .route("/ui/window", post(crate::ui::http::window))
+        .route("/ui/frame", post(crate::ui::http::frame))
+        .route("/ui/snapshot/{id}", post(crate::ui::http::snapshot))
+        .route("/voice/levels", get(crate::voice_levels::http::levels))
+        .route("/voice/demo", post(crate::voice_levels::http::demo))
+        .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
+
+    let app = Router::new()
+        .nest("/api", api_routes)
+        .route("/ws", any(ws::ws_handler))
+        .route("/live", any(crate::live::ws_live));
+
+    // Static web UI when web/dist exists (SPA fallback to index.html, no auth: the app
+    // reads the token from the URL fragment). Added before the layers below so the Host
+    // check covers static files too (DNS rebinding).
+    let dist = crate::paths::Paths::resolve().web_dist();
+    let app = if dist.is_dir() {
+        let index = dist.join("index.html");
+        let serve_dir = tower_http::services::ServeDir::new(&dist)
+            .not_found_service(tower_http::services::ServeFile::new(index));
+        app.fallback_service(serve_dir)
+    } else {
+        app
+    };
+    app.layer(middleware::from_fn(host_check))
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
+        .with_state(state)
+}
+
+pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
+    let app = router(state.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:7878").await?;
+    {
+        let s = state.settings.read().unwrap();
+        crate::startup::greet(&s.startup.greeting, &s.persona);
+    }
+    let url = format!("http://127.0.0.1:7878/#token={}", state.token);
+    println!("kagentd {} listening on http://127.0.0.1:7878", state.version);
+    println!("open {url}");
+    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    Ok(())
+}
+
+/// Ctrl+C or SIGTERM (systemd stop): finish in-flight requests, then return.
+async fn shutdown_signal() {
+    let term = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut s) => {
+                s.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {},
+        _ = term => {},
+    }
+    tracing::info!("shutdown requested");
+}

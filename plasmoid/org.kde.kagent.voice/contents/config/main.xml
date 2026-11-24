@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="port" type="Int"><default>7878</default></entry>
+    <entry name="tokenPath" type="String"><default>~/.config/kagent/token</default></entry>
+    <entry name="style" type="String"><default>bars</default></entry>
+    <entry name="fps" type="Int"><default>20</default></entry>
+    <entry name="showLabel" type="Bool"><default>true</default></entry>
+  </group>
+</kcfg>

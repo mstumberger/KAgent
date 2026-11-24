@@ -1,0 +1,378 @@
+# Spec: acceptance scenarios
+
+Given / When / Then per stage. A stage is done when its scenarios pass (automated
+where marked **[auto]**, otherwise run manually once and note the result in
+IMPLEMENTATION.md section E). Test model: Ollama `qwen2.5:7b-instruct`. All daemon
+scenarios run with `KAGENT_HOME=$(mktemp -d)` unless stated.
+
+## S0-S1 core and read-only tools
+1. **[auto]** Given the workspace, when `cargo test --workspace`, then all tests pass
+   and `cargo clippy --workspace -- -D warnings` is clean.
+2. **[auto]** Given `examples/tools_smoke.rs`, when run, then every RO tool returns
+   `ok` (sections may say `unavailable`) within 5 s each.
+3. **[auto]** `shell` assessment table (tools.md section 5) classifies all cases.
+4. **[auto]** `journal` argv builder rejects `since: "x; rm -rf /"`.
+5. **[auto]** Agent loop with a scripted fake model: model asks for 2 RO calls + 1 MUT
+   call in one response -> the 2 RO run in parallel, the MUT asks the broker; deny ->
+   tool result says "not executed: the user denied this action"; next model request
+   contains 3 tool results in call order.
+6. **[auto]** Cancel during a pending approval -> turn status `cancelled`, every tool
+   call has a result, no dangling call in the stored session.
+7. **[auto]** Session file with an assistant tool call but no result (crash) ->
+   `sanitize_history` inserts a synthetic error result.
+
+## S2 providers
+1. **[auto]** Import script produces a file with >= 20 templates incl. `anthropic`,
+   `openai`, `ollama`, `gemini`; no template with `zhipu-account`.
+2. **[auto]** Rule precedence: model rule says contextWindow 100k, api rule 150k,
+   site rule 200k -> resolved 200k; personal config 50k -> 50k.
+3. **[auto]** Add from template twice -> ids `anthropic`, `anthropic-2`.
+4. **[auto]** Masking: `sk-ant-abcdefghijkl1234` -> `sk-...1234`; short key -> `****`.
+5. **[auto]** File written with mode 0600; reload equals saved.
+
+## S3 adapters
+1. **[auto]** Each SSE fixture (text + one tool call, arguments split across 3 chunks)
+   -> ModelResponse with exact text, one ToolCall with parsed JSON input, usage set.
+2. **[auto]** SSE parser handles `\r\n`, comments (`:` lines), event split across
+   chunk boundaries.
+3. **[auto]** Invalid tool-argument JSON -> input `{"_raw": "..."}`, no panic.
+4. **[auto]** 429 then 200 -> one retry, success; cancel before first byte -> error
+   returned within 200 ms.
+5. **[gated auto]** `KAGENT_IT=1`: Ollama tool round trip: ask "call system_info" with
+   a single tool spec -> model emits a tool call.
+
+## S4 daemon
+1. **[auto]** Wrong Host header -> 421; missing token -> 401; correct -> 200.
+2. **[auto script]** `scripts/smoke-api.sh`: add Ollama provider, set chatModel, create
+   session, send "What kernel version am I running? Use your tools.", turn finishes
+   `completed` within 120 s, session has a tool message from `system_info` or
+   `kernel_info`, final answer contains the string from `uname -r`.
+3. Send a second message while the first turn runs -> response `queued`; it appears
+   as a user message before the next model request (steering).
+4. DELETE a running session -> turn cancelled, files removed.
+
+## S5 web
+1. Open the printed URL -> token stored, hash cleared, chat loads.
+2. Ask "list the 5 processes using the most memory" -> streaming text, a
+   `process_list` tool card with input/output/duration.
+3. Start `sleep 600` in a terminal; ask "kill the sleep 600 process" -> approval card
+   (risk high) -> Deny -> model reports it did not kill; repeat -> Allow once -> killed.
+4. Providers page: add Anthropic template with a fake key -> test shows an auth error
+   (not a crash); key shown masked; reload page -> masked again.
+5. Permission mode read-only -> mutating calls are denied without a card.
+
+## S6 audit + kill switch
+1. **[auto]** 3 tool calls -> 3+ audit records; `GET /api/audit/verify` ok; edit one
+   byte in the file -> verify reports that seq.
+2. **[auto]** Tool running `sleep 60` (shell) -> `POST /api/stop-all` -> process group
+   gone within 3 s, turn `cancelled`.
+3. **[auto]** Input field `password` appears redacted in the audit record.
+
+## S7 diagnostics + skills
+1. Ask "my machine feels slow, check it" -> model calls `load_skill slow-machine`,
+   then at least `system_info`, `process_list`; answer names the top consumer.
+2. Ask "why is boot slow?" -> `boot_analysis` used; answer cites the top blame entries.
+3. Ask "is my nvidia driver ok after the last kernel update?" -> `drivers` +
+   `kernel_info` used; answer states DKMS status for the running kernel.
+4. **[auto]** Skills loader reads frontmatter `name`, `description`; missing
+   frontmatter -> skill skipped with a warning.
+
+## S8 change layer
+1. **[auto]** priv validation table (priv-ops.md section 5) passes.
+2. Helper not installed -> a PRIV call returns a clear error with the install hint;
+   `GET /api/state` shows `privHelper: "missing"`.
+3. "Set swappiness to 10" -> approval card shows `sysctl vm.swappiness=10 (persist)`
+   -> allow -> `/proc/sys/vm/swappiness` is 10, `/etc/sysctl.d/99-kagent.conf` has the
+   line, change listed -> Undo -> value back to the old one, file restored.
+4. "Install htop" -> card shows the apt simulation -> deny -> nothing installed.
+5. "Restart bluetooth" -> PRIV card -> allow -> unit restarted, change recorded
+   (no undo available, card says so).
+6. `edit_file` on a home file with `old` occurring twice -> error with count 2.
+7. Ask to stop `dbus.service` -> refused by validation with an explanation.
+
+## S9 desktop
+1. "Switch audio output to <headphones>" -> `audio_control set_default`; `wpctl status`
+   shows the new default.
+2. "Connect <bt device>" -> connected; "dark mode" -> colorscheme applied.
+3. Provider key migrated to Secret Service: `providers.json` has `apiKey: ""` +
+   `apiKeyRef`; daemon restart still works.
+
+## S10 voice
+1. **[auto]** Setup message builder output matches a golden JSON (model, voice, tools
+   converted to Gemini schema with uppercase types, resumption, compression).
+2. **[auto]** Fake socket: `toolCall` with 2 functionCalls -> 2 `execute_call`s ->
+   one `toolResponse` with both ids in order.
+3. **[auto]** `goAway` -> reconnect with the stored handle; browser socket stays open
+   (fake upstream).
+4. Manual: say "what is my CPU temperature?" -> spoken answer with the value; interrupt
+   mid-answer -> playback stops within 300 ms.
+5. Manual: say "restart bluetooth" -> approval card appears in the UI, model says it is
+   waiting; click allow -> it confirms by voice.
+6. After the session, the text session contains the voice transcript (via voice).
+
+## S11 Tauri
+1. Hotkey shows the overlay with the orb; speaking animates it; Escape hides it.
+2. Tray "Stop all" works like `POST /api/stop-all`.
+3. Closing the main window keeps the daemon and tray running.
+
+## S12 MCP
+1. MCP inspector lists only tools from `mcpToolGroups`; `system_info` returns data.
+2. A MUT tool via MCP raises an approval card in the KAgent UI; deny -> MCP result says
+   denied; audit has session id `mcp`.
+
+## S13 watchers
+1. **[auto]** Each matcher fixture (alerts.md section 6).
+2. `logger -t sshd "Failed password for invalid user test from 203.0.113.9 port 1 ssh2"`
+   x12 within a minute -> one `ssh-bruteforce` alert, count 12, one notification.
+3. Fill a test loop-mounted ext4 image to 95% -> `disk-space` review alert.
+4. "Investigate" on an alert -> new session with the evidence, model proposes a fix.
+
+## S14 intrusion detection
+1. Enable honeytokens -> 4 files created, listed in `honeytokens.json`.
+2. `cat ~/.aws/credentials.legacy` from a terminal -> `honeytoken-access` high alert
+   within 2 s (with pid/comm when the bpftrace stream is enabled).
+3. Add a line to `~/.ssh/authorized_keys` -> `persist-authorized-keys` high alert with
+   the key fingerprint within 10 min (or immediately via inotify).
+4. Create `~/.config/systemd/user/x.service` with `ExecStart=/tmp/x` -> high.
+5. A change applied through KAgent (S8 sysctl persist) does not raise a baseline alert.
+6. Stop the daemon -> within 5 min a critical desktop notification "KAgent stopped".
+
+## S15 MikroTik
+1. **[auto]** REST fixtures parse into devices; IPFIX fixture (template + data set)
+   decodes to the expected flow rows.
+2. With the owner's router: `lan_devices` lists devices with first-seen; a phone joining
+   Wi-Fi raises `lan-new-device`.
+3. `nmap -p 1-1000 <router>` from a LAN laptop -> the laptop appears in `scanners`;
+   `router-scanner` review alert.
+4. `router_block_ip 203.0.113.9` -> approval (high, not rememberable) -> entry exists
+   in `kagent-block` with timeout; undo removes it.
+5. Router powered off -> `router-unreachable` info after 10 min, no crash.
+
+## S16 eBPF
+1. "What is writing to my disk right now?" -> `trace io-by-process` (PRIV card) ->
+   answer lists top processes by bytes.
+2. **[auto]** Unknown script id or seconds 60 -> rejected by the helper.
+3. Each script runs once without bpftrace errors on this machine (log fixes in E).
+
+## Voice levels + KDE widget (added in review, 2026-11-24)
+1. **[auto]** `voice_levels` tests: envelope of silence/tone, speaking -> idle state
+   transitions, seq-based polling without repeats, ring + poll cap.
+2. Daemon running, widget installed: `POST /api/voice/demo` -> widget shows blue bars
+   labelled "Speaking", then green bars labelled "Listening". (Verified 2026-11-24 with
+   `plasmawindowed org.kde.kagent.voice`.)
+3. A chat turn running -> widget shows the scanner sweep with "Thinking..."; an approval
+   card pending -> red sweep, "Waiting for your approval", plasmoid needs-attention.
+4. Daemon stopped -> "KAgent is not running", polling backs off to 2 s; daemon restarted
+   with a new token -> widget recovers within 5 s (401 -> token re-read).
+5. S10: during a live session the widget follows real mic and model audio with < 200 ms
+   visible lag.
+
+Phase 4 (S17-S33, planned 2026-11-24). Same rules: daemon scenarios with
+`KAGENT_HOME=$(mktemp -d)` unless stated. Each stage also runs the unit tests its spec
+lists under "Tests".
+
+## S17 agent foundations
+1. **[auto]** A turn cancelled after two text deltas: `wait` returns `Cancelled` and
+   `text` holds both deltas.
+2. **[auto]** A tool future that panics: the turn ends `Failed` with "internal error",
+   `TurnFinished` is emitted, and the same session runs a next turn.
+3. **[auto]** "This session" allowed in session A for `shell ls`: the same call in
+   session B still shows a card.
+4. **[auto]** `PUT /api/settings {"startup":{"greeting":{"enabled":false}}}` keeps
+   `startup.autostart` and the greeting text.
+5. **[auto]** `PUT /api/settings {"voice":{"bran":"routed"}}` -> 400 with
+   `did you mean "brain"`.
+6. **[auto]** A group missing from `GROUP_PRIORITY` is advertised when the budget allows.
+7. **[auto]** The guard table: with `KAGENT_HOME` set, or from a `target/` binary while
+   the unit points to a release binary, the systemd unit is not rewritten.
+8. **[auto script]** `scripts/smoke-api.sh` passes; `systemctl --user cat kagentd.service`
+   shows the same `ExecStart` before and after it.
+
+## S18 skills library core
+1. **[auto]** The 12 real frontmatter fixtures parse to the expected name, description
+   and body; the three the old loader dropped (`discernment-nudge`, `claude-api`,
+   `academy-guide`) parse.
+2. **[auto]** With `<config>/skills/alpha` present the index lists `alpha` and every
+   bundled skill; a `beta` directory added between two turns is in the next prompt
+   without a restart.
+3. **[auto]** A user skill named like a bundled one wins; `skills.disabled` with a
+   bundled name hides it from the index and `load_skill` refuses it.
+4. **[auto]** With `indexBudgetChars` 500 the index holds full lines up to the cap and
+   then one names-only line.
+5. **[auto]** `load_skill` returns the body with `${CLAUDE_SKILL_DIR}` replaced by the
+   skill directory and counts a use.
+6. With Ollama, "my machine feels slow, check it" still calls `load_skill
+   slow-machine` (regression of S7 scenario 1).
+
+## S19 settings screen
+1. `#view=settings` opens the last section; `#view=settings&section=tools` opens Tools
+   and permissions; `#view=providers` opens Models.
+2. Every section of the registry opens from the menu without a console error, dark and
+   light, at 1200x820 and at 700x500 (headless Chrome, screenshots checked).
+3. Type a persona name, then toggle "Greet me": the typed name is still there; one PUT
+   per change; no second `GET /api/state` for `settingsChanged`.
+4. `ui show {view: "settings", section: "browser"}` opens the Browser section.
+5. `pnpm -C web dev` against the running daemon: a chat message streams its answer.
+6. Tools and permissions shows `toolOverrides` per tool and the `tasks` group chip.
+
+## S20 skills UI and self-authoring
+1. Settings -> Skills lists bundled and user skills with source badges; switching a
+   bundled skill off removes it from the next prompt.
+2. "New skill" with an invalid name shows a field error; a valid one appears in the
+   list and in the next prompt.
+3. In chat, "remember how you fixed the bluetooth problem as a skill": `skill_save`, a
+   card with the text, allow, the file exists under `<config>/skills` and `load_skill`
+   returns it.
+4. `skill_delete` on a bundled skill -> error naming the source; on a user skill ->
+   card -> allow -> the directory is gone.
+5. `/` in the composer lists the skills; `/slow-machine it lags after login` runs the
+   turn with the skill body in every model request of that turn, and the stored user
+   message is only the text.
+6. `skill-creator` is listed and loads.
+
+## S21 skill import and sources
+1. **[auto]** Import plan from two source folders that share a real path: one entry; an
+   existing name is skipped with `name exists`.
+2. Import three skills from `~/.agents/skills` in copy mode: they appear switched off;
+   enable one: it is in the next prompt.
+3. Import one in symlink mode, then delete it: the link is gone and the target folder
+   still has its `SKILL.md`.
+4. Add `https://github.com/obra/superpowers` with subdir `skills`: a clone under
+   `<data>/skill-sources/`, its skills listed disabled, the commit in
+   `skill-sources.json`.
+5. Change a file in a local-path source and sync: the skill is `updated` and disabled
+   again; a removed skill is reported `removed`.
+6. **[auto]** A source URL that is neither https nor an absolute path -> 400 before any
+   command runs.
+
+## S22 context compaction
+1. **[auto]** Scripted model, 32k window, a 60-message history: one summarize call; the
+   next request starts with the summary message; the session file is unchanged; the
+   meta holds `summary` and `summaryUpto`.
+2. **[auto]** 16k window without `fastModel`: the old note ("N earlier messages were
+   omitted") and no summarize call.
+3. **[auto]** A failing summarize call: the turn continues with the note.
+4. **[auto]** A capacity error from the model: one compaction and a retry before
+   `fallbackModel` is used.
+5. `/compact` in a long chat returns; the next answer still uses a fact from the
+   summarized part.
+6. **[gated auto]** With Ollama (16k) the S4 smoke question still finishes with one
+   tool call.
+
+## S23 todo lists
+1. **[auto]** `todo_write` with two items `in_progress`: the second becomes pending;
+   the result lists all items; `todoUpdated` is emitted.
+2. **[auto]** After a daemon restart the list is still in the meta.
+3. Ask for a five-step diagnosis: the panel appears above the composer, items turn done
+   as the work proceeds, a click toggles one item, Clear empties the list.
+4. The widget shows "2/5".
+
+## S24 plan mode
+1. **[auto]** In plan mode with `full` control and an allow rule, `write_file` is
+   refused with the plan message; `read_file` and `todo_write` run.
+2. **[auto]** `plan_exit` with a plan raises a `kind: "plan"` card; approve ->
+   `planning` false, the plan file written, `approvedPlan` set, the next request has
+   the plan block.
+3. **[auto]** Deny with a reason: still planning; the tool result carries the reason.
+4. `/plan free 20 GB of disk`: the agent researches read-only and shows the plan card;
+   Approve: the steps run under the normal permission mode.
+5. Voice: "yes" to a plan card approves it (an ordinary card).
+
+## S25 memory
+1. **[auto]** Scorer: "which router do I have" picks `router` over `printer`; "stop the
+   music" matches nothing.
+2. **[auto]** Secret guard: an `sk-...` key is refused; "the printer is in the
+   hallway" is accepted.
+3. **[auto]** `replaces` removes the old memory from recall; `memory_get` still returns
+   it.
+4. "Remember that my printer is in the hallway": card, allow, the file exists; in a new
+   session a message about the printer has the memory in its prompt.
+5. Settings -> Memory lists it as "agent, not reviewed"; opening it clears the badge;
+   an edit survives a restart.
+6. "What did we decide about the router last week?" -> `session_search` returns the
+   older session.
+
+## S26 voice brain
+1. **[auto script]** `scripts/test-live.py`: the six checks of `voice.md` section 10.
+2. **[auto]** `speakable` turns an answer with a table and a code block into plain
+   sentences.
+3. `routed`: "what is my CPU temperature" -> the chat model's answer is spoken word for
+   word; the session holds the turn with via voice.
+4. A question that needs a tool, then a follow-up about the answer: the follow-up is
+   answered with the earlier context.
+5. "stop" while it thinks: silence, the turn is cancelled; "stop the music" pauses the
+   player.
+6. `live`: a session opened after a long chat knows what was discussed; with the
+   vocabulary on, a project name is transcribed correctly.
+
+## S27 browser attach
+1. **[auto]** `parse_devtools_active_port` table; tab rules table.
+2. **[auto]** `BrowserSession` against the fake CDP server: two targets on one socket;
+   reopened after a drop.
+3. Remote debugging off in Brave: `browser status` says so and prints the instruction
+   line; Settings -> Browser shows the same.
+4. Tick the checkbox, Connect, click Allow: status `on` with the tab count; "read the
+   page I have open" returns the active tab's text.
+5. A click in the owner's tab shows a card in `full` mode; closing that tab is refused;
+   a tab the agent opened can be closed.
+
+## S28 automations
+1. **[auto]** Schedule table: "every 2 weeks on monday 09:00", "mon,fri 18:00",
+   "*/20 9-17 * * 1-5" and "in 20m" parse; "sometimes" -> 400.
+2. **[auto]** `next_run` with a fixed clock: three runs do not drift; a run 6 minutes
+   late is `missed`.
+3. **[auto]** An old `tasks.json` with `Every` and `Daily` records loads and runs as
+   before.
+4. A task created with `delayMinutes: 1` fires once, notifies, and is `done`.
+5. A weekdays task whose prompt needs an approval, in `ask` mode: the call is refused,
+   the result lists what was skipped, the history shows `ok`.
+6. The template "Morning health check" enabled: the next due run writes a run with an
+   empty result and no notification when the score is 90 or more.
+
+## S29 Telegram bot
+1. **[auto]** Pairing table; splitting; Markdown to HTML; forwarding rules.
+2. Paste a token: the bot username appears; "Show pairing code"; `/start <code>` from
+   the phone: status `polling`.
+3. A text from the phone is answered in Telegram and appears in the session with a
+   `telegram` pill; a message from a second chat gets no answer.
+4. With forwarding on: a pending card arrives with buttons; Allow once resolves it; a
+   reboot card is never forwarded.
+5. A `review` alert inside quiet hours is not pushed; a `high` alert is, with an Ack
+   button.
+
+## S30 web tools
+1. **[auto]** Guard table; a redirect to a blocked address stops.
+2. **[auto]** HTML fixtures -> the expected text and links; the search page fixture ->
+   results.
+3. "What is the latest stable kernel on kernel.org?": `web_fetch` answers without a
+   browser window.
+4. "Search the web for ...": results are listed; with the engine Off the tool says
+   search is off.
+5. `web_fetch http://127.0.0.1:9333/json/list` is refused.
+
+## S31 subagents and background tasks
+1. **[auto]** The `children.rs` scenarios of `agents.md` section 7.
+2. **[auto]** Tool filter; `explore` refuses a mutating call.
+3. "Research in parallel what uses the disk and what uses the memory, then summarize":
+   two Agents cards; the summary arrives without a new message.
+4. A mutating call by `general` shows a card named after the subagent.
+5. `shell` with `background: true` returns at once; `task_output` shows the output;
+   Stop all kills it.
+
+## S32 hooks
+1. **[auto]** Runner table: exit 0, 2, other; timeout; async.
+2. **[auto]** Allow cannot relax a destructive call; ask forces a card; deny ends the
+   call.
+3. **[auto]** Protection table: `edit_file` on `settings.json` and
+   `shell ... > .../settings.json` are `always_ask`.
+4. A `PreToolUse` hook that denies `shell` commands containing `curl`: the call ends
+   with "not executed"; the audit has a `Hook` record.
+5. Settings -> Hooks: Test runs the hook with the sample and shows the decision.
+
+## S33 inline widgets
+1. **[auto]** Size cap; unknown id is 404; export replaces the markers.
+2. "Show my doctor score as a gauge": the answer holds the marker and the panel renders
+   in chat.
+3. Headless Chrome: a fragment's `fetch`, `top.location` and `localStorage` stay
+   blocked; the height follows the content.
+4. Voice: the same question is answered in words, without the marker.

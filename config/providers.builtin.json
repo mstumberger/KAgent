@@ -1,0 +1,4569 @@
+{
+ "schemaVersion": 1,
+ "generatedFrom": "ZCode zcode-builtin.json revision 33",
+ "templates": [
+  {
+   "id": "zai-standard-api",
+   "name": "Z.ai API",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://api.z.ai/api/paas/v4",
+    "headers": {}
+   },
+   "keyUrl": "https://z.ai/manage-apikey/apikey-list",
+   "models": [
+    "GLM-5.3",
+    "GLM-5.3-Flash",
+    "GLM-5V-Turbo",
+    "GLM-5.1",
+    "GLM-5.1-Highspeed",
+    "GLM-5",
+    "GLM-5-Turbo",
+    "GLM-4.7",
+    "GLM-4.7-FlashX",
+    "GLM-4.7-Flash",
+    "GLM-4.6",
+    "GLM-4.5-Air",
+    "GLM-4.5",
+    "GLM-4.6V",
+    "GLM-4.6V-Flash",
+    "GLM-4.6V-FlashX",
+    "GLM-4.1V-Thinking-FlashX",
+    "GLM-4.1V-Thinking-Flash",
+    "GLM-4-FlashX-250414",
+    "GLM-4-Flash-250414",
+    "GLM-4V-Flash",
+    "codegeex-4",
+    "charglm-4",
+    "emohaa"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "bigmodel-standard-api",
+   "name": "BigModel API",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "headers": {}
+   },
+   "keyUrl": "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
+   "models": [
+    "GLM-5.3",
+    "GLM-5.3-Flash",
+    "GLM-5V-Turbo",
+    "GLM-5.1",
+    "GLM-5.1-Highspeed",
+    "GLM-5",
+    "GLM-5-Turbo",
+    "GLM-4.7",
+    "GLM-4.7-FlashX",
+    "GLM-4.7-Flash",
+    "GLM-4.6",
+    "GLM-4.5-Air",
+    "GLM-4.5",
+    "GLM-4.6V",
+    "GLM-4.6V-Flash",
+    "GLM-4.6V-FlashX",
+    "GLM-4.1V-Thinking-FlashX",
+    "GLM-4.1V-Thinking-Flash",
+    "GLM-4-FlashX-250414",
+    "GLM-4-Flash-250414",
+    "GLM-4V-Flash",
+    "codegeex-4",
+    "charglm-4",
+    "emohaa"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "moonshot-kimi",
+   "name": "Kimi",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://api.moonshot.cn/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.kimi.com/console/api-keys",
+   "models": [
+    "kimi-k3",
+    "kimi-k2.7-code",
+    "kimi-k2.6",
+    "kimi-k2.7-code-highspeed",
+    "k3",
+    "k3-256k"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "minimax",
+   "name": "MiniMax",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://api.minimaxi.com/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.minimaxi.com/console/access?tab=api-keys",
+   "models": [
+    "MiniMax-M3",
+    "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
+    "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
+    "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
+    "MiniMax-M2"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "deepseek",
+   "name": "DeepSeek",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://api.deepseek.com/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.deepseek.com/api_keys",
+   "models": [
+    "deepseek-flash",
+    "deepseek-v4-pro"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "qwen-alibaba-model-studio-cn",
+   "name": "Alibaba Cloud (China)",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://dashscope.aliyuncs.com/apps/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://bailian.console.aliyun.com/cn-beijing?tab=model",
+   "models": [
+    "qwen3.8-max",
+    "qwen3.8-flash",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.7-flash",
+    "qwen3.6-plus",
+    "qwen3.6-flash",
+    "qwen3.5-plus",
+    "qwen3.5-flash",
+    "qwen3-max",
+    "qwen-plus",
+    "qwen-flash",
+    "qwen3-vl-plus"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "qwen-alibaba-model-studio-intl",
+   "name": "Alibaba Cloud (Global)",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://modelstudio.console.aliyun.com/ap-southeast-1?tab=dashboard",
+   "models": [
+    "qwen3.8-max",
+    "qwen3.8-flash",
+    "qwen3.8-omni-flash",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.7-flash",
+    "qwen3.6-plus",
+    "qwen3.6-flash",
+    "qwen3.5-plus",
+    "qwen3.5-flash",
+    "qwen3-max",
+    "qwen-plus",
+    "qwen-flash",
+    "qwen3-vl-plus"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "xiaomi-mimo",
+   "name": "Xiaomi MiMo API",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://api.xiaomimimo.com/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.xiaomimimo.com/",
+   "models": [
+    "mimo-v2.6-pro",
+    "mimo-v2.6-flash",
+    "mimo-v2.5-pro",
+    "mimo-v2.5"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "xiaomi-mimo-token-plan",
+   "name": "Xiaomi MiMo Token Plan",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://token-plan-cn.xiaomimimo.com/anthropic",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.xiaomimimo.com/",
+   "models": [
+    "mimo-v2.6-pro",
+    "mimo-v2.6-flash"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "openai",
+   "name": "OpenAI",
+   "api": {
+    "type": "openai-responses",
+    "baseUrl": "https://api.openai.com/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://platform.openai.com/api-keys",
+   "models": [
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.6",
+    "gpt-5.4",
+    "gpt-5.4-pro",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.3-codex"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "anthropic",
+   "name": "Anthropic",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://api.anthropic.com/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://console.anthropic.com/settings/keys",
+   "models": [
+    "claude-fable-5-1",
+    "claude-fable-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5-20251001"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "xai",
+   "name": "xAI",
+   "api": {
+    "type": "openai-responses",
+    "baseUrl": "https://api.x.ai/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://console.x.ai",
+   "models": [
+    "grok-4.6",
+    "grok-build-0.1",
+    "grok-4.3"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "openrouter",
+   "name": "OpenRouter",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://openrouter.ai/api",
+    "headers": {}
+   },
+   "keyUrl": "https://openrouter.ai/keys",
+   "models": [
+    "anthropic/claude-fable-5.1",
+    "openai/gpt-6-astra",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-opus-5",
+    "deepseek/deepseek-v4-pro",
+    "moonshotai/kimi-k3",
+    "z-ai/glm-5.3",
+    "qwen/qwen3.8-max",
+    "minimax/minimax-m3",
+    "xiaomi/mimo-v2.5-pro",
+    "x-ai/grok-4.6",
+    "deepseek/deepseek-v4.1-flash",
+    "qwen/qwen3.8-max-0902",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6",
+    "openai/gpt-5.4",
+    "openai/gpt-5.4-pro",
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5.4-nano",
+    "openai/gpt-5.3-codex",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-haiku-4.5",
+    "anthropic/claude-opus-4.8",
+    "anthropic/claude-opus-4.7",
+    "anthropic/claude-opus-4.6",
+    "anthropic/claude-opus-4.5",
+    "anthropic/claude-sonnet-4.6",
+    "anthropic/claude-sonnet-4.5",
+    "deepseek/deepseek-v4-flash",
+    "moonshotai/kimi-k2.7-code",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.5",
+    "z-ai/glm-5.3-flash",
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.1",
+    "z-ai/glm-5v-turbo",
+    "z-ai/glm-5",
+    "z-ai/glm-5-turbo",
+    "z-ai/glm-4.7",
+    "z-ai/glm-4.7-flash",
+    "z-ai/glm-4.6",
+    "z-ai/glm-4.6v",
+    "z-ai/glm-4.5-air",
+    "z-ai/glm-4.5",
+    "qwen/qwen3.8-flash",
+    "qwen/qwen3.7-max",
+    "qwen/qwen3.7-plus",
+    "qwen/qwen3.7-flash",
+    "qwen/qwen3.6-plus",
+    "qwen/qwen3.6-flash",
+    "qwen/qwen3.5-plus-20260420",
+    "qwen/qwen3-vl-plus",
+    "qwen/qwen3-vl-flash",
+    "minimax/minimax-m2.7",
+    "minimax/minimax-m2.5",
+    "xiaomi/mimo-v2.5",
+    "x-ai/grok-build-0.1",
+    "x-ai/grok-4.3"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-go-chat",
+   "name": "OpenCode Go (Chat)",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "glm-5.3-flash",
+    "glm-5.3",
+    "kimi-k3",
+    "kimi-k2.7-code",
+    "deepseek-v4.1-flash",
+    "deepseek-v4-pro",
+    "mimo-v2.5",
+    "mimo-v2.5-pro",
+    "glm-5.2",
+    "glm-5.1",
+    "kimi-k2.6",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+    "hy4-preview",
+    "hy3"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-go-messages",
+   "name": "OpenCode Go (Anthropic)",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "minimax-m3",
+    "qwen3.8-max",
+    "qwen3.8-flash",
+    "minimax-m2.7",
+    "minimax-m2.5",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.6-plus"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-go-responses",
+   "name": "OpenCode Go (Responses)",
+   "api": {
+    "type": "openai-responses",
+    "baseUrl": "https://opencode.ai/zen/go/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "gpt-5.6-luna",
+    "grok-4.6"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-zen-responses",
+   "name": "OpenCode Zen (Responses)",
+   "api": {
+    "type": "openai-responses",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.4",
+    "gpt-5.4-pro",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2",
+    "gpt-5.1"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-zen-messages",
+   "name": "OpenCode Zen (Anthropic)",
+   "api": {
+    "type": "anthropic-messages",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "claude-fable-5-1",
+    "claude-fable-5",
+    "qwen3.7-max",
+    "qwen3.6-plus",
+    "qwen3.5-plus",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "qwen3.7-plus"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "opencode-zen-chat",
+   "name": "OpenCode Zen (Chat)",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://opencode.ai/auth",
+   "models": [
+    "kimi-k3",
+    "minimax-m3",
+    "deepseek-v4-pro",
+    "glm-5.2",
+    "big-pickle",
+    "mimo-v2.5-free",
+    "hy3-free",
+    "ling-3.0-flash-fin-free",
+    "nemotron-3-ultra-free",
+    "muse-spark-1.2-contributor-free",
+    "minimax-m2.7",
+    "deepseek-v4-flash",
+    "glm-5.1",
+    "nemotron-3.5-lightning-free"
+   ],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "gemini",
+   "name": "Google Gemini",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "headers": {}
+   },
+   "keyUrl": "https://aistudio.google.com/app/apikey",
+   "models": [
+    "gemini-3.8-pro",
+    "gemini-3.8-flash"
+   ],
+   "liveModels": [
+    "gemini-3.8-live"
+   ],
+   "voices": [
+    "Kore",
+    "Puck",
+    "Charon",
+    "Zephyr",
+    "Fenrir",
+    "Leda",
+    "Orus",
+    "Aoede",
+    "Callirrhoe",
+    "Autonoe",
+    "Enceladus",
+    "Iapetus",
+    "Umbriel",
+    "Algieba",
+    "Despina",
+    "Erinome",
+    "Algenib",
+    "Rasalgethi",
+    "Laomedeia",
+    "Achernar",
+    "Alnilam",
+    "Schedar",
+    "Gacrux",
+    "Pulcherrima",
+    "Achird"
+   ]
+  },
+  {
+   "id": "ollama",
+   "name": "Ollama (local)",
+   "api": {
+    "type": "ollama-native",
+    "baseUrl": "http://127.0.0.1:11434",
+    "headers": {}
+   },
+   "keyUrl": "",
+   "models": [],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "lmstudio",
+   "name": "LM Studio (local)",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "http://127.0.0.1:1234/v1",
+    "headers": {}
+   },
+   "keyUrl": "",
+   "models": [],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "groq",
+   "name": "Groq",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://console.groq.com/keys",
+   "models": [],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "mistral",
+   "name": "Mistral",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://api.mistral.ai/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://console.mistral.ai/api-keys",
+   "models": [],
+   "liveModels": [],
+   "voices": []
+  }
+ ],
+ "modelRules": [
+  {
+   "match": {
+    "model": ".*"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsToolCall": true,
+    "enabled": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": ".*GLM-5\\.2.*"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "disabled",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": ".*GLM-5-Turbo.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5\\.3.*"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5\\.3-flash.*"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5\\.1.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5\\.1-highspeed.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-5v-turbo.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.7.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.7-flash.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.7-flashx.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.6.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.5.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 98304
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.5-air.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 98304
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.6v.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "supportsImage": true,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.6v-flash.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "supportsImage": true,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.6v-flashx.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "supportsImage": true,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.1v-thinking-flash.*"
+   },
+   "config": {
+    "contextWindow": 65536,
+    "supportsImage": true,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4\\.1v-thinking-flashx.*"
+   },
+   "config": {
+    "contextWindow": 65536,
+    "supportsImage": true,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4-flashx-250414.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "maxOutputTokens": 16384
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4-flash-250414.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "maxOutputTokens": 16384
+   }
+  },
+  {
+   "match": {
+    "model": ".*glm-4v-flash.*"
+   },
+   "config": {
+    "contextWindow": 16384,
+    "supportsImage": true,
+    "maxOutputTokens": 1024
+   }
+  },
+  {
+   "match": {
+    "model": ".*codegeex-4.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*charglm-4.*"
+   },
+   "config": {
+    "contextWindow": 8192,
+    "maxOutputTokens": 4096
+   }
+  },
+  {
+   "match": {
+    "model": ".*emohaa.*"
+   },
+   "config": {
+    "contextWindow": 8192,
+    "maxOutputTokens": 4096
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.6.*"
+   },
+   "config": {
+    "contextWindow": 1050000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.3-codex.*"
+   },
+   "config": {
+    "contextWindow": 400000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-6-astra.*"
+   },
+   "config": {
+    "contextWindow": 1050000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.4.*"
+   },
+   "config": {
+    "contextWindow": 1050000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.4-pro.*"
+   },
+   "config": {
+    "contextWindow": 1050000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.4-mini.*"
+   },
+   "config": {
+    "contextWindow": 400000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*gpt-5\\.4-nano.*"
+   },
+   "config": {
+    "contextWindow": 400000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*claude-(?:fable|opus|sonnet)-5.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*claude-haiku-4[.-]5.*"
+   },
+   "config": {
+    "contextWindow": 200000,
+    "supportsImage": true,
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": ".*claude-(?:fable|mythos)-5[.-]1.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*grok-4\\.6.*"
+   },
+   "config": {
+    "contextWindow": 500000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "model": ".*grok-build-0\\.1.*"
+   },
+   "config": {
+    "contextWindow": 256000,
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*grok-4\\.3.*"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*kimi-k3.*"
+   },
+   "config": {
+    "contextWindow": 1048576,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*k3.*"
+   },
+   "config": {
+    "contextWindow": 1048576,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*k3-256k.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*kimi-k2\\.7-code.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 98304
+   }
+  },
+  {
+   "match": {
+    "model": ".*kimi-k2\\.6.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 98304
+   }
+  },
+  {
+   "match": {
+    "model": ".*kimi-k2\\.5.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 98304
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-8k.*"
+   },
+   "config": {
+    "contextWindow": 8192,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-32k.*"
+   },
+   "config": {
+    "contextWindow": 32768,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-128k.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-8k-vision-preview.*"
+   },
+   "config": {
+    "contextWindow": 8192,
+    "supportsImage": true,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-32k-vision-preview.*"
+   },
+   "config": {
+    "contextWindow": 32768,
+    "supportsImage": true,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*moonshot-v1-128k-vision-preview.*"
+   },
+   "config": {
+    "contextWindow": 131072,
+    "supportsImage": true,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M3.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.7.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.7-highspeed.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.5.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.5-highspeed.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.1.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*MiniMax-M2\\.1-highspeed.*"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "maxOutputTokens": 32000
+   }
+  },
+  {
+   "match": {
+    "model": ".*deepseek-v4-flash.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": ".*deepseek-v4-pro.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": ".*deepseek-flash.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": ".*deepseek-v4[.-]1-flash.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "low",
+     "high",
+     "max"
+    ],
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.8-(?:max|flash).*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "xhigh"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.5-plus.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.5-flash.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3-max.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen-plus.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen-flash.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3-vl-plus.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.7-max.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.7-plus.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.7-flash.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.6-plus.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.6-flash.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.7-max-2026-06-08.*"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.8-omni-flash.*"
+   },
+   "config": {
+    "contextWindow": 65536,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "minimal",
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ],
+    "maxOutputTokens": 16384
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2\\.6-(?:pro|flash).*"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2\\.5.*"
+   },
+   "config": {
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2\\.5-pro.*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2-pro.*"
+   },
+   "config": {
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2-omni.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": ".*mimo-v2-flash.*"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": ".*(?:ox-alpha|glm-x-preview-f|x-preview-f-free).*",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "thinking": {
+       "type": "adaptive"
+      },
+      "output_config": {
+       "effort": "low"
+      }
+     },
+     "high": {
+      "thinking": {
+       "type": "adaptive"
+      },
+      "output_config": {
+       "effort": "high"
+      }
+     },
+     "max": {
+      "thinking": {
+       "type": "adaptive"
+      },
+      "output_config": {
+       "effort": "max"
+      }
+     }
+    }
+   }
+  },
+  {
+   "match": {
+    "model": ".*(?:ox-alpha|glm-x-preview-f|x-preview-f-free).*",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    }
+   }
+  },
+  {
+   "match": {
+    "model": "glm-5\\.3-flash",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "glm-5\\.3",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "glm-5\\.2",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "glm-5\\.1",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 202752,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 32768
+   }
+  },
+  {
+   "match": {
+    "model": "kimi-k3",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1048576,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "max"
+    ],
+    "reasoningPatches": {
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "kimi-k2\\.7-code",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 262144
+   }
+  },
+  {
+   "match": {
+    "model": "kimi-k2\\.6",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 262144,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "deepseek-v4\\.1-flash",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": "deepseek-v4-pro",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": "deepseek-v4-flash",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": "deepseek-v4-flash-vision-exp",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "high",
+     "max"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     },
+     "max": {
+      "reasoning_effort": "max"
+     }
+    },
+    "maxOutputTokens": 384000
+   }
+  },
+  {
+   "match": {
+    "model": "mimo-v2\\.5",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": "mimo-v2\\.5-pro",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1048576,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": "hy4-preview",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 1024000,
+    "reasoningLevels": [
+     "none",
+     "high"
+    ],
+    "reasoningPatches": {
+     "none": {
+      "reasoning_effort": "none"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     }
+    },
+    "maxOutputTokens": 64000
+   }
+  },
+  {
+   "match": {
+    "model": "hy3",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-chat-completions"
+   },
+   "config": {
+    "contextWindow": 256000,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "high"
+    ],
+    "reasoningPatches": {
+     "none": {
+      "reasoning_effort": "none"
+     },
+     "low": {
+      "reasoning_effort": "low"
+     },
+     "high": {
+      "reasoning_effort": "high"
+     }
+    },
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": "minimax-m3",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "minimax-m2\\.7",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "minimax-m2\\.5",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 204800,
+    "reasoningLevels": [
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "qwen3\\.8-max",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "xhigh"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "qwen3\\.8-flash",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "xhigh"
+    ],
+    "maxOutputTokens": 131072
+   }
+  },
+  {
+   "match": {
+    "model": "qwen3\\.7-max",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "qwen3\\.7-plus",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "qwen3\\.6-plus",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "anthropic-messages"
+   },
+   "config": {
+    "contextWindow": 1000000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "disabled",
+     "enabled"
+    ],
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "gpt-5\\.6-luna",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-responses"
+   },
+   "config": {
+    "contextWindow": 1050000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "none",
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ],
+    "reasoningPatches": {
+     "none": {
+      "reasoning": {
+       "effort": "none"
+      }
+     },
+     "low": {
+      "reasoning": {
+       "effort": "low"
+      }
+     },
+     "medium": {
+      "reasoning": {
+       "effort": "medium"
+      }
+     },
+     "high": {
+      "reasoning": {
+       "effort": "high"
+      }
+     },
+     "xhigh": {
+      "reasoning": {
+       "effort": "xhigh"
+      }
+     },
+     "max": {
+      "reasoning": {
+       "effort": "max"
+      }
+     }
+    },
+    "maxOutputTokens": 128000
+   }
+  },
+  {
+   "match": {
+    "model": "grok-4\\.6",
+    "baseUrl": "https://opencode\\.ai/zen/go/v1/?",
+    "apiType": "openai-responses"
+   },
+   "config": {
+    "contextWindow": 500000,
+    "supportsImage": true,
+    "reasoningLevels": [
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ],
+    "reasoningPatches": {
+     "low": {
+      "reasoning": {
+       "effort": "low"
+      }
+     },
+     "medium": {
+      "reasoning": {
+       "effort": "medium"
+      }
+     },
+     "high": {
+      "reasoning": {
+       "effort": "high"
+      }
+     },
+     "xhigh": {
+      "reasoning": {
+       "effort": "xhigh"
+      }
+     }
+    },
+    "maxOutputTokens": 500000
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "baseUrl": "https://api\\.z\\.ai/api/anthropic/?"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "baseUrl": "https://open\\.bigmodel\\.cn/api/anthropic/?"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "baseUrl": "https://zcode\\.z\\.ai/api/v1/zcode-plan/anthropic/?"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "baseUrl": "https://zcode\\.z\\.ai/api/v1/highspeed/anthropic/?"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": "deepseek-v4-flash(?:-vision-exp)?",
+    "baseUrl": "https://api\\.deepseek\\.com(?:/.*)?",
+    "apiType": ".*"
+   },
+   "config": {
+    "supportsImage": true
+   }
+  },
+  {
+   "match": {
+    "model": ".*deepseek-v4[.-]1-flash(?:[.\\-:/\\[].*)?",
+    "baseUrl": "https://openrouter\\.ai/api(?:/v1)?/?",
+    "apiType": ".*"
+   },
+   "config": {
+    "contextWindow": 1048576
+   }
+  },
+  {
+   "match": {
+    "model": ".*qwen3\\.7-flash(?:-20\\d{2}(?:-?\\d{2}){2})?(?:[:/\\[].*)?",
+    "baseUrl": "https://openrouter\\.ai/api(?:/v1)?/?",
+    "apiType": ".*"
+   },
+   "config": {
+    "maxOutputTokens": 65536
+   }
+  },
+  {
+   "match": {
+    "model": "qwen/qwen3\\.8-max-0902",
+    "baseUrl": "https://openrouter\\.ai/api(?:/v1)?/?",
+    "apiType": ".*"
+   },
+   "config": {
+    "reasoningLevels": [
+     "minimal",
+     "low",
+     "medium",
+     "high",
+     "xhigh"
+    ]
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "glm-5.3-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "glm-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "glm-5.2"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "glm-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "kimi-k3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "kimi-k2.7-code"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "kimi-k2.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "deepseek-v4.1-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "deepseek-v4-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "deepseek-v4-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "deepseek-v4-flash-vision-exp"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "mimo-v2.5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "mimo-v2.5-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "hy4-preview"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-chat",
+    "model": "hy3"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "minimax-m3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "minimax-m2.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "minimax-m2.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "qwen3.8-max"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "qwen3.8-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "qwen3.7-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "qwen3.7-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-messages",
+    "model": "qwen3.6-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-responses",
+    "model": "gpt-5.6-luna"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-go-responses",
+    "model": "grok-4.6"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-api",
+    "model": "GLM-5-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-api",
+    "model": "GLM-5-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-api",
+    "model": "GLM-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-api",
+    "model": "GLM-5.3-Flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-api",
+    "model": "GLM-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-api",
+    "model": "GLM-5.3-Flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "kimi-k3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "kimi-k2.7-code"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "kimi-k2.6"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "k3"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "k3-256k"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.7"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.7-highspeed"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.5-highspeed"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2.1-highspeed"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "minimax",
+    "model": "MiniMax-M2"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "deepseek",
+    "model": "deepseek-v4-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.8-max"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.8-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.5-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.5-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3-vl-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.8-max"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.8-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.5-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.5-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3-vl-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo",
+    "model": "mimo-v2.6-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo",
+    "model": "mimo-v2.6-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo-token-plan",
+    "model": "mimo-v2.6-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo-token-plan",
+    "model": "mimo-v2.6-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo",
+    "model": "mimo-v2.5-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xiaomi-mimo",
+    "model": "mimo-v2.5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.6-sol"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.6-terra"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.6-luna"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.3-codex"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "anthropic",
+    "model": "claude-fable-5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "anthropic",
+    "model": "claude-opus-5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "anthropic",
+    "model": "claude-sonnet-5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "anthropic",
+    "model": "claude-haiku-4-5-20251001"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xai",
+    "model": "grok-4.6"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xai",
+    "model": "grok-build-0.1"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "xai",
+    "model": "grok-4.3"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.6-sol"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.6-terra"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.6-luna"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.3-codex"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-opus-5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-sonnet-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-haiku-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "deepseek/deepseek-v4-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "deepseek/deepseek-v4-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "moonshotai/kimi-k3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "moonshotai/kimi-k2.7-code"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5.3-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5.2"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.8-max"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.8-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "minimax/minimax-m3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "xiaomi/mimo-v2.5-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "xiaomi/mimo-v2.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "x-ai/grok-4.6"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.6-sol"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.6-terra"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.6-luna"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.5-pro"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.4-pro"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.4-mini"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.4-nano"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.3-codex"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.3-codex-spark"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.2"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-fable-5"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-opus-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-sonnet-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-haiku-4-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-opus-4-8"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-opus-4-7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-opus-4-6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-opus-4-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-sonnet-4-6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-sonnet-4-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "qwen3.7-max"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "qwen3.7-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "qwen3.6-plus"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "qwen3.5-plus"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "kimi-k3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "minimax-m3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "minimax-m2.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "deepseek-v4-pro"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "deepseek-v4-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "glm-5.2"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "glm-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "big-pickle"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "mimo-v2.5-free"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "hy3-free"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "ling-3.0-flash-fin-free"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "nemotron-3-ultra-free"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "nemotron-3.5-lightning-free"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-chat",
+    "model": "muse-spark-1.2-contributor-free"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-opus-4.8"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-opus-4.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-opus-4.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-opus-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-sonnet-4.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-sonnet-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "moonshotai/kimi-k2.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "moonshotai/kimi-k2.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5v-turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-5-turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.7-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.6v"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.5-air"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "z-ai/glm-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.7-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.7-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.7-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.6-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.6-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.5-plus-20260420"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3-vl-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3-vl-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "minimax/minimax-m2.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "minimax/minimax-m2.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "x-ai/grok-build-0.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "x-ai/grok-4.3"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5.3-Flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5V-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5.1-Highspeed"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-5-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.7-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.7-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.5-Air"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.6V"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.6V-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.6V-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.1V-Thinking-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4.1V-Thinking-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4-FlashX-250414"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4-Flash-250414"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "GLM-4V-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "codegeex-4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "charglm-4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "zai-standard-api",
+    "model": "emohaa"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5.3"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5.3-Flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5V-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5.1"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5.1-Highspeed"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-5-Turbo"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.7"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.7-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.7-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.6"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.5-Air"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.5"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.6V"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.6V-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.6V-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.1V-Thinking-FlashX"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4.1V-Thinking-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4-FlashX-250414"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4-Flash-250414"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "GLM-4V-Flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "codegeex-4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "charglm-4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "bigmodel-standard-api",
+    "model": "emohaa"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-6-astra"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-responses",
+    "model": "gpt-6-astra"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "anthropic",
+    "model": "claude-fable-5-1"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "opencode-zen-messages",
+    "model": "claude-fable-5-1"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-6-astra"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "anthropic/claude-fable-5.1"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "deepseek",
+    "model": "deepseek-flash"
+   },
+   "config": {
+    "enabled": true
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.4-pro"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.4-mini"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openai",
+    "model": "gpt-5.4-nano"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.4"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.4-pro"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.4-mini"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "openai/gpt-5.4-nano"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.7-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.7-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.7-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.6-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-cn",
+    "model": "qwen3.6-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.7-max"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.7-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.7-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.6-plus"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.6-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "qwen-alibaba-model-studio-intl",
+    "model": "qwen3.8-omni-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "moonshot-kimi",
+    "model": "kimi-k2.7-code-highspeed"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "deepseek/deepseek-v4.1-flash"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "templateId": "openrouter",
+    "model": "qwen/qwen3.8-max-0902"
+   },
+   "config": {
+    "enabled": false
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "apiType": "openai-chat-completions",
+    "baseUrl": "https?://(127\\.0\\.0\\.1|localhost):11434(/v1)?/?"
+   },
+   "config": {
+    "contextWindow": 4096,
+    "maxOutputTokens": 1024
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "apiType": "openai-chat-completions",
+    "baseUrl": "https?://(127\\.0\\.0\\.1|localhost):1234(/v1)?/?"
+   },
+   "config": {
+    "contextWindow": 4096,
+    "maxOutputTokens": 1024
+   }
+  },
+  {
+   "match": {
+    "model": ".*",
+    "apiType": "ollama-native"
+   },
+   "config": {
+    "contextWindow": 16384,
+    "maxOutputTokens": 4096,
+    "supportsToolCall": true
+   }
+  }
+ ]
+}

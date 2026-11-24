@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPlugin": {
+        "Id": "org.kde.kagent.voice",
+        "Name": "KAgent Voice",
+        "Description": "Live waveform of KAgent's voice session and what the agent is doing",
+        "Icon": "audio-input-microphone",
+        "Category": "System Information",
+        "License": "MIT",
+        "Version": "0.1.0",
+        "Authors": [{ "Name": "KAgent" }],
+        "FormFactors": ["desktop", "panel"]
+    }
+}

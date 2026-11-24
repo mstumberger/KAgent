@@ -1,0 +1,21 @@
+event: message
+data: {"choices":[{"delta":{"role":"assistant","content":""}}]}
+
+data: {"choices":[{"delta":{"content":"The kernel is "}}]}
+
+data: {"choices":[{"delta":{"content":"7.0.0."}}]}
+
+data: {"choices":[{"delta":{"content":"43-generic."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_abc123","type":"function","function":{"name":"system_info","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"section\":"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"full\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":42,"completion_tokens":17}}
+
+data: [DONE]
+

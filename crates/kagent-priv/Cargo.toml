@@ -1,0 +1,17 @@
+[package]
+name = "kagent-priv"
+version.workspace = true
+edition.workspace = true
+description = "KAgent root helper: validated, typed root operations (JSON on stdin)"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "kagent-priv"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
