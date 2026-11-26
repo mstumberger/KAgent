@@ -56,6 +56,8 @@ async fn agent_stop_cancels_a_running_child_and_a_queued_one() {
 
     // A queued child: cancelled, and never started. The others are not touched.
     assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": waiting})).await, ("stopped".to_string(), ToolCallStatus::Ok));
+    // The log of the rig is filled by a task of its own: wait for the event, then read.
+    wait_status(&r, &waiting, ChildStatus::Cancelled).await;
     assert_eq!(statuses(&r, &waiting), [ChildStatus::Queued, ChildStatus::Cancelled]);
     assert!(r.model.of("job-s2").is_empty(), "it never made a request");
     assert_eq!(statuses(&r, &first), [ChildStatus::Running], "one is stopped, not the others");

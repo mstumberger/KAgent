@@ -80,6 +80,9 @@ pub async fn put_settings(State(st): State<Arc<AppState>>, Json(patch): Json<Val
             }
         }
     }
+    // At most `subagents.maxConcurrent` subagents run at once (agents.md section 2).
+    let max_children = st.settings.read().unwrap().subagents_config().max_concurrent;
+    st.agent.set_max_concurrent_children(max_children as usize).await;
     // Apply the systemd user unit change outside the settings lock (spawns
     // systemctl; slow paths must never hold the lock).
     if let Some(want) = wants_autostart {
@@ -315,11 +318,13 @@ pub async fn list_sessions(
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Response> {
     let parent = q.get("parent").map(String::as_str).filter(|p| !p.is_empty());
-    let mut metas = kagent_core::session::SessionStore::visible(st.agent.store().list().await.map_err(internal)?, parent);
-    for m in &mut metas {
+    let mut listed = crate::subagents::listed(st.agent.store().list().await.map_err(internal)?, parent);
+    for (m, _) in &mut listed {
         m.message_count = st.agent.store().load_messages(&m.id).await.map(|v| v.len()).unwrap_or(0);
     }
-    Ok(ok_json(json!({"sessions": metas})))
+    // Each with `agents`, how many subagents it started (the row of a parent says "3 agents").
+    let sessions: Vec<Value> = listed.iter().map(|(m, n)| crate::subagents::with_agents(m, *n)).collect();
+    Ok(ok_json(json!({"sessions": sessions})))
 }
 
 pub async fn create_session(State(st): State<Arc<AppState>>, Json(body): Json<Value>) -> ApiResult<Response> {
@@ -335,9 +340,8 @@ pub async fn get_session(State(st): State<Arc<AppState>>, Path(id): Path<String>
 }
 
 pub async fn delete_session(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
-    st.agent.cancel(&id).await;
-    st.agent.forget(&id);
-    st.agent.store().delete(&id).await.map_err(internal)?;
+    // Cancels and deletes the subagents of the session too (agents.md section 2).
+    st.agent.delete_session(&id).await.map_err(internal)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -361,7 +365,10 @@ pub async fn post_message(
     if text.trim().is_empty() {
         return Err(bad_request("text required"));
     }
-    st.agent.store().meta(&id).await.map_err(|e| not_found(format!("{e:#}")))?;
+    let meta = st.agent.store().meta(&id).await.map_err(|e| not_found(format!("{e:#}")))?;
+    if meta.origin == kagent_core::session::SessionOrigin::Subagent {
+        return Err(HttpError(StatusCode::CONFLICT, "conflict", "the session of a subagent is read-only: talk to the session that started it".into()));
+    }
     // A message that starts with `/<skill>` gives its turn that skill's body (skills.md section 6).
     let mut opts = st.skills.turn_opts(&text);
     opts.plan = plan;

@@ -53,7 +53,7 @@ type AuditRecord = /* config.md section 6 */;
 | POST `/api/sessions` | `{title?}` | `SessionMeta` (201) |
 | GET `/api/sessions/:id` | | `{meta: SessionMeta, messages: Message[]}` |
 | DELETE `/api/sessions/:id` | | 204 (cancels if running) |
-| POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice"}` | `{status: "started", turnId}` or `{status: "queued"}` |
+| POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice"}` | `{status: "started", turnId}` or `{status: "queued"}`; 409 for the session of a subagent (read-only) |
 | POST `/api/sessions/:id/cancel` | | `{cancelled: boolean}` |
 | POST `/api/stop-all` | | `{cancelledTurns: number, killedProcesses: number}` |
 | POST `/api/approvals/:requestId` | `{decision: "allowOnce"\|"allowSession"\|"allowAlways"\|"deny", reason?}` | 204, or 404 if already resolved |
@@ -136,7 +136,8 @@ Server -> client:
 ## 6. Phase 4 endpoints (S17-S33)
 
 Same transport, auth and error shape as section 3. `GET /api/sessions` without
-`parent` hides sessions with origin `subagent`. `GET /api/sessions/:id` returns the
+`parent` hides sessions with origin `subagent`. Each listed session has `agents`, how
+many subagents it started. `GET /api/sessions/:id` returns the
 phase 4 meta fields of config.md section 11 (`origin`, `parent`, `summary`,
 `todo`, `planning`, `approvedPlan`). `ApprovalRequest` gains `kind: "tool"|"plan"`;
 for a plan, `preview` holds the plan text.
@@ -187,9 +188,10 @@ for a plan, `preview` holds the plan text.
 | web | GET `/api/web/brave-key` | | `{configured}`; never the key |
 | | PUT `/api/web/brave-key` | `{key}` | `{configured: true}`; 400 for a key that is not 16 to 128 printable ASCII characters without a space |
 | | DELETE `/api/web/brave-key` | | 204 |
-| subagents | GET `/api/agents` | | `{agents: AgentProfileView[]}` |
-| | PUT `/api/agents/:name` | `{description, model?, toolGroups?, maxIterations?, prompt}` | `AgentProfileView`: creates or updates; built-in names -> 409 |
+| subagents | GET `/api/agents` | | `{agents: AgentProfileView[], invalid: [{file: string, reason: string}]}` |
+| | PUT `/api/agents/:name` | `{description, model?, toolGroups?, maxIterations?, prompt}` | `AgentProfileView` (201 when it creates, 200 when it changes; a field left out keeps its value); built-in names -> 409; an invalid name, a missing description, an unknown tool group, `maxIterations` outside 1..80 or a model the providers do not know -> 400 |
 | | DELETE `/api/agents/:name` | | 204 |
+| | POST `/api/sessions/:id/subagents/:child/stop` | | `{status}`; 404 for a subagent of another session, 409 when it ended already |
 | | GET `/api/sessions?parent=<id>` | | `SessionMeta[]` |
 | hooks | GET `/api/hooks` | | `{hooks: HookView[], events: string[]}` |
 | | POST `/api/hooks` | `Hook` without `id` | `HookView` (201) |

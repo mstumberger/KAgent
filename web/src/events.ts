@@ -25,7 +25,9 @@ export type AgentEvent =
   | { type: "memoryChanged"; name: string; removed: boolean }
   | { type: "tasksChanged" }
   | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
-  | { type: "telegramStatus"; status: string; detail: string };
+  | { type: "telegramStatus"; status: string; detail: string }
+  /** A subagent of `sessionId` changed state (agents.md section 3). */
+  | { type: "subagentUpdated"; sessionId: string; child: import("./settings/subagents/api").ChildView; status: import("./settings/subagents/api").ChildStatus };
 
 type Handler = (ev: AgentEvent) => void;
 

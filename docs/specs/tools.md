@@ -462,7 +462,7 @@ Profiles, completion notifications and limits: `agents.md`.
 
 | Tool | Assess | Input | What |
 |---|---|---|---|
-| `agent_run` | MUT, risk low, no approval | `{description: string (<= 80), prompt: string, profile?: string (default "general"), model?: model ref, background?: boolean (default true)}` | starts a child session (`origin: subagent`, parent = this session) running the prompt with the profile's model and tool groups. Returns `agentId` and `running` or `queued`. `background: false` waits up to 120 s, then keeps running in the background and returns |
+| `agent_run` | MUT, risk low, no approval | `{description: string (<= 80), prompt: string or an array of lines (the schema says `anyOf`), profile?: string (default "general"), model?: a model ref the providers know (`<providerId>::<modelId>`), else an error and no subagent, background?: boolean (default true)}` | starts a child session (`origin: subagent`, parent = this session) running the prompt with the profile's model and tool groups. Returns `agentId` and `running` or `queued`. `background: false` waits up to 120 s, then keeps running in the background and returns. Because it is MUT, a planning session cannot start a subagent |
 | `agent_wait` | RO | `{ids: string[] (<= 8), timeout_sec?: 0..120 (default 60)}` | output (<= 6000 chars each) and state of the named agents when they finish or the time is up |
 | `agent_stop` | MUT, risk low, no approval | `{id: string}` | cancels the child's running turn |
 | `agent_list` | RO | `{}` | children of this session: id, profile, state, duration |

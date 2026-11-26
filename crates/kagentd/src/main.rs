@@ -32,6 +32,7 @@ mod skills_import;
 mod skills_sources;
 mod skills_sources_api;
 mod startup;
+mod subagents;
 mod voice_levels;
 mod watch;
 mod web;
@@ -80,6 +81,8 @@ pub struct AppState {
     pub browser: Arc<browser::Browser>,
     /// The `web_fetch` and `web_search` tools: also the Brave key behind its route (web.md).
     pub web: Arc<web::Web>,
+    /// The subagent profiles behind `/api/agents` (agents.md).
+    pub subagents: Arc<subagents::Subagents>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -252,6 +255,13 @@ async fn run() -> anyhow::Result<()> {
     let plan_access = kagent_core::plan::PlanAccess::default();
     registry.register(Arc::new(kagent_core::plan::PlanEnter::new(plan_access.clone())));
     registry.register(Arc::new(kagent_core::plan::PlanExit::new(plan_access.clone(), paths.data.join("plans"))));
+    // Subagents and background tasks (agents.md): the four subagent tools reach the agent
+    // and its profiles through this handle; the tasks use the daemon's one registry.
+    let agent_access = kagent_core::tools::agents::AgentAccess::default();
+    agent_access.register(&mut registry);
+    let background = kagent_core::tools::background::Background::shared();
+    registry.register(Arc::new(kagent_core::tools::tasktools::TaskOutput::new(background.clone())));
+    registry.register(Arc::new(kagent_core::tools::tasktools::TaskStop::new(background)));
     let browser = Arc::new(browser::Browser::from_settings(&paths.data, &settings));
     registry.register(browser.clone());
     let settings_cell = Arc::new(std::sync::OnceLock::new());
@@ -369,6 +379,16 @@ async fn run() -> anyhow::Result<()> {
     agent.set_tool_groups(Some(settings_arc.read().unwrap().tool_groups.clone()));
     todo_access.attach(&agent);
     plan_access.attach(&agent);
+    // Subagents (agents.md): the profiles, the model windows, the background tasks and the limit.
+    let subagents = subagents::Subagents::start(
+        agent.clone(),
+        agent_access,
+        subagents::ProfileHub::new(paths.config.join("agents")),
+        providers.clone(),
+        paths.data.join("task-out"),
+        settings_arc.read().unwrap().subagents_config().max_concurrent,
+    )
+    .await;
     // Compaction (compaction.md section 1) reads its settings before every model request.
     let (settings_for_compaction, providers_for_compaction) = (settings_arc.clone(), providers.clone());
     agent.set_compaction_source(Arc::new(move || {
@@ -425,6 +445,7 @@ async fn run() -> anyhow::Result<()> {
         skill_sources,
         browser,
         web,
+        subagents,
         live_sessions: Default::default(),
         services,
         levels,
@@ -465,6 +486,8 @@ async fn run() -> anyhow::Result<()> {
     }
     let audit_on_exit = audit.clone();
     let r = server::serve(state).await;
+    // Every background task gets TERM, and KILL if it is still there 2 s later (agents.md section 4).
+    kagent_core::tools::background::Background::shared().shutdown().await;
     watch_cancel.cancel();
     let _ = audit_on_exit.append(kagent_core::audit::AuditKind::Stop, "daemon", serde_json::json!({"version": VERSION}));
     tracing::info!("kagentd stopped");

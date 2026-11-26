@@ -158,6 +158,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/telegram/pairing", delete(crate::bots::http::unpair))
         .route("/telegram/test", post(crate::bots::http::test_message))
         .route("/web/brave-key", get(crate::web::http::get_key).put(crate::web::http::put_key).delete(crate::web::http::delete_key))
+        .route("/agents", get(crate::subagents::http::list))
+        .route("/agents/{name}", put(crate::subagents::http::put_profile).delete(crate::subagents::http::delete))
+        .route("/sessions/{id}/subagents/{child}/stop", post(crate::subagents::http::stop))
         .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
 
     let app = Router::new()

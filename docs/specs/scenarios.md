@@ -357,7 +357,10 @@ lists under "Tests".
 1. **[auto]** The `children.rs` scenarios of `agents.md` section 7.
 2. **[auto]** Tool filter; `explore` refuses a mutating call.
 3. "Research in parallel what uses the disk and what uses the memory, then summarize":
-   two Agents cards; the summary arrives without a new message.
+   two Agents cards; the summary arrives without a new message. (With the local
+   qwen2.5:7b-instruct: two `agent_run` calls in 6 of 6 runs, the summary without a
+   new message in 6 of 6; two Agents cards only after the first pair was refused for
+   `model: "general"`, in 4 of 6 runs.)
 4. A mutating call by `general` shows a card named after the subagent.
 5. `shell` with `background: true` returns at once; `task_output` shows the output;
    Stop all kills it.

@@ -34,10 +34,12 @@ pub async fn ends_with(r: &Rig, text: &str) {
 
 #[tokio::test]
 async fn a_finished_child_gives_an_idle_parent_a_new_turn_with_the_notification() {
+    // The child holds its one request until the test lets it go: the parent's turn is over first.
+    let release = Arc::new(Notify::new());
     let r = rig(
         &[
             ("parent", vec![call("agent_run", json!({"description": "job-a", "prompt": ["do", "it"]})), say("started it"), say("the final summary")]),
-            ("job-a", vec![say("the answer from the child")]),
+            ("job-a", vec![gated(&release, "the answer from the child")]),
         ],
         PermissionMode::Ask,
     )
@@ -46,11 +48,12 @@ async fn a_finished_child_gives_an_idle_parent_a_new_turn_with_the_notification(
     assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
 
     // The child: a session of its own under the parent (agents.md section 2).
-    let children = kids(&r, 1).await;
-    let child = &children[0];
-    assert_eq!((child.title.as_str(), child.profile.as_str()), ("job-a", "general"));
-    // The parent's turn is over; the child's goes on a moment longer.
-    wait_status(&r, &child.id, ChildStatus::Done).await;
+    let started = kids(&r, 1).await;
+    assert_eq!((started[0].title.as_str(), started[0].profile.as_str()), ("job-a", "general"));
+    assert_eq!(started[0].status, ChildStatus::Running, "the parent's turn is over; the child's goes on");
+    release.notify_one();
+    wait_status(&r, &started[0].id, ChildStatus::Done).await;
+    let child = &children(&r).remove(0);
     assert_eq!(child.status, ChildStatus::Done);
     let meta = r.store.meta(&child.id).await.unwrap();
     assert_eq!((meta.origin, meta.parent.as_deref(), meta.title.as_str()), (SessionOrigin::Subagent, Some(r.session.as_str()), "job-a"));

@@ -1,0 +1,108 @@
+/* Agents cards in the transcript (agents.md section 6) and the notice of a read-only
+   subagent session. The tokens are those of index.css. */
+.agent-card {
+  flex-shrink: 0;
+  align-self: stretch;
+  max-width: 760px;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  background: rgba(255, 255, 255, 0.02);
+}
+:root[data-theme="light"] .agent-card { background: #f6f8fd; }
+.agent-card[data-status="running"] { border-color: rgba(124, 196, 255, 0.4); }
+.agent-card[data-status="failed"] { border-color: rgba(255, 107, 125, 0.45); }
+
+.agent-line { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px; }
+.agent-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.agent-open:hover { background: rgba(124, 196, 255, 0.08); }
+.agent-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.agent-card[data-status="running"] .agent-dot { background: var(--ice); animation: agent-pulse 1.2s ease-in-out infinite; }
+.agent-card[data-status="done"] .agent-dot { background: var(--ok); }
+.agent-card[data-status="failed"] .agent-dot { background: var(--bad); }
+.agent-card[data-status="cancelled"] .agent-dot { background: var(--signal); }
+@keyframes agent-pulse { 50% { opacity: 0.35; } }
+
+.agent-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.agent-profile,
+.agent-time { flex: 0 0 auto; color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.agent-status {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  padding: 0 7px;
+  color: var(--dim);
+}
+.agent-status.status-running { color: var(--ice); border-color: rgba(124, 196, 255, 0.4); }
+.agent-status.status-done { color: var(--ok); }
+.agent-status.status-failed { color: var(--bad); }
+.agent-stop { flex: 0 0 auto; font-size: 12px; line-height: 1.6; }
+
+.agent-output {
+  margin: 0 10px 8px 32px;
+  max-height: 8em;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The session of a subagent opens read-only: this stands where the composer is. */
+.agent-readonly {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 max(16px, calc((100% - 792px) / 2)) 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  background: rgba(18, 26, 46, 0.7);
+  font-size: 13px;
+  color: var(--dim);
+}
+:root[data-theme="light"] .agent-readonly { background: #fff; color: var(--ink); }
+.agent-readonly strong { color: var(--ink); }
+
+/* How many subagents a session started, on its row of the list. */
+.session-agents { margin-left: auto; flex: 0 0 auto; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* A report of a subagent or a background task (a stored message of role user): it reads as a
+   note at the left, not as something the owner said. */
+.bubble.agent-note { max-width: 760px; align-self: stretch; }
+
+/* A report inside its note: the line of the report, and the whole output behind a toggle. */
+.agent-report + .agent-report { margin-top: 8px; }
+.agent-report-output { margin-top: 2px; }
+.agent-report-output summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.agent-report-output summary:hover { color: var(--ink); }
+.agent-report-output pre {
+  margin: 6px 0 0;
+  max-height: 40vh;
+  overflow: auto;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

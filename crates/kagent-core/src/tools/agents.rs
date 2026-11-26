@@ -29,6 +29,10 @@ pub(super) fn unasking(name: &str, description: &str, schema: Value) -> ToolCont
     contract
 }
 
+/// Where the profiles are read before each `agent_run`: the daemon's folder, so a file
+/// edited by hand counts at once.
+pub type ProfileSource = Arc<dyn Fn() -> Vec<Profile> + Send + Sync>;
+
 /// How the tools reach the agent and its profiles. The daemon creates the handle before
 /// its registry (the agent does not exist yet), gives it to the tools, attaches the agent
 /// once it exists and hands it the profiles of `<config>/agents`.
@@ -36,6 +40,7 @@ pub(super) fn unasking(name: &str, description: &str, schema: Value) -> ToolCont
 pub struct AgentAccess {
     agent: Arc<OnceLock<Weak<Agent>>>,
     profiles: Arc<RwLock<Vec<Profile>>>,
+    source: Arc<OnceLock<ProfileSource>>,
     /// How long `agent_run` with `background: false` waits, in milliseconds (0 = `RUN_WAIT`).
     run_wait: Arc<AtomicU64>,
 }
@@ -49,6 +54,19 @@ impl AgentAccess {
     /// The profiles the tools may start: the daemon's, read from `<config>/agents`.
     pub fn set_profiles(&self, profiles: Vec<Profile>) {
         *self.profiles.write().unwrap() = profiles;
+    }
+
+    /// Read the profiles through `source` before each `agent_run`. The first one stays.
+    pub fn set_profile_source(&self, source: ProfileSource) {
+        let _ = self.source.set(source);
+    }
+
+    /// The profiles now: through the source when there is one, else those that were set.
+    pub fn profiles(&self) -> Vec<Profile> {
+        if let Some(read) = self.source.get() {
+            *self.profiles.write().unwrap() = read();
+        }
+        self.profiles.read().unwrap().clone()
     }
 
     /// How long `agent_run` with `background: false` waits for an answer (tests shorten it).
@@ -74,7 +92,7 @@ impl AgentAccess {
     }
 
     fn profile(&self, name: &str) -> Result<Profile, String> {
-        let known = self.profiles.read().unwrap();
+        let known = self.profiles();
         if let Some(profile) = known.iter().find(|p| p.name == name) {
             return Ok(profile.clone());
         }
@@ -120,7 +138,11 @@ async fn wait_for(agent: &Arc<Agent>, parent: &str, id: &str, limit: Duration, c
     }
 }
 
-const RUN_DESCRIPTION: &str = "Start a subagent (a second agent with its own session) for one job and go on yourself: for work that would fill this conversation, or for several jobs at once. It sees only a short digest of this conversation, so `prompt` holds the whole job. Its one final answer arrives later as a message that starts with [Agent ...]: wait for it with agent_wait. Its approvals still ask the user.";
+/// The wording was found with the real local model (qwen2.5:7b-instruct, raw replays of the
+/// first request of "Research in parallel ..."): with the first one 0 of 8 answers called
+/// the tool (two read-only calls of its own instead), with this one 12 of 12 did, two calls
+/// in 6 of them.
+const RUN_DESCRIPTION: &str = "Delegate jobs to subagents (a second agent with its own session each) and go on yourself: for work that would fill this conversation, or for several jobs at once. For N jobs make N agent_run calls in one answer, one per job (a short `description` each), then call agent_wait and summarize their answers. A subagent sees only a short digest of this conversation, so `prompt` holds the whole job. Its one final answer arrives later as a message that starts with [Agent ...]. Its approvals still ask the user.";
 const WAIT_DESCRIPTION: &str = "Wait for the subagents this session started (their ids from agent_run; none given: all of them) and get their answers, until they have ended or `timeout_sec` has passed. An agent that ends on its own reports to you without agent_wait.";
 const STOP_DESCRIPTION: &str = "Stop a subagent of this session (its id from agent_run or agent_list). A stopped agent reports nothing.";
 const LIST_DESCRIPTION: &str = "The subagents this session started: id, profile, state, how long they ran.";
@@ -136,10 +158,10 @@ impl AgentRun {
             "agent_run",
             RUN_DESCRIPTION,
             json!({"type":"object","required":["description","prompt"],"properties":{
-                "description":{"type":"string","description":"the job in a few words (at most 80 characters); shown to the user"},
+                "description":{"type":"string","description":"ONE job in a few words (at most 80 characters), shown to the user; one call per job"},
                 "prompt":{"description":"the whole job: the goal, the steps, what to report. One text, or one line per item","anyOf":[{"type":"string"},{"type":"array","items":{"type":"string"}}]},
                 "profile":{"type":"string","description":"general (every tool) or explore (read-only research), or a profile of Settings -> Subagents; default general"},
-                "model":{"type":"string","description":"a model ref for the subagent; default: the profile's, else the chat model"},
+                "model":{"type":"string","description":"Optional. A model ref in the form <providerId>::<modelId>, exactly as Settings -> Models lists it; never a profile name. Leave it out unless a specific model is needed: the profile's model is used, else the chat model."},
                 "background":{"type":"boolean","description":"true (default): the answer comes at once; false: wait up to 120 s for the subagent's answer"}
             }}),
         );

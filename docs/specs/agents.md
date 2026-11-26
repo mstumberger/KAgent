@@ -24,38 +24,48 @@ prompt: |
   (`^[a-z0-9][a-z0-9-]{0,63}$`), `description` (required, at most 500 chars),
   `toolGroups` (absent = every enabled group), `maxIterations` (1..80, default 25),
   `model` (a model ref; empty = the chat model), `prompt` (at most 8000 chars).
+- The name of a profile is the name of its file. A frontmatter `name` that differs, a
+  key that is not one of the six, an unknown tool group or a value out of range makes
+  the file invalid: it is skipped and listed with the reason. The text after the
+  frontmatter is not read.
+- The folder is read before each `agent_run` and on `GET /api/agents`.
 - Built-ins (not files; they cannot be edited or deleted):
   - `general`: every enabled group.
   - `explore`: read-only. Any call whose assessment is not read-only is refused with
     "explore is read-only".
-- An invalid profile file is skipped with a warning and listed in the UI with the
-  reason.
+- An invalid profile file is listed in the UI with its reason.
 
 ## 2. Running a subagent
 
-- Orchestration is in `kagent-core/src/agent/children.rs`, so it is tested with the
-  scripted model of `tests/agent_loop.rs`. `kagentd/src/subagents/runner.rs` only wires
-  profiles, the tool and the API.
+- Orchestration is in `kagent-core/src/agent/children.rs` (with
+  `children/{registry,run}.rs`), so it is tested with the scripted model
+  (`tests/subagents`). `kagentd/src/subagents/runner.rs` only wires the profiles, the
+  tool and the API.
 - `agent_run` (tools.md section 21) creates a child session: origin `subagent`,
-  `parent` = the calling session, title = `description`.
+  `parent` = the calling session, title = `description`. It answers an error and makes
+  no session when `model` is not a ref (`<providerId>::<modelId>`) or is unknown to
+  the providers.
 - The child's system prompt = the base prompt + "You are a subagent. <description of
   the job>. End with a complete final answer: it is returned to the agent that started
   you." + the profile `prompt`. The job prompt sent to the child is preceded by the
   parent's digest (`SessionStore::digest`, 2000 chars) when the parent has a history,
   so the child knows what the conversation is about.
-- Tools = the profile's groups, enforced at execution: `Agent::set_session_tool_groups
-  (session_id, groups)` makes `execute_call` deny a call outside them ("not in this
-  subagent's tool groups"). `explore` sets a per-session read-only flag that denies
-  every call whose assessment is not read-only.
+- Tools = the profile's groups, enforced at execution: a per-session tool-group
+  filter makes `execute_call` deny a call outside them ("not in this subagent's tool
+  groups"). `explore` sets a per-session read-only flag that denies every call whose
+  assessment is not read-only.
 - The child uses the permission engine with its own session id: its cards carry the
-  subagent's name, and allowances are session-scoped (foundations.md section 2).
+  subagent's job name, and allowances are session-scoped (foundations.md section 2).
 - Concurrency: at most `subagents.maxConcurrent` (default 4) running children in the
   daemon. More are queued and reported as `queued`.
 - `stop_all` cancels children too. Deleting a parent session cancels and deletes its
-  children.
+  children. A queued subagent is stopped with
+  `POST /api/sessions/:id/subagents/:child/stop` (the session's `cancel` cannot reach
+  it).
 - Depth: a subagent cannot start subagents (`agent_run` is not among its tools).
 - Plan mode: a child of a planning session gets the plan restriction
-  (`plan-todo.md` section 2).
+  (`plan-todo.md` section 2). `agent_run` is a mutating tool, so a planning session
+  cannot start a subagent at all; whether it may is an open question for the owner.
 
 ## 3. Results
 
@@ -64,12 +74,18 @@ prompt: |
   with role user and `Via::Agent`:
   `[Agent "<description>" <done|failed|cancelled> in 42 s]` and the output (at most
   4000 chars).
-  - Parent idle: a new turn starts with it, so the main agent reacts without being
-    asked.
+  - Parent idle, and a chat or a voice session: a new turn starts with it, at most 5
+    in a row without a message of the owner (`MAX_AUTO_TURNS`), so the main agent
+    reacts without being asked.
   - Parent running: it is queued as steering.
+  - In the session of a task, an alert investigation or a Telegram chat it is stored
+    only: those callers wait with `send` and `wait_idle`, and a turn started by a
+    notification would race that wait.
+  - A cancelled subagent reports nothing; `subagentUpdated` still says `cancelled`.
 - `subagentUpdated {sessionId, child, status}` is emitted on every state change.
 - The child's session is listed under its parent (`GET /api/sessions?parent=<id>`) and
-  hidden from the main list.
+  hidden from the main list. Each listed session has `agents`, how many subagents it
+  started. The session of a subagent is read-only: a message into it is 409.
 
 ## 4. Background shell tasks
 
@@ -78,20 +94,32 @@ prompt: |
   `bg_<8 hex>`.
 - States: running, done (with the exit code), failed, killed. The output file keeps its
   last 1 MiB. At most 20 running tasks; a further one is refused.
-- At daemon exit and on `stop_all` every task gets TERM, then KILL after 2 s (the
-  existing `kill_group` path).
+- On `stop_all` every task gets TERM, then KILL after 2 s (the existing `kill_group`
+  path). At daemon exit `Background::shutdown` sends TERM, waits 2 s and sends KILL
+  itself (after the server returns: the thread of `kill_group` dies with the daemon).
+  Whether a process group is still alive is read from `/proc`.
 - Completion sends the starting session the same kind of notification message:
   `[Task <taskId> finished, exit 0]`.
 
 ## 5. API
 
-api.md section 6: `/api/agents` and `GET /api/sessions?parent=`.
+api.md section 6: `GET /api/agents` (valid profiles and the invalid files with their
+reasons), `PUT /api/agents/:name` (201 when it creates, 200 when it changes; a field
+left out keeps its value; 400 for an invalid name, a missing description, an unknown
+tool group, `maxIterations` outside 1..80 or a model the providers do not know),
+`DELETE /api/agents/:name`, `POST /api/sessions/:id/subagents/:child/stop`,
+`GET /api/sessions?parent=<id>`.
 
 ## 6. UI
 
-- Chat: an "Agents" card in the transcript (from `subagentUpdated` and the tool
-  result): profile, state, elapsed time, an output preview (1500 chars), Stop. A click
-  opens the child session read-only, with a link back to the main session.
+- Chat: an "Agents" card in the transcript (from `subagentUpdated` and the results of
+  `agent_run`): profile, state, elapsed time, an output preview (1500 chars), Stop. A
+  click opens the child session read-only, with a link back to the main session. After
+  a reload the cards are rebuilt from the transcript; the whole output of a report is
+  behind a toggle that starts closed.
+- The end of a turn reloads the open chat only (before, the end of any session's turn
+  opened that session, which with subagents switched the view to a subagent's
+  session).
 - Session list: children are not shown; the parent row shows "3 agents".
 - Settings -> Subagents: the list (built-ins marked), an editor (name, description,
   model, tool groups as chips, max iterations, prompt), max concurrent, Delete.
@@ -99,10 +127,12 @@ api.md section 6: `/api/agents` and `GET /api/sessions?parent=`.
 ## 7. Tests (no root; loopback only)
 
 - Profiles: parsing; an invalid name or a missing description is skipped; a built-in
-  name cannot be overwritten.
+  name cannot be overwritten; a `name` that differs from the file name is invalid.
 - Tool filter: a call outside the groups is denied; `explore` denies a mutating call.
-- `children.rs` in `tests/agent_loop.rs` (scripted model): a finished child gives an
-  idle parent a new turn with the notification; a busy parent gets it queued; the
-  concurrency limit; `stop_all` cancels; the depth limit.
+- `children.rs` in `tests/subagents` (scripted model): a finished child gives an idle
+  parent a new turn with the notification; a busy parent gets it queued; the
+  concurrency limit; `stop_all` cancels; the depth limit; the child of a planning
+  session is restricted (through `start_child`, because `agent_run` itself is
+  mutating); the limit of 5 turns on notifications alone.
 - Background tasks: the output cap keeps the tail; the limit of 20; stop-all kills
-  (`sleep 60`, as the existing exec tests do).
+  `sleep 60`.

@@ -91,7 +91,8 @@ impl Agent {
         let contract = tool.contract().clone();
         let input = normalize_input(&contract.input_schema, call.input.clone());
         let call = ToolCall { input, ..call.clone() };
-        let assessment = tool.assess(&call.input);
+        // A subagent's summary carries the name of its job (its approval card).
+        let assessment = self.named(session_id, tool.assess(&call.input));
         // What a subagent's profile takes (agents.md section 2): enforced here, when the
         // call runs, so a tool the model remembered from elsewhere is refused too.
         if let Some(reason) = self.child_refusal(session_id, &call.name, &assessment) {

@@ -6,9 +6,11 @@ import { api, initialSection, initialSession, initialView, postPlan, putTodo, re
 import { builtinOf } from "./commands";
 import { events, type AgentEvent } from "./events";
 import { resolveView, type View } from "./nav";
+import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
 
 export interface Store {
-  sessions: SessionMeta[];
+  /** With `agents`, how many subagents each session started (agents.md section 6). */
+  sessions: SessionRow[];
   activeSession: string | null;
   messages: Record<string, Message[]>;
   streaming: Record<string, string>; // sessionId -> partial assistant text
@@ -31,6 +33,10 @@ export interface Store {
   todos: Record<string, TodoItem[]>;
   /** Each session's plan-mode flag (plan-todo.md section 2): from the session's meta, then from `planUpdated` and the answers of the plan route. */
   planning: Record<string, boolean>;
+  /** Each session's subagents (agents.md section 6): from `subagentUpdated`, in the order they were started. */
+  children: Record<string, ChildView[]>;
+  /** The meta of each session opened here: `origin` and `parent` tell the session of a subagent (read-only). */
+  metas: Record<string, SessionInfo>;
 }
 
 let store: Store = {
@@ -53,6 +59,8 @@ let store: Store = {
   composerDraft: "",
   todos: {},
   planning: {},
+  children: {},
+  metas: {},
 };
 
 const listeners = new Set<() => void>();
@@ -92,7 +100,7 @@ export function applySettings(settings: StateView["settings"]) {
 }
 
 export async function refreshSessions() {
-  const { sessions } = await api.get<{ sessions: SessionMeta[] }>("/api/sessions");
+  const { sessions } = await api.get<{ sessions: SessionRow[] }>("/api/sessions");
   set({ sessions });
   if (!store.activeSession && sessions.length > 0) {
     void openSession(sessions[0].id);
@@ -101,14 +109,15 @@ export async function refreshSessions() {
 
 export async function openSession(id: string) {
   set({ activeSession: id });
-  const s = await api.get<{ meta: SessionMeta; messages: Message[] }>(`/api/sessions/${id}`);
-  // The session's todo list comes with its meta (plan-todo.md section 1).
-  set({ messages: { ...store.messages, [id]: s.messages }, todos: { ...store.todos, [id]: s.meta.todo ?? [] }, planning: { ...store.planning, [id]: s.meta.planning ?? false } });
+  const s = await api.get<{ meta: SessionInfo; messages: Message[] }>(`/api/sessions/${id}`);
+  // The session's todo list comes with its meta (plan-todo.md section 1), as does what
+  // tells the session of a subagent (agents.md section 6).
+  set({ messages: { ...store.messages, [id]: s.messages }, todos: { ...store.todos, [id]: s.meta.todo ?? [] }, planning: { ...store.planning, [id]: s.meta.planning ?? false }, metas: { ...store.metas, [id]: s.meta } });
 }
 
 export async function newSession(): Promise<string> {
   const meta = await api.post<SessionMeta>("/api/sessions", {});
-  set({ sessions: [meta, ...store.sessions], activeSession: meta.id, messages: { ...store.messages, [meta.id]: [] }, todos: { ...store.todos, [meta.id]: [] }, planning: { ...store.planning, [meta.id]: false } });
+  set({ sessions: [meta, ...store.sessions], activeSession: meta.id, messages: { ...store.messages, [meta.id]: [] }, todos: { ...store.todos, [meta.id]: [] }, planning: { ...store.planning, [meta.id]: false }, metas: { ...store.metas, [meta.id]: meta } });
   return meta.id;
 }
 
@@ -126,7 +135,9 @@ export async function saveTodo(id: string, items: TodoItem[]) {
 export async function deleteSession(id: string) {
   await api.del(`/api/sessions/${id}`);
   const sessions = store.sessions.filter((s) => s.id !== id);
-  set({ sessions, activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
+  // The daemon deleted the subagents of the session with it (agents.md section 2).
+  const without = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id));
+  set({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
   if (store.activeSession) void openSession(store.activeSession);
 }
 
@@ -150,6 +161,11 @@ export async function sendMessage(text: string, plan = false) {
   if (builtin === "plan") return;
   const id = store.activeSession;
   if (!id || !line) return;
+  // The session of a subagent is read-only (agents.md section 6); the daemon refuses too.
+  if (store.metas[id]?.origin === "subagent") {
+    set({ notice: "The session of a subagent is read-only: its answer arrives in the session that started it." });
+    return;
+  }
   const prefixed = /^\/plan\s/.test(line);
   const body = prefixed ? { text: line.replace(/^\/plan\s+/, ""), plan: true } : plan ? { text, plan: true } : { text };
   await api.post(`/api/sessions/${id}/messages`, body);
@@ -192,6 +208,15 @@ export function takeComposerDraft() {
 export async function cancelSession() {
   const id = store.activeSession;
   if (id) await api.post(`/api/sessions/${id}/cancel`);
+}
+
+/** Stop a subagent of `sessionId` (the Stop button of its Agents card): a running one is cancelled and a queued one never starts; the card follows the event. A failure is a notice. */
+export async function stopSubagent(sessionId: string, childId: string) {
+  try {
+    await agentsApi.stop(sessionId, childId);
+  } catch (e) {
+    set({ notice: `Subagent not stopped: ${e instanceof Error ? e.message : String(e)}` });
+  }
 }
 
 /** Answer a card. `reason` is the text of the reason field of a plan card (plan-todo.md section 2). */
@@ -256,7 +281,9 @@ export function handleEvent(ev: AgentEvent) {
       set({ running, streaming: { ...store.streaming, [ev.sessionId]: "" }, reasoning: { ...store.reasoning, [ev.sessionId]: "" } });
       // A failed turn otherwise leaves the chat silent.
       if (ev.status === "failed" && ev.error) set({ notice: `Turn failed: ${ev.error.slice(0, 300)}` });
-      void openSession(ev.sessionId); // reload the finished history
+      // Reload the finished history of the open chat. Another session's turn (a subagent's,
+      // a task's) ends without opening that session here.
+      if (ev.sessionId === store.activeSession) void openSession(ev.sessionId);
       void refreshSessions();
       break;
     }
@@ -280,6 +307,13 @@ export function handleEvent(ev: AgentEvent) {
       // The session entered or left plan mode (the agent, an approval, "Cancel plan").
       set({ planning: { ...store.planning, [ev.sessionId]: ev.active } });
       break;
+    case "subagentUpdated": {
+      // A subagent of the session started, got a slot, ended or was stopped (agents.md section 3).
+      const mine = store.children[ev.sessionId] ?? [];
+      const child = { ...ev.child, status: ev.status };
+      set({ children: { ...store.children, [ev.sessionId]: mine.some((c) => c.id === child.id) ? mine.map((c) => (c.id === child.id ? child : c)) : [...mine, child] } });
+      break;
+    }
     case "settingsChanged":
       // The event carries the whole settings (the answer of PUT /api/settings): no
       // second GET /api/state.

@@ -69,6 +69,12 @@ fn the_profile_named_is_found_or_the_others_are_listed() {
     assert_eq!(access.profile("disk-audit").unwrap().name, "disk-audit");
     assert_eq!(access.profile("nope").unwrap_err(), "unknown profile 'nope': general, explore, disk-audit, zeta", "the profiles of the owner, in order, and no built-in twice");
     assert!(access.agent().is_err(), "nothing is attached: the tool says so");
+    // The daemon's folder is read before each lookup: a file edited by hand counts at once.
+    access.set_profile_source(Arc::new(|| vec![Profile { name: "late".into(), ..Profile::general() }]));
+    assert_eq!(access.profile("late").unwrap().name, "late");
+    assert_eq!(access.profile("disk-audit").unwrap_err(), "unknown profile 'disk-audit': general, explore, late", "the source's list replaces the one that was set");
+    access.set_profile_source(Arc::new(|| vec![Profile { name: "second".into(), ..Profile::general() }]));
+    assert_eq!(access.profiles()[0].name, "late", "the first source stays");
     // The wait of `agent_run` is 120 s unless a test shortens it.
     assert_eq!((access.run_wait(), access.set_run_wait(Duration::from_secs(2)), access.run_wait()), (children::RUN_WAIT, (), Duration::from_secs(2)));
 }

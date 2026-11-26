@@ -18,6 +18,34 @@ use tokio_util::sync::CancellationToken;
 const SLEEP: &str = "sleep 47";
 const SLEEP_ONCE: &str = "sleep 48";
 const SLEEP_TOOL: &str = "sleep 49";
+const SLEEP_EXIT: &str = "sleep 46";
+/// A command whose process group ignores TERM (the shell's trap is inherited by `sleep`).
+/// Not its only command: alone, bash replaces itself by `sleep` and the group has no leader.
+const STUBBORN: &str = "trap '' TERM; sleep 46; echo done";
+
+#[tokio::test]
+async fn shutdown_kills_what_runs_and_waits_for_nothing() {
+    // Daemon exit (agents.md section 4): TERM, then KILL for a group that is still there.
+    let dir = tempfile::tempdir().unwrap();
+    let bg = Background::new(dir.path());
+    let before = Instant::now();
+    bg.shutdown().await;
+    assert!(before.elapsed() < Duration::from_secs(1), "nothing runs: no wait");
+
+    let plain = bg.start("s", SLEEP_EXIT, None).await.unwrap().id;
+    until(5, "the command runs", || running_count(SLEEP_EXIT) == 1).await;
+    let stubborn = bg.start("s", STUBBORN, None).await.unwrap().id;
+    until(5, "the stubborn command runs", || running_count(&format!("bash -c {STUBBORN}")) == 1).await;
+    let started = Instant::now();
+    bg.shutdown().await;
+    assert!(started.elapsed() >= Duration::from_millis(1900) && started.elapsed() < Duration::from_secs(4), "it waits the 2 s only for the group that ignored TERM: {:?}", started.elapsed());
+    assert_eq!(running_count(SLEEP_EXIT), 0, "sleep died of TERM");
+    assert_eq!(running_count(&format!("bash -c {STUBBORN}")), 0, "the stubborn group died of KILL");
+    for id in [plain, stubborn] {
+        assert_eq!(bg.info(&id).unwrap().status, TaskStatus::Killed);
+    }
+    assert_eq!(bg.running(), 0);
+}
 
 fn ctx(session: &str) -> ToolContext {
     ToolContext {
@@ -132,7 +160,8 @@ async fn a_task_tells_its_session_how_it_ended_unless_it_was_killed() {
     let mut lines: Vec<&str> = tail.lines().collect();
     lines.sort_unstable();
     assert_eq!(lines, ["first", "second"], "stdout and stderr, each as it came");
-    let first = told.lock().unwrap();
+    // A copy: a guard held here would block the sink (and the one thread of this runtime).
+    let first = told.lock().unwrap().clone();
     assert_eq!(first.len(), 1);
     assert_eq!((first[0].0.as_str(), first[0].1.lines().next()), ("sess-1", Some(format!("[Task {} finished, exit 3]", failed.id).as_str())));
     let mut lines: Vec<&str> = first[0].1.lines().skip(1).collect();
@@ -144,7 +173,6 @@ async fn a_task_tells_its_session_how_it_ended_unless_it_was_killed() {
     let (info, tail) = ended(&bg, &ok.id).await;
     assert_eq!((info.status, info.exit_code), (TaskStatus::Done, Some(0)));
     assert_eq!(tail.trim(), dir.path().display().to_string());
-    drop(first);
     assert_eq!(told.lock().unwrap().len(), 2);
     assert!(told.lock().unwrap()[1].1.starts_with(&format!("[Task {} finished, exit 0]\n", ok.id)));
 

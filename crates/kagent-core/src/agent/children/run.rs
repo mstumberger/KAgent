@@ -63,6 +63,16 @@ impl Agent {
         self.tools_for(session_id).iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ")
     }
 
+    /// The assessment of a call of a subagent: its summary is prefixed with the name of
+    /// its job, so its approval card says whose call it is (agents.md section 2). A call
+    /// of any other session is returned as it is.
+    pub(crate) fn named(&self, session_id: &str, mut assessment: CallAssessment) -> CallAssessment {
+        if let Some((_, view, _, _)) = self.children.get(session_id) {
+            assessment.summary = format!("subagent \"{}\": {}", view.title, assessment.summary);
+        }
+        assessment
+    }
+
     /// The refusal of a restricted session, when there is one (read after `tool_enabled`).
     pub(crate) fn child_refusal(&self, session_id: &str, tool: &str, call: &CallAssessment) -> Option<String> {
         self.children.refusal(session_id, tool, call)
@@ -102,6 +112,14 @@ impl Agent {
         if parent.origin == SessionOrigin::Subagent {
             anyhow::bail!("a subagent cannot start subagents: do the work with your own tools and end with a complete answer");
         }
+        // The model of the child: the one the call named, else the profile's; empty = the chat
+        // model. One that is not a ref, or that the providers do not know (where they can be
+        // asked), is refused here and not at the first request of the child. The local model
+        // passes a profile name here in about half of its calls.
+        let model = req.model.as_deref().map(str::trim).filter(|m| !m.is_empty()).unwrap_or_else(|| req.profile.model.trim());
+        if !model.is_empty() && !(model.contains("::") && self.children.model_window().is_none_or(|read| read(model).is_some())) {
+            anyhow::bail!("model '{model}' is not a model the providers know: pass a model ref (<providerId>::<modelId>), or leave `model` out (the profile's model, else the chat model)");
+        }
         let state = self.state(&req.parent).await?;
         let digest = if state.messages.lock().await.is_empty() { String::new() } else { self.store.digest(&req.parent, DIGEST_CHARS).await.unwrap_or_default() };
         let meta = self.store.create_with(description, SessionOrigin::Subagent, Some(req.parent.clone())).await?;
@@ -114,7 +132,7 @@ impl Agent {
         self.children.restrict(&id, restriction);
         let view = ChildView { id: id.clone(), title: description.into(), profile: req.profile.name.clone(), status: ChildStatus::Queued, started_at: None, ended_at: None };
         let job = Job {
-            model_ref: req.model.filter(|m| !m.trim().is_empty()).unwrap_or_else(|| req.profile.model.clone()),
+            model_ref: model.to_string(),
             max_iterations: req.profile.max_iterations,
             block: subagent_block(description, &req.profile),
             text: Some(job_text(&digest, prompt)),
@@ -137,6 +155,13 @@ impl Agent {
     /// here; the queue goes on where the caller loops (`pump_children`).
     async fn launch_child(self: &Arc<Self>, id: &str) {
         let Some(text) = self.children.take_text(id) else { return };
+        // Said running before the turn exists, so the end of a turn that fails at once
+        // (no chat model) can never reach the UI before the state it ends.
+        if let Some(view) = self.children.started(id) {
+            if let Some((parent, _, _, _)) = self.children.get(id) {
+                self.child_event(&parent, &view);
+            }
+        }
         match self.send(id, text, Via::Agent).await {
             Ok(SendOutcome::Started { handle, .. }) => self.watch_child(id.to_string(), handle),
             // Never queued: a new child's session has no turn.
@@ -148,11 +173,6 @@ impl Agent {
                     self.child_event(&parent, &view);
                     let _ = self.notify(&parent, &render(&view, Some(&end), MAX_OUTPUT_CHARS)).await;
                 }
-            }
-        }
-        if let Some(view) = self.children.started(id) {
-            if let Some((parent, _, _, _)) = self.children.get(id) {
-                self.child_event(&parent, &view);
             }
         }
     }

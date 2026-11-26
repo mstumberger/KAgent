@@ -18,6 +18,8 @@ use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::Command;
 
+mod shutdown;
+
 use super::exec::kill_group;
 
 /// At most this many tasks run at once; a further one is refused (agents.md section 4).
@@ -272,6 +274,7 @@ impl Background {
             .collect();
         running.iter().filter(|id| self.stop(id)).count()
     }
+
 }
 
 /// Spawn the command and make its record. The caller enters it in the registry.

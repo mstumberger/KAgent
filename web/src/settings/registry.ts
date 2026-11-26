@@ -13,6 +13,7 @@ import WebSection from "./sections/Web";
 import Skills from "./sections/Skills";
 import Memory from "./sections/Memory";
 import Tools from "./sections/Tools";
+import Subagents from "./sections/Subagents";
 import Telegram from "./sections/Telegram";
 
 export type SectionGroup = "Basics" | "Agent capabilities" | "Channels";
@@ -135,6 +136,15 @@ export const SECTIONS: Section[] = [
     keywords: ["permission", "approval", "always allow", "override", "groups", "MCP", "read-only", "full control"],
     icon: "shield",
     component: Tools,
+  },
+  {
+    id: "agents",
+    title: "Subagents",
+    group: "Agent capabilities",
+    description: "The profiles a subagent runs with, and how many of them work at once.",
+    keywords: ["subagent", "agent", "profile", "background", "parallel", "explore", "task", "max concurrent"],
+    icon: "talk",
+    component: Subagents,
   },
   {
     id: "telegram",

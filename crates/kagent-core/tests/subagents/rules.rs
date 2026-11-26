@@ -24,6 +24,8 @@ async fn deleting_a_parent_cancels_and_deletes_its_children() {
     assert_eq!(handle.wait().await.status, TurnStatus::Cancelled);
     assert!(r.store.list().await.unwrap().is_empty(), "the parent and its children are gone");
     assert!(r.store.meta(&child.id).await.is_err() && r.store.meta(&r.session).await.is_err());
+    // The child's turn ends in a task of its own, after the parent's: wait for the event.
+    wait_status(&r, &child.id, ChildStatus::Cancelled).await;
     assert_eq!(statuses(&r, &child.id), [ChildStatus::Running, ChildStatus::Cancelled]);
     assert!(children(&r).is_empty());
 }
@@ -48,6 +50,13 @@ async fn a_profiles_model_and_iteration_limit_are_applied_and_its_window_is_read
     assert!(note[0].starts_with("[Agent \"job-m\" failed in ") && note[0].contains(&format!("agent {}, profile small\nerror: stopped after 3 model requests (max iterations)", child.id)), "{}", note[0]);
     assert_eq!(statuses(&r, &child.id), [ChildStatus::Running, ChildStatus::Failed]);
     ends_with(&r, "after").await;
+
+    // A model that is not a ref, or that the providers do not know, is refused before a
+    // session is made (the local model passes a profile name as `model` in about half of its calls).
+    let (text, status) = run_tool(&r, &r.session, "agent_run", json!({"description": "d", "prompt": "p", "model": "general"})).await;
+    assert_eq!((status, text.as_str()), (ToolCallStatus::Error, "the subagent was not started: model 'general' is not a model the providers know: pass a model ref (<providerId>::<modelId>), or leave `model` out (the profile's model, else the chat model)"));
+    assert_eq!(run_tool(&r, &r.session, "agent_run", json!({"description": "d", "prompt": "p", "model": "nope::x"})).await.1, ToolCallStatus::Error, "a ref the providers do not know");
+    assert_eq!(children(&r).len(), 1, "nothing was started for either");
 }
 
 #[tokio::test]
@@ -101,6 +110,26 @@ async fn a_background_task_tells_its_session_through_the_agent() {
     let seen = r.model.of("parent");
     assert!(seen[2].last_user.starts_with(&format!("[Task {id} finished, exit 3]\n")) && seen[2].last_user.contains("line-one"), "{}", seen[2].last_user);
     assert_eq!(notes(&r, &r.session).await.len(), 1, "the killed task sent no message");
+}
+
+#[tokio::test]
+async fn an_approval_card_of_a_subagent_carries_the_name_of_its_job() {
+    // Scenario S31 item 4, agents.md section 2: the child uses the permission engine with
+    // its own session id, and its card says whose call it is.
+    let r = rig(&[("parent", vec![run("job-card"), say("after")]), ("job-card", vec![call("probe_c", json!({})), say("done")])], PermissionMode::Ask).await;
+    let handle = started(&r, "one job").await;
+    until(10, "the child's card", || !r.agent.broker().pending().is_empty()).await;
+    let child = children(&r).remove(0);
+    let card = r.agent.broker().pending().remove(0);
+    assert_eq!((card.session_id.as_str(), card.tool.as_str()), (child.id.as_str(), "probe_c"), "the card is the child's own");
+    let plain = r.agent.tools().get("probe_c").unwrap().assess(&json!({})).summary;
+    assert_eq!(card.summary, format!("subagent \"job-card\": {plain}"), "named after the subagent, then the call");
+    // The same call by a session that is not a subagent keeps its summary.
+    assert!(!plain.starts_with("subagent"), "{plain}");
+    r.agent.broker().resolve(&card.request_id, kagent_core::permission::ApprovalDecision::Deny { reason: None });
+    assert_eq!(handle.wait().await.status, TurnStatus::Completed);
+    wait_status(&r, &child.id, ChildStatus::Done).await;
+    assert!(results(&r, &child.id, "probe_c").await[0].is_error, "the denied call did not run");
 }
 
 /// Processes running exactly `command`.

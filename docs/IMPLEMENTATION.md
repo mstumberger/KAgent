@@ -719,7 +719,7 @@ Check: the standard checks with `web/` and the gated Ollama test and smoke scrip
 
 ### S31 - Subagents and background tasks (~1300 lines)
 Spec: `specs/agents.md` (all); `specs/tools.md` sections 21 and 23 (the `shell` row); `specs/api.md` sections 6 (`/api/agents`, `?parent=`) and 7 (`subagentUpdated`).
-Read: `crates/kagent-core/src/agent/mod.rs`, `agent/turn.rs`, `agent/calls.rs:43-70` (the disabled-group refusal), `crates/kagent-core/tests/agent_loop.rs`, `crates/kagent-core/src/tools/exec.rs:120-190` (process group and kill), `crates/kagent-core/src/tools/shell.rs`, `crates/kagentd/src/skills_api.rs` (the CRUD pattern), `web/src/views/Chat.tsx`, `web/src/events.ts`.
+Read: `crates/kagent-core/src/agent/mod.rs`, `agent/turn.rs`, `agent/calls.rs` (the disabled-group refusal), `crates/kagent-core/tests/common/mod.rs` (the scripted-model rig; the tests of the stage are in `tests/subagents/`), `crates/kagent-core/src/tools/exec.rs` (process group and kill), `crates/kagent-core/src/tools/shell.rs`, `crates/kagentd/src/skills_api.rs` (the CRUD pattern), `web/src/views/Chat.tsx`, `web/src/events.ts`.
 Do:
 - Core: `agent/children.rs` (start a child, notify the parent, the concurrency limit, the depth limit), per-session tool groups and the read-only flag in `execute_call`, `tools/background.rs` (the registry of background tasks; the `background` flag of `shell`).
 - Daemon: `subagents/profiles.rs` (files and built-ins), `subagents/runner.rs`, `subagents/http.rs`; the `subagents` settings section.
@@ -2192,6 +2192,81 @@ release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was not 
   searches; the tool then says so (Settings -> Web has Brave, which needs a key, or
   SearXNG).
 
+### Session 2026-11-26 (S31 subagents and background tasks)
+
+Two agent runs. The first (13:19 to 14:01) was killed, most likely by the coding
+plan's usage limit, with the core half written and tested; the second (14:28 to 16:17,
+218 tool calls) kept that core, fixed what its own tests showed and built the daemon
+and the web halves. 560 workspace tests (518 before), 2 ignored, on three full runs.
+No release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was not run.
+- The core of the interrupted run was kept: `agent/children.rs` and
+  `children/{registry,run}.rs` (the orchestration, on the scripted model in
+  `tests/subagents`), `tools/{agents,tasktools,background}.rs`, `tests/subagents/*`.
+  Fixed there: a deadlock in a test file (a guard held across an await blocked the
+  sink; the lib tests hung 15 minutes on the first run), two racy assertions (the
+  rig's event log is filled by a task of its own), the order of the `running` event.
+- A notification wakes a chat or a voice session only, at most 5 turns in a row
+  without a message of the owner (`MAX_AUTO_TURNS`). A task, an alert investigation or
+  a Telegram chat waits with `send` and `wait_idle`; a turn started by a notification
+  would race that wait. A cancelled subagent reports nothing.
+- `agent_run` is MUT (tools.md), so a planning session cannot start a subagent; the
+  plan restriction of a child is tested through `start_child` by hand. Open for the
+  owner.
+- `agent_run` refuses a `model` that is not a ref or that the providers do not know:
+  the local 7B passes `model: "general"` in 8 of 18 raw calls.
+- **The description of `agent_run` was sharpened after raw replays** (the first
+  request of scenario item 3, 37 tools): as the interrupted run left it, `agent_run`
+  came in 0 of 8 answers (two read-only calls of its own in 8 of 8); with the final
+  wording 12 of 12, two calls in 6 of 12. A line of the system prompt gave 8 of 8 with
+  the old description too; `prompt.rs` was not changed.
+- Real loop, the daemon's registry (66 tools; 37 kept at 16k), 6 runs of item 3: two
+  `agent_run` in the first answer 6 of 6; the first pair refused for
+  `model: "general"` in 4 of 6 and sent again; two subagents ran and ended `done`
+  6 of 6; the summary without a new message 6 of 6 (4 by the turn a report starts,
+  2 by `agent_wait`); 8 to 10 requests, 34 to 64 s a run. Smoke 3 of 3 with both
+  registries.
+- Profiles: the name is the file's name; a frontmatter name that differs, a key that
+  is not one of the six, an unknown group or a value out of range makes the file
+  invalid (skipped, listed with the reason). The folder is read before each
+  `agent_run` and on `GET /api/agents`. **Spec corrected (api.md section 6):** the
+  list answers `{agents, invalid}`; `PUT` answers 201 or 200 and a field left out
+  keeps its value; `POST /api/sessions/:id/subagents/:child/stop` was added (a queued
+  subagent cannot be stopped through `cancel`); each listed session has `agents`; a
+  message into the session of a subagent is 409.
+- Background tasks: at daemon exit `Background::shutdown()` (TERM, 2 s, KILL) runs
+  after the server returns. Whether a process group is alive is read from `/proc`:
+  `kill -0 -<pgid>` answers "failed" on this machine while the same `kill` delivers.
+- Web: `turnFinished` reloads the open chat only (before, the end of any session's
+  turn opened that session). The cards are rebuilt from the transcript after a reload;
+  the output of a report is behind a toggle. The first browser pass found that the
+  refusal of the daemon did not show above the form; fixed.
+- Files: `kagentd/src/subagents/{mod,profiles,http,runner,settings}.rs`;
+  `web/src/components/{AgentsCard.tsx,agents.ts,agents.css}`,
+  `settings/sections/Subagents.tsx`, `settings/subagents/{api.ts,draft.ts,ProfileEditor.tsx,subagents.css}`.
+  Beyond the list: `api.rs` (+7 lines: `agents` on each listed session;
+  `delete_session` calls `Agent::delete_session`; the 409; `subagents.maxConcurrent`
+  applied after the settings lock), `tools/background/shutdown.rs`.
+- Verification: build clean (`cargo build --workspace` with `-D warnings`); 560 tests
+  three times; the gated Ollama test; `pnpm -C web lint` (4 warnings, 0 errors, the
+  baseline), `tsc -b` and the scratch build (`/tmp/kagent-s31-dist`; `web/dist`
+  unchanged). Headless 66 of 66, twice, on the Chat page and the Subagents section,
+  on an own dev server (5203) and an own Chrome (CDP 9353); nothing sent to
+  127.0.0.1:7878; the ports were free at the end. Harness `/tmp/kagent-s31-harness`,
+  screenshots `/tmp/kagent-s31-shots`, the real-model project
+  `/tmp/kagent-s31-evidence` (not in the repo).
+- Seen, not changed: `prompt.rs` says nothing about subagents. The local 7B: one
+  `agent_run` for two jobs in about half of the answers; its subagents sometimes end
+  with a narration instead of an answer; one "gave no answer". With more than 5
+  notifications in a row an idle parent is not woken for the sixth. `get_state` lists
+  a running subagent in `running`. `main.rs` is 495 lines, `api.rs` 501,
+  `settings.rs` 435. The status lines of `AGENTS.md` and the phase 4 header above
+  still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenario S31 items 3 to 5 through the live UI with a
+  cloud model. Open: the valve of 5 turns; whether plan mode may start subagents
+  (`agent_run` MUT, or in `PLAN_ALLOWED`); a line about subagents in the system
+  prompt.
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2227,7 +2302,7 @@ Phase 4 (planned 2026-11-24, not started; the order is the dependency order)
 - [x] S28 automations: scheduled tasks (items 1 to 4 automatic; items 5 and 6 with the local model through a test daemon under a temporary home: item 5 passes, item 6 ran with a doctor score of 87, so its summary branch; the NOTHING branch is unit-tested only; the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
 - [x] S29 Telegram bot (item 1 automatic; items 2 to 5 need the owner's bot: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; the `telegram` pill of item 3 was added with S30; section E)
 - [x] S30 web tools: fetch and search (items 1 to 5 automatic; items 3 to 5 by hand through the tool's code path with two requests to the web; the Settings -> Web page in the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
-- [ ] S31 subagents and background tasks
+- [x] S31 subagents and background tasks (relaunched after an interrupted run; items 1 and 2 automatic; item 3 with the local model in process: two `agent_run` calls in 6 of 6 runs; items 3 to 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
 - [ ] S32 hooks
 - [ ] S33 inline widgets
 
