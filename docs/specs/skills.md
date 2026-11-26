@@ -31,7 +31,7 @@ project-scoped skills.
 
 | Source | Root | Notes |
 |---|---|---|
-| `bundled` | repo `skills/`, or next to the binary, or `/usr/share/kagent/skills` (`paths.rs` existing candidates) | read-only; the 8 playbooks |
+| `bundled` | repo `skills/`, or next to the binary, or `/usr/share/kagent/skills` (`paths.rs` existing candidates) | read-only; the 8 playbooks and `skill-creator` |
 | `user` | `<config>/skills/<name>/` | written by the owner in the UI or by the agent (`skill_save`) |
 | `imported` | `<config>/skills-imported/<name>/` | written by import and sources; a directory, or a symlink into another tool's skills folder |
 
@@ -93,15 +93,21 @@ project-scoped skills.
   <request>` as the user message.
 - The daemon (`api::post_message`) sees a message that starts with `/<name>` where
   `name` is an enabled skill: the user message is stored as sent, and the turn gets
-  the skill body as an extra prompt block for every model request of that turn
-  (`PromptInput.skill_body`). The body is not stored in the session.
-- Unknown `/name`: sent as plain text (the model answers normally).
+  the skill body as an extra prompt block for every model request of that turn. The
+  body is not stored in the session. How: `prompt::skill_block` renders the block and
+  `api::post_message` hands it to `Agent::send_with` as `TurnOpts.system_suffix`
+  (`PromptInput` cannot carry it: the config closure has no input of a single turn).
+- The message arrives while a turn runs (it is queued as steering): its block is in
+  the prompt from the next model request on.
+- Unknown `/name`, or a disabled one: sent as plain text (the model answers normally).
 - A skill loaded this way counts as a use.
+- `/new` (the whole message) is done by the UI: a new session, nothing is sent.
+  `/compact` and `/plan` are listed as coming with S22 and S24 until those stages.
 
 ## 7. Import from other tools (S21)
 
-- Detected sources (`GET /api/skills/import-sources`), each only when the folder
-  exists:
+- Detected sources (`GET /api/skills/import-sources`): every folder of the table is a
+  row, with `exists` false and no skills when it is missing:
 
 | agent | path |
 |---|---|
@@ -120,8 +126,8 @@ project-scoped skills.
 - Import mode `copy` (default) copies the directory tree (files only, at most 20 MB per
   skill, no symlinks inside) into `<config>/skills-imported/<name>`. Mode `symlink`
   creates `<config>/skills-imported/<name>` as a symlink to the source directory.
-- Import never overwrites: an existing name in the user or imported root is skipped
-  with the reason `name exists`.
+- Import never overwrites: a name that any skill has (a bundled one too), or that has a
+  folder or link in the imported root, is skipped with the reason `name exists`.
 - **Quarantine**: imported skills arrive disabled (added to `skills.disabled`). The
   owner enables the ones they want in Settings -> Skills. The import result says so.
 - Delete on an imported symlink removes the link only. The target is never touched.
@@ -129,7 +135,7 @@ project-scoped skills.
 ## 8. Sources: git URLs (S21)
 
 - A source = `{id, name, url, ref, subdir, commit?, lastSync?, lastError?, skills[]}` in
-  `<config>/skill-sources.json` (`skills/sources.rs`).
+  `<config>/skill-sources.json` (`kagentd/src/skills_sources.rs`).
 - `url`: `https://` git URL, or an absolute local path. `ref`: branch, tag or commit
   (default: the default branch). `subdir`: folder inside the repository that holds the
   skills (default: the repository root). `name`: display name (default: repository
@@ -138,17 +144,21 @@ project-scoped skills.
   `git -c core.hooksPath=/dev/null -c protocol.file.allow=user clone --depth 1
   [--branch <ref>] -- <url> <data>/skill-sources/<id>`, scan `subdir` two levels deep,
   copy each skill into `<config>/skills-imported/<name>` (same copy rule as above),
-  record `path`, `hash` (SHA-256 of all files, sorted) and `syncedAt`. A name that
-  exists in the user root is skipped.
+  record `path`, `hash` (SHA-256 of all files, sorted) and `syncedAt`. A name that any
+  skill has, or that has a folder in the imported root, is skipped with `name exists`.
+  The same address cannot be added twice (409). A source is read without following
+  links.
   - A local path is read in place, not cloned.
   - Limits: clone output is discarded; the directory may hold at most 200 MB and 2000
-    files; at most 100 skills per sync; `git` missing -> error "install git".
+    files; more than 100 skills is an error and nothing is installed; `git` missing ->
+    error "install git".
   - Nothing in the source is executed. Only `SKILL.md` and the files beside it are
     copied.
-- `sync` re-fetches (`git fetch --depth 1 origin <ref>` then checkout, or re-reads the
-  local path), copies new and changed skills, removes copies whose skill disappeared
-  from the source, and reports `added`, `updated`, `removed`. New and changed skills
-  are disabled again (changed content is new content).
+- `sync` re-fetches (`git fetch --depth 1 origin <ref>` (`HEAD` when no `ref` is
+  given), then `git checkout --force --detach FETCH_HEAD`, or re-reads the local path),
+  copies new and changed skills, removes copies whose skill disappeared from the
+  source, and reports `added`, `updated`, `removed`. New and changed skills are
+  disabled again (changed content is new content).
 - Deleting a source removes its clone; with `removeSkills` it also removes the copies
   it installed.
 - Catalog of suggestions (`config/skill-sources.builtin.json`, read-only):
@@ -185,6 +195,10 @@ Layout per `ui-settings.md`: list on the left, detail on the right.
 - Imported and sourced skills are disabled until the owner enables them.
 - `skill_save` and `skill_delete` go through the permission engine and the audit log.
   `skill_delete` refuses everything outside `<config>/skills` and refuses symlinks.
+  `skill_save` writes no skill through a symlink either.
+- After `skill_save`, `skill_delete` and every write of the API the library is read
+  again at once and `skillsChanged` goes out: `load_skill` and the Skills page see the
+  change before the next turn.
 - Sources are added by the owner through the UI or the API only. No tool adds a source.
 - A source clone runs with hooks disabled and is never executed.
 
@@ -201,9 +215,12 @@ Layout per `ui-settings.md`: list on the left, detail on the right.
   after a file is added, removed or edited.
 - `tool.rs`: `load_skill` returns the body with the directory variable expanded, counts
   a use, and names the enabled skills grouped by source on an unknown name.
-  `SkillSave` refuses a reserved name, a name equal to another one except for case, and
-  an oversized body, and overwrites only a user skill. `SkillDelete` refuses bundled and
-  imported names, refuses a symlink, and removes a user directory.
+- `author.rs` (`author/tests.rs`): `SkillSave` refuses a reserved name, a name equal to
+  another one except for case, and an oversized body, and overwrites only a user skill.
+  `SkillDelete` refuses bundled and imported names, refuses a symlink, and removes a
+  user directory. `file.rs`: `render` writes what `parse` reads back, and `replace`
+  changes three fields of an existing file and keeps the other lines of its
+  frontmatter. The bundled `skill-creator` is listed, loads and is under 60 lines.
 - `sources.rs`: parse of `skill-sources.json` round trip; argv built for clone, fetch
   and checkout; invalid URL and `ref` are rejected before any command runs; the sync
   plan (added, updated, removed) from two hashes; skills of a sync land in
@@ -211,4 +228,6 @@ Layout per `ui-settings.md`: list on the left, detail on the right.
 - import: plan from a source tree with a duplicate real path and an existing name;
   copy skips symlinks inside the skill; delete of an imported symlink removes the link
   and leaves the target.
-- API validation: invalid name, reserved name, oversized body -> 400.
+- API validation (`skills_api.rs`): invalid name, reserved name, oversized body -> 400;
+  a name the owner has already (POST), a change or a delete of a bundled skill -> 409;
+  `/<name>` of a message names an enabled skill only.

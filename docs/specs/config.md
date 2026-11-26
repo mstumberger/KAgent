@@ -215,7 +215,7 @@ Retention: delete `flows_5m` older than 14 days hourly. `bucket` = unix time / 3
 | Name | Path |
 |---|---|
 | imported skills | `<config>/skills-imported/<name>/` (a directory, or a symlink to a skill elsewhere) |
-| skill sources | `<config>/skill-sources.json` (0600); clones under `<data>/skill-sources/<id>/` |
+| skill sources | `<config>/skill-sources.json` (0600): `{schemaVersion, sources: [...], imports: [{name, source, path, hash}]}`; clones under `<data>/skill-sources/<id>/`; copies are staged in `<config>/skills-imported.staging/` |
 | skill usage | `<data>/skill-usage.json`: `{"<name>": {"uses": 3, "lastUsed": "<rfc3339>"}}` |
 | memory | `<config>/memory/{MEMORY.md, user.md, machine.md, <topic>.md}` (`memory.md`) |
 | subagent profiles | `<config>/agents/<name>.md` (`agents.md`) |
@@ -251,16 +251,18 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
 | `skills.indexBudgetChars` | 500..20000 |
 | `memory.recallCount` | 0..8; `memory.recallChars` 0..8000 |
 | `compaction.thresholdPct` | 50..95 |
-| `voice.brain` | `routed` \| `live` \| `auto` (`voice.md`); `voice.toolGroups` = groups declared to the live model in `live` and `auto`; existing keys `voice.hotkey`, `voice.orbTheme` stay untouched |
-| `browser.backend` | `own` \| `attach`; `browser.attachProfile` = user data dir of the browser to attach to, empty = first found (`browser.md`); `browser.attachTrust` `strict` \| `normal` |
+| `voice.brain` | `routed` \| `live` \| `auto` (`voice.md`); `voice.toolGroups` = groups declared to the live model in `live` and `auto` (unknown names are refused with 400 and on load; `[]` is no tools); existing keys `voice.hotkey`, `voice.orbTheme` stay untouched |
+| `browser.backend` | `own` \| `attach`; `browser.attachProfile` = user data dir of the browser to attach to, empty = first found (`browser.md`); it must be an absolute path or start with `~/` (else 400, and refused on load); `browser.attachTrust` `strict` \| `normal` |
 | `tasks.onApproval` | `deny` \| `wait`: default policy for unattended runs (`automations.md`) |
+| `tasks.timeoutMin` | 1..1440; `tasks.maxConcurrent` 1..8; `tasks.deliver` only `desktop`, `session`, `telegram` (outside these: 400, and refused on load) |
 | `telegram.*` | `bots.md`; `approvalForwardSec` 5..600 |
 | `subagents.maxConcurrent` | 1..8 |
-| `search.engine` | `duckduckgo` \| `brave` \| `searxng` \| `none` (`web.md`) |
+| `search.engine` | `duckduckgo` \| `brave` \| `searxng` \| `none` (`web.md`); `search.searxUrl` is empty, or an http or https address without a password (else 400, and refused on load); the Brave key is set with `PUT /api/web/brave-key`, not here |
 | `hooks.events` | `hooks.md` |
 
 `PUT /api/settings` merges objects recursively; `toolGroups` with an unknown name and
-`toolOverrides` with a value other than `allow`/`ask`/`deny` are rejected with 400.
+`toolOverrides` with a value other than `allow`/`ask`/`deny` are rejected with 400
+(`null` instead removes that tool's override, which a merge cannot do).
 `toolGroups: []` means all groups.
 
 ### Hook (in `hooks.events.<Event>[]`)
@@ -282,4 +284,6 @@ line run by that shell; `timeoutMs` 100..60000. Unknown keys are rejected.
  "planning": false, "approvedPlan": null}
 ```
 `origin`: `chat | voice | task | alert | telegram | subagent`. `summary` + `summaryUpto`
-come from compaction (`compaction.md`), `approvedPlan` from plan mode (`plan-todo.md`).
+come from compaction (`compaction.md`), `approvedPlan` from plan mode (`plan-todo.md`):
+`{"path": "<data>/plans/<sessionId>-<n>.md", "text": "<the plan>"}` once a plan was
+approved; `n` is the first number the session has not used.

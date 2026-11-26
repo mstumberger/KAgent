@@ -83,6 +83,9 @@ export default function Overlay({ onExpand, onHide }: Props) {
   const lastUser = [...v.lines].reverse().find((l) => l.who === "user");
   const lastAgent = [...v.lines].reverse().find((l) => l.who !== "user");
   const pct = Math.round(v.volume * 100);
+  // The todo list of the open session (plan-todo.md section 1): a chip "3/7" while it has items.
+  const todo = s.activeSession ? (s.todos[s.activeSession] ?? []) : [];
+  const todoDone = todo.filter((item) => item.status === "completed").length;
 
   return (
     <div className={`widget st-${state}`}>
@@ -109,6 +112,11 @@ export default function Overlay({ onExpand, onHide }: Props) {
       <div className={`widget-status st-${state}`}>
         <span className="sdot" />
         {label}
+        {todo.length > 0 && (
+          <span className="widget-todo" title={`Todo: ${todoDone} of ${todo.length} done`} aria-label={`Todo: ${todoDone} of ${todo.length} done`}>
+            {todoDone}/{todo.length}
+          </span>
+        )}
       </div>
 
       {(lastUser || lastAgent) && (

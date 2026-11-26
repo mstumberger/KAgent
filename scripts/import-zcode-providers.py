@@ -31,7 +31,8 @@ EXTRA_TEMPLATES = [
                 "headers": {}},
         "keyUrl": "https://aistudio.google.com/app/apikey",
         "models": ["gemini-3.8-pro", "gemini-3.8-flash"],
-        "liveModels": ["gemini-3.8-live"],
+        # The second thinks longer before it speaks (voice.md section 8).
+        "liveModels": ["gemini-3.8-live", "gemini-3.8-live-extended-thinking"],
         "voices": ["Kore", "Puck", "Charon", "Zephyr", "Fenrir", "Leda", "Orus", "Aoede",
                    "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
                    "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar",

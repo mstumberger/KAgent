@@ -1,6 +1,8 @@
 //! Tool implementations, grouped as in `docs/specs/tools.md`.
 
+pub mod agents;
 pub mod apps;
+pub mod background;
 pub mod change;
 pub mod desktop;
 pub mod display;
@@ -18,6 +20,7 @@ pub mod security;
 pub mod services;
 pub mod sessions;
 pub mod shell;
+pub mod tasktools;
 pub mod terminal;
 pub mod sys;
 pub mod timeline;
@@ -54,8 +57,16 @@ pub fn group_of(name: &str) -> &'static str {
         "shell" => "shell",
         "hardware" | "power" | "power_profile" | "audio" | "bluetooth" | "crashes" | "drivers"
         | "disk_health" => "hardware",
-        "load_skill" => "skills",
+        "load_skill" | "skill_save" | "skill_delete" => "skills",
         "tasks" => "tasks",
+        // The agent's own tools (tools.md sections 19 and 21): its lists and plans, and
+        // the subagents and background tasks it starts.
+        "todo_write" | "todo_read" | "plan_enter" | "plan_exit" => "agent",
+        "agent_run" | "agent_wait" | "agent_stop" | "agent_list" | "task_output" | "task_stop" => "agent",
+        // Memory and earlier conversations (tools.md section 18).
+        "memory_save" | "memory_search" | "memory_get" | "memory_forget" | "session_search" => "memory",
+        // The web tools (tools.md section 20), registered by the daemon like the memory tools.
+        "web_fetch" | "web_search" => "web",
         "package" | "measure" | "undo_change" | "list_changes" => "change",
         "audio_control" | "bluetooth_control" | "wifi" | "display" | "windows" | "notify" | "open" => "desktop",
         "media" | "open_in_editor" | "projects" | "focus_context" | "clipboard" | "input" | "browser" | "ui" | "terminal" | "system_power" | "sessions" | "screen" | "message" => "desktop",
@@ -131,5 +142,33 @@ mod group_tests {
         for c in super::builtin_registry().contracts() {
             assert_ne!(super::group_of(&c.name), "other", "tool {} has no group in group_of()", c.name);
         }
+    }
+
+    /// The daemon registers these with the agent's handle (`kagentd/src/main.rs`), so
+    /// the loop over `builtin_registry` above does not see them.
+    #[test]
+    fn the_agent_tools_belong_to_the_agent_group() {
+        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "task_output", "task_stop"] {
+            assert_eq!(super::group_of(name), "agent", "{name} is a tool of the agent group");
+        }
+        assert!(crate::context::GROUP_PRIORITY.contains(&"agent"), "and the group is among those kept when the window is small");
+    }
+
+    /// The memory tools (tools.md section 18) are registered the same way.
+    #[test]
+    fn the_memory_tools_belong_to_the_memory_group() {
+        for name in ["memory_save", "memory_search", "memory_get", "memory_forget", "session_search"] {
+            assert_eq!(super::group_of(name), "memory", "{name} is a tool of the memory group");
+        }
+        assert!(crate::context::GROUP_PRIORITY.contains(&"memory"), "and the group is among those kept when the window is small");
+    }
+
+    /// The web tools (tools.md section 20) are registered the same way, in the daemon.
+    #[test]
+    fn the_web_tools_belong_to_the_web_group() {
+        for name in ["web_fetch", "web_search"] {
+            assert_eq!(super::group_of(name), "web", "{name} is a tool of the web group");
+        }
+        assert!(crate::context::GROUP_PRIORITY.contains(&"web"), "and the group is among those kept when the window is small");
     }
 }

@@ -1,0 +1,78 @@
+/* The composer's slash picker (components/CommandInput.tsx). */
+
+.cmd {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+.cmd input {
+  width: 100%;
+}
+
+.cmd-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--glass);
+  border: 1px solid var(--rim-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
+.cmd-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cmd-item[aria-selected="true"] {
+  background: rgba(124, 196, 255, 0.12);
+}
+
+/* A command whose stage is not done: named, not pickable. */
+.cmd-item.later {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.cmd-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.cmd-name code {
+  font-size: 12.5px;
+}
+
+.cmd-kind {
+  font-size: 10.5px;
+  color: var(--dim);
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+
+.cmd-desc {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

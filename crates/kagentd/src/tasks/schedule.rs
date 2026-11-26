@@ -1,217 +1,327 @@
-//! Schedules for tasks, parsed from short human text (docs/specs/tasks.md):
-//! once:   "in 20m", "in 2h", "in 1d", "14:30", "at 14:30", "tomorrow 07:00",
-//!         "2026-11-25 09:00"
-//! repeat: "every 30m", "every 2h", "hourly", "daily 09:00", "every day at 9:00",
-//!         "weekdays 08:30", "weekends 10:00", "mon,wed,fri 18:00", "every monday 9:00"
-//! All times are local.
+//! Schedules for tasks (automations.md section 2): the three variants, parsed from short
+//! human text or a 5-field cron expression, described in a few words, and `next_run`.
+//! All times are local. Records from before S28 load through the aliases `At`, `Every`
+//! and `Daily`.
+//!
+//! In words:
+//!   once:   "in 20m", "14:30", "at 14:30", "tomorrow 07:00", "monday 09:00",
+//!           "2026-11-25 09:00"
+//!   repeat: "every 30m", "every 2 hours", "hourly", "daily 09:00", "every day at 09:00",
+//!           "weekdays 08:30", "weekends 10:00", "mon,fri 18:00", "every monday 09:00",
+//!           "every 2 days at 09:00", "every 2 weeks on monday 09:00", "every 3 months"
+//!   cron:   "0 9 * * 1-5", "*/20 9-17 * * 1-5", "cron 30 8 1 * *"
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Weekday};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, SubsecRound, TimeZone};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+use super::cron;
+
+mod parse;
+pub use parse::parse;
+
+#[cfg(test)]
+mod tests;
+
+/// The largest `n` of an interval.
+const MAX_N: u32 = 200;
+
+/// The clock time of a day-and-longer interval that names none.
+const DEFAULT_AT: &str = "08:00";
+
+/// Three examples, in the message about text that does not parse.
+pub const EXAMPLES: &str = "'in 20m', 'weekdays 08:30', '0 9 * * 1-5'";
+
+/// What an empty schedule means, in lists.
+pub const ON_DEMAND: &str = "to-do (run on demand)";
+
+const DAY_NAMES: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Unit {
+    #[default]
+    Minute,
+    Hour,
+    Day,
+    Week,
+    Month,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Schedule {
     /// Once, at this moment.
-    At { at: DateTime<Local> },
-    /// Repeats every N minutes.
-    Every { minutes: u32 },
-    /// At a time of day on some weekdays (0 = Monday .. 6 = Sunday; empty = every day).
-    Daily { time: String, days: Vec<u8> },
+    Once { at: DateTime<Local> },
+    /// Every `n` of `unit`. `at` (HH:MM) and `weekdays` (0 = Monday .. 6 = Sunday) are
+    /// for days and longer; `from` is the first day of the periods of an interval of
+    /// several days, of weeks (the weekday of the first run) or of months (its day).
+    Interval {
+        unit: Unit,
+        n: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        weekdays: Option<Vec<u8>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        from: Option<NaiveDate>,
+    },
+    /// 5 fields: minute, hour, day of month, month, day of week (cron.rs).
+    Cron { expr: String },
+}
+
+/// `now`, to the second: what the daemon stores.
+pub fn stamp(now: DateTime<Local>) -> DateTime<Local> {
+    now.trunc_subsecs(0)
+}
+
+/// A wall-clock time of this zone. The earlier one when it comes twice (the clocks went
+/// back); a time the clocks skipped (they went forward) is read with the offset of the
+/// day before, so it lands an hour later.
+pub(super) fn local(naive: NaiveDateTime) -> Option<DateTime<Local>> {
+    match Local.from_local_datetime(&naive) {
+        LocalResult::Single(at) | LocalResult::Ambiguous(at, _) => Some(at),
+        LocalResult::None => {
+            let offset = Local.offset_from_utc_datetime(&(naive - Duration::days(1)));
+            Some(Local.from_utc_datetime(&(naive - offset)))
+        }
+    }
+}
+
+/// "HH:MM" as a schedule stores it.
+fn hhmm(text: &str) -> Option<NaiveTime> {
+    NaiveTime::parse_from_str(text.trim(), "%H:%M").ok()
+}
+
+fn hhmm_string(time: NaiveTime) -> String {
+    time.format("%H:%M").to_string()
+}
+
+/// The days of a week in a few words: nothing for every day, "weekdays", "weekends", or
+/// "mon, fri".
+fn day_list(days: Option<&[u8]>) -> Option<String> {
+    let mut days: Vec<u8> = days?.to_vec();
+    if days.is_empty() {
+        return None;
+    }
+    days.sort_unstable();
+    days.dedup();
+    if days == [0, 1, 2, 3, 4] {
+        return Some("weekdays".into());
+    }
+    if days == [5, 6] {
+        return Some("weekends".into());
+    }
+    Some(days.iter().map(|d| DAY_NAMES[(*d as usize) % 7]).collect::<Vec<_>>().join(", "))
+}
+
+// What a stored or sent schedule holds, field by field: `deny_unknown_fields` cannot be
+// combined with the type tag, so each variant has its own struct.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OnceAt {
+    at: DateTime<Local>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IntervalFields {
+    unit: Unit,
+    n: u32,
+    #[serde(default)]
+    at: Option<String>,
+    #[serde(default)]
+    weekdays: Option<Vec<u8>>,
+    #[serde(default)]
+    from: Option<NaiveDate>,
+}
+
+impl From<IntervalFields> for Schedule {
+    fn from(f: IntervalFields) -> Self {
+        Self::Interval { unit: f.unit, n: f.n, at: f.at, weekdays: f.weekdays, from: f.from }
+    }
+}
+
+/// The shape before S28.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OldEvery {
+    minutes: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OldDaily {
+    time: String,
+    days: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CronFields {
+    expr: String,
+}
+
+fn read<T: serde::de::DeserializeOwned>(kind: &str, fields: &Value) -> Result<T, String> {
+    serde_json::from_value(fields.clone()).map_err(|e| format!("a {kind} schedule: {e}"))
 }
 
 impl Schedule {
+    /// Every variant except `once`.
     pub fn repeats(&self) -> bool {
-        !matches!(self, Schedule::At { .. })
+        !matches!(self, Self::Once { .. })
     }
 
-    /// Short description for lists ("daily 09:00", "weekdays 08:30", "once 25 Nov 09:00").
+    pub fn interval(unit: Unit, n: u32, at: Option<String>, weekdays: Option<Vec<u8>>, from: Option<NaiveDate>) -> Self {
+        Self::Interval { unit, n, at, weekdays, from }
+    }
+
+    /// A schedule from what a file, a request or a tool holds. The type names the
+    /// variant (`once`, `interval`, `cron`; before S28: `At`, `Every`, `Daily`); a field
+    /// the variant does not have, or a value out of range, is an error.
+    pub fn from_value(value: Value) -> Result<Self, String> {
+        let Value::Object(mut fields) = value else {
+            return Err("a schedule must be an object with a type".into());
+        };
+        let kind = fields.remove("type").and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        let rest = Value::Object(fields);
+        let schedule = match kind.as_str() {
+            "once" | "At" => Self::Once { at: read::<OnceAt>(&kind, &rest)?.at },
+            "interval" => read::<IntervalFields>(&kind, &rest)?.into(),
+            "Every" => Self::interval(Unit::Minute, read::<OldEvery>(&kind, &rest)?.minutes, None, None, None),
+            "Daily" => {
+                let daily = read::<OldDaily>(&kind, &rest)?;
+                Self::interval(Unit::Day, 1, Some(daily.time), (!daily.days.is_empty()).then_some(daily.days), None)
+            }
+            "cron" => Self::Cron { expr: read::<CronFields>(&kind, &rest)?.expr },
+            other => return Err(format!("unknown schedule type '{other}'")),
+        };
+        schedule.validate()?;
+        Ok(schedule)
+    }
+
+    /// As the spec allows a stored schedule to be (automations.md section 1).
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Once { .. } => Ok(()),
+            Self::Cron { expr } => cron::parse(expr).map(|_| ()),
+            Self::Interval { unit, n, at, weekdays, from } => {
+                if !(1..=MAX_N).contains(n) {
+                    return Err(format!("interval: n must be between 1 and {MAX_N}, not {n}"));
+                }
+                if at.as_deref().is_some_and(|t| hhmm(t).is_none()) {
+                    return Err(format!("interval: at must be HH:MM, not '{}'", at.clone().unwrap_or_default()));
+                }
+                if weekdays.as_deref().is_some_and(|days| days.iter().any(|d| *d > 6)) {
+                    return Err("interval: weekdays are 0 (Monday) to 6 (Sunday)".into());
+                }
+                let extra = match unit {
+                    Unit::Minute | Unit::Hour if at.is_some() || weekdays.is_some() || from.is_some() => {
+                        Some("a schedule in minutes or hours takes no at, weekdays or from".to_string())
+                    }
+                    Unit::Month if weekdays.is_some() => Some("a monthly interval takes no weekdays".to_string()),
+                    _ => None,
+                };
+                extra.map_or(Ok(()), Err)
+            }
+        }
+    }
+
+    /// A few words for lists: "once Wed 25 Nov 09:00", "every 30 minutes", "weekdays at
+    /// 08:30", "every 2 weeks on mon at 09:00", "cron 0 9 * * 1-5".
     pub fn describe(&self) -> String {
         match self {
-            Schedule::At { at } => format!("once {}", at.format("%a %d %b %H:%M")),
-            Schedule::Every { minutes } if minutes % 1440 == 0 => format!("every {} d", minutes / 1440),
-            Schedule::Every { minutes } if minutes % 60 == 0 => format!("every {} h", minutes / 60),
-            Schedule::Every { minutes } => format!("every {minutes} min"),
-            Schedule::Daily { time, days } => {
-                let d: &[u8] = days;
-                let which = match d {
-                    [] => "daily".to_string(),
-                    [0, 1, 2, 3, 4] => "weekdays".into(),
-                    [5, 6] => "weekends".into(),
-                    _ => d.iter().map(|x| ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][*x as usize % 7]).collect::<Vec<_>>().join(","),
-                };
-                format!("{which} {time}")
+            Self::Once { at } => format!("once {}", at.format("%a %d %b %H:%M")),
+            Self::Cron { expr } => format!("cron {expr}"),
+            Self::Interval { unit, n, at, weekdays, from } => {
+                let time = hhmm(at.as_deref().unwrap_or(DEFAULT_AT)).map(hhmm_string).unwrap_or_default();
+                let days = day_list(weekdays.as_deref());
+                let on = days.as_deref().map(|d| format!(" on {d}")).unwrap_or_default();
+                match unit {
+                    Unit::Minute if *n == 1 => "every minute".into(),
+                    Unit::Minute => format!("every {n} minutes"),
+                    Unit::Hour if *n == 1 => "hourly".into(),
+                    Unit::Hour => format!("every {n} hours"),
+                    Unit::Day if *n == 1 => days.map_or_else(|| format!("daily at {time}"), |d| format!("{d} at {time}")),
+                    Unit::Day => format!("every {n} days{on} at {time}"),
+                    Unit::Week if *n == 1 => format!("every week{on} at {time}"),
+                    Unit::Week => format!("every {n} weeks{on} at {time}"),
+                    Unit::Month if *n == 1 => format!("monthly{} at {time}", from.map(|d| format!(" on day {}", d.day())).unwrap_or_default()),
+                    Unit::Month => format!("every {n} months{} at {time}", from.map(|d| format!(" on day {}", d.day())).unwrap_or_default()),
+                }
             }
         }
     }
 
-    /// First run strictly after `from` (None: a one-off already in the past).
-    pub fn next_after(&self, from: DateTime<Local>) -> Option<DateTime<Local>> {
+    /// The next run strictly after `after`: None when a `once` is over, or when a cron
+    /// expression matches nothing within 366 days. Computed from `after`, never from
+    /// when a run ended.
+    pub fn next_run(&self, after: DateTime<Local>) -> Option<DateTime<Local>> {
         match self {
-            Schedule::At { at } => (*at > from).then_some(*at),
-            Schedule::Every { minutes } => Some(from + Duration::minutes((*minutes).max(1) as i64)),
-            Schedule::Daily { time, days } => {
-                let t = NaiveTime::parse_from_str(time, "%H:%M").ok()?;
-                (0..8).find_map(|offset| {
-                    let date = from.date_naive() + Duration::days(offset);
-                    let wd = date.weekday().num_days_from_monday() as u8;
-                    if !days.is_empty() && !days.contains(&wd) {
-                        return None;
-                    }
-                    let at = local(date.and_time(t))?;
-                    (at > from).then_some(at)
-                })
+            Self::Once { at } => (*at > after).then_some(*at),
+            Self::Cron { expr } => cron::parse(expr).ok().and_then(|c| c.next(after)),
+            Self::Interval { unit: Unit::Minute, n, .. } => Some(after + Duration::minutes(i64::from(*n))),
+            Self::Interval { unit: Unit::Hour, n, .. } => Some(after + Duration::hours(i64::from(*n))),
+            Self::Interval { unit, n, at, weekdays, from } => next_day_like(*unit, *n, at.as_deref(), weekdays.as_deref(), *from, after),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Schedule {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        Self::from_value(value).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Days, weeks and months: the first matching day after `after`. The periods count from
+/// `from` (an epoch Monday for days and weeks, January 1st 1970 for months, when a
+/// schedule names none); at most the period that holds `after` and the one after it are
+/// looked at.
+fn next_day_like(unit: Unit, n: u32, at: Option<&str>, days: Option<&[u8]>, from: Option<NaiveDate>, after: DateTime<Local>) -> Option<DateTime<Local>> {
+    let time = hhmm(at.unwrap_or(DEFAULT_AT))?;
+    let today = after.date_naive();
+    // An interval that names no anchor counts from the epoch: a Monday for days and
+    // weeks, the 1st of January for months.
+    let anchor = from.unwrap_or(match unit {
+        Unit::Month => NaiveDate::from_ymd_opt(1970, 1, 1).expect("a date"),
+        _ => NaiveDate::from_ymd_opt(1970, 1, 5).expect("a date"),
+    });
+    let n = i64::from(n);
+    // A day interval names its days of the week: the next one can be a week away.
+    let passes = if unit == Unit::Day { 8 } else { 2 };
+    for i in 0..passes {
+        let start = match unit {
+            Unit::Day => anchor.checked_add_signed(Duration::days((today - anchor).num_days().div_euclid(n) * n + i * n))?,
+            Unit::Week => anchor.checked_add_signed(Duration::days((today - anchor).num_days().div_euclid(7 * n) * 7 * n + i * 7 * n))?,
+            _ => {
+                // Months: the day of the anchor, or the last day of a shorter month.
+                let months = (i64::from(today.year()) - i64::from(anchor.year())) * 12 + i64::from(today.month0()) - i64::from(anchor.month0());
+                let k = months.div_euclid(n) * n + i * n;
+                let year = anchor.year() + i32::try_from((i64::from(anchor.month0()) + k).div_euclid(12)).ok()?;
+                let month = u32::try_from((i64::from(anchor.month0()) + k).rem_euclid(12)).ok()? + 1;
+                let last = last_day(year, month)?;
+                NaiveDate::from_ymd_opt(year, month, anchor.day().min(last))?
+            }
+        };
+        for j in 0..if unit == Unit::Week { 7 } else { 1 } {
+            let date = start + Duration::days(j);
+            if let Some(days) = days.filter(|d| !d.is_empty()) {
+                if !days.contains(&(date.weekday().num_days_from_monday() as u8)) {
+                    continue;
+                }
+            }
+            if let Some(at) = local(date.and_time(time)) {
+                if at > after {
+                    return Some(at);
+                }
             }
         }
     }
+    None
 }
 
-fn local(n: NaiveDateTime) -> Option<DateTime<Local>> {
-    Local.from_local_datetime(&n).earliest()
-}
-
-fn parse_time(s: &str) -> Option<NaiveTime> {
-    let s = s.trim().trim_start_matches("at ").trim();
-    if let Ok(t) = NaiveTime::parse_from_str(s, "%H:%M") {
-        return Some(t);
-    }
-    // "9", "9am", "7pm"
-    let (num, pm) = if let Some(n) = s.strip_suffix("pm") { (n.trim(), true) } else if let Some(n) = s.strip_suffix("am") { (n.trim(), false) } else { (s, false) };
-    let h: u32 = num.parse().ok()?;
-    let h = if pm && h < 12 { h + 12 } else { h };
-    NaiveTime::from_hms_opt(h, 0, 0)
-}
-
-fn parse_duration(s: &str) -> Option<u32> {
-    let s = s.trim().replace(' ', "");
-    let (num, unit) = s.split_at(s.find(|c: char| !c.is_ascii_digit())?);
-    let n: u32 = num.parse().ok()?;
-    let mins = match unit {
-        "m" | "min" | "mins" | "minute" | "minutes" => n,
-        "h" | "hr" | "hrs" | "hour" | "hours" => n * 60,
-        "d" | "day" | "days" => n * 1440,
-        _ => return None,
-    };
-    (mins > 0).then_some(mins)
-}
-
-fn weekday(s: &str) -> Option<u8> {
-    let w: Weekday = s.trim().trim_end_matches('s').parse().ok()?;
-    Some(w.num_days_from_monday() as u8)
-}
-
-/// Parse a schedule; `None` input text or "" means no schedule (a to-do).
-pub fn parse(text: &str, now: DateTime<Local>) -> Result<Option<Schedule>, String> {
-    let t = text.trim().to_lowercase();
-    if t.is_empty() || t == "none" || t == "manual" || t == "todo" {
-        return Ok(None);
-    }
-    let bad = || format!("unknown schedule '{text}'. Use e.g. 'in 20m', '14:30', 'tomorrow 07:00', '2026-11-25 09:00', 'every 30m', 'daily 09:00', 'weekdays 08:30', 'mon,fri 18:00'");
-    // A bare duration ("1m", "30 min") means "in".
-    if let Some(m) = parse_duration(&t) {
-        return Ok(Some(Schedule::At { at: now + Duration::minutes(m as i64) }));
-    }
-    if let Some(rest) = t.strip_prefix("in ") {
-        let m = parse_duration(rest).ok_or_else(bad)?;
-        return Ok(Some(Schedule::At { at: now + Duration::minutes(m as i64) }));
-    }
-    if t == "hourly" {
-        return Ok(Some(Schedule::Every { minutes: 60 }));
-    }
-    if let Some(rest) = t.strip_prefix("every ") {
-        if let Some(m) = parse_duration(rest) {
-            return Ok(Some(Schedule::Every { minutes: m }));
-        }
-        if let Some(rest) = rest.strip_prefix("day") {
-            let time = parse_time(rest).ok_or_else(bad)?;
-            return Ok(Some(Schedule::Daily { time: time.format("%H:%M").to_string(), days: vec![] }));
-        }
-        // "every monday 9:00"
-        let (day, time) = rest.split_once(' ').ok_or_else(bad)?;
-        let d = weekday(day).ok_or_else(bad)?;
-        let time = parse_time(time).ok_or_else(bad)?;
-        return Ok(Some(Schedule::Daily { time: time.format("%H:%M").to_string(), days: vec![d] }));
-    }
-    if let Some(rest) = t.strip_prefix("tomorrow") {
-        let time = parse_time(rest).unwrap_or_else(|| NaiveTime::from_hms_opt(9, 0, 0).expect("valid"));
-        let at = local((now.date_naive() + Duration::days(1)).and_time(time)).ok_or_else(bad)?;
-        return Ok(Some(Schedule::At { at }));
-    }
-    for (word, days) in [("daily", vec![]), ("weekdays", vec![0, 1, 2, 3, 4]), ("weekends", vec![5, 6])] {
-        if let Some(rest) = t.strip_prefix(word) {
-            let time = parse_time(rest).ok_or_else(bad)?;
-            return Ok(Some(Schedule::Daily { time: time.format("%H:%M").to_string(), days }));
-        }
-    }
-    // "mon,wed,fri 18:00"
-    if let Some((list, time)) = t.split_once(' ') {
-        let days: Option<Vec<u8>> = list.split(',').map(weekday).collect();
-        if let (Some(mut days), Some(time)) = (days, parse_time(time)) {
-            days.sort_unstable();
-            days.dedup();
-            return Ok(Some(Schedule::Daily { time: time.format("%H:%M").to_string(), days }));
-        }
-    }
-    // Absolute date-time.
-    for f in ["%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M"] {
-        if let Ok(n) = NaiveDateTime::parse_from_str(&t, f) {
-            let at = local(n).ok_or_else(bad)?;
-            return if at > now { Ok(Some(Schedule::At { at })) } else { Err(format!("{text} is in the past")) };
-        }
-    }
-    if let Ok(d) = NaiveDate::parse_from_str(&t, "%Y-%m-%d") {
-        let at = local(d.and_hms_opt(9, 0, 0).expect("valid")).ok_or_else(bad)?;
-        return Ok(Some(Schedule::At { at }));
-    }
-    // A bare time: today if still ahead, else tomorrow.
-    if let Some(time) = parse_time(&t) {
-        let today = local(now.date_naive().and_time(time)).ok_or_else(bad)?;
-        let at = if today > now { today } else { today + Duration::days(1) };
-        return Ok(Some(Schedule::At { at }));
-    }
-    Err(bad())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn now() -> DateTime<Local> {
-        // Monday 2026-11-23 10:00 local.
-        Local.with_ymd_and_hms(2026, 11, 23, 10, 0, 0).unwrap()
-    }
-
-    #[test]
-    fn parses_once() {
-        let n = now();
-        assert_eq!(parse("in 20m", n).unwrap(), Some(Schedule::At { at: n + Duration::minutes(20) }));
-        assert_eq!(parse("in 2 hours", n).unwrap(), Some(Schedule::At { at: n + Duration::hours(2) }));
-        assert_eq!(parse("1m", n).unwrap(), Some(Schedule::At { at: n + Duration::minutes(1) }));
-        assert_eq!(parse("30 min", n).unwrap(), Some(Schedule::At { at: n + Duration::minutes(30) }));
-        assert_eq!(parse("14:30", n).unwrap(), Some(Schedule::At { at: Local.with_ymd_and_hms(2026, 11, 23, 14, 30, 0).unwrap() }));
-        assert_eq!(parse("09:00", n).unwrap(), Some(Schedule::At { at: Local.with_ymd_and_hms(2026, 11, 24, 9, 0, 0).unwrap() }), "past time -> tomorrow");
-        assert_eq!(parse("tomorrow 7am", n).unwrap(), Some(Schedule::At { at: Local.with_ymd_and_hms(2026, 11, 24, 7, 0, 0).unwrap() }));
-        assert_eq!(parse("2026-11-25 09:15", n).unwrap(), Some(Schedule::At { at: Local.with_ymd_and_hms(2026, 11, 25, 9, 15, 0).unwrap() }));
-        assert!(parse("2026-01-01 09:00", n).unwrap_err().contains("past"));
-        assert_eq!(parse("", n).unwrap(), None, "no schedule = to-do");
-        assert!(parse("whenever", n).is_err());
-    }
-
-    #[test]
-    fn parses_repeats_and_next_runs() {
-        let n = now();
-        assert_eq!(parse("every 30m", n).unwrap(), Some(Schedule::Every { minutes: 30 }));
-        assert_eq!(parse("hourly", n).unwrap(), Some(Schedule::Every { minutes: 60 }));
-        let wd = parse("weekdays 08:30", n).unwrap().unwrap();
-        assert_eq!(wd, Schedule::Daily { time: "08:30".into(), days: vec![0, 1, 2, 3, 4] });
-        assert_eq!(wd.describe(), "weekdays 08:30");
-        assert_eq!(wd.next_after(n).unwrap(), Local.with_ymd_and_hms(2026, 11, 24, 8, 30, 0).unwrap(), "Tuesday morning");
-        let fri = Local.with_ymd_and_hms(2026, 11, 27, 9, 0, 0).unwrap();
-        assert_eq!(wd.next_after(fri).unwrap(), Local.with_ymd_and_hms(2026, 11, 30, 8, 30, 0).unwrap(), "skips the weekend");
-        let d = parse("every day at 9:00", n).unwrap().unwrap();
-        assert_eq!(d.next_after(n).unwrap(), Local.with_ymd_and_hms(2026, 11, 24, 9, 0, 0).unwrap());
-        assert_eq!(parse("mon,fri 18:00", n).unwrap(), Some(Schedule::Daily { time: "18:00".into(), days: vec![0, 4] }));
-        assert_eq!(parse("every monday 9", n).unwrap(), Some(Schedule::Daily { time: "09:00".into(), days: vec![0] }));
-        assert_eq!(Schedule::At { at: n }.next_after(n), None, "one-off in the past");
-        assert_eq!(Schedule::Every { minutes: 120 }.describe(), "every 2 h");
-    }
+fn last_day(year: i32, month: u32) -> Option<u32> {
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].get(month as usize - 1).copied()
 }

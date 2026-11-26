@@ -9,16 +9,15 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import PermissionPicker from "./components/PermissionPicker";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
+import { VIEWS } from "./nav";
+import SettingsPage from "./settings/SettingsPage";
 import Chat from "./views/Chat";
-import Providers from "./views/Providers";
 import System from "./views/System";
 import Voice from "./views/Voice";
 import Overlay from "./views/Overlay";
 import Alerts from "./views/Alerts";
 import Changes from "./views/Changes";
 import Security from "./views/Security";
-import Settings from "./views/Settings";
-import Tools from "./views/Tools";
 import Tasks from "./views/Tasks";
 
 /** Voice keeps running across tabs: show it (and mute/stop) everywhere. */
@@ -145,8 +144,9 @@ export default function App() {
           </button>
         )}
         <nav>
-          {(["chat", "voice", "tasks", "alerts", "changes", "security", "system", "providers", "tools", "settings"] as const).map((v) => (
+          {VIEWS.map((v) => (
             <button key={v} className={s.view === v ? "tab active" : "tab"} onClick={() => setView(v)}>
+              {v === "settings" && <Icon name="gear" size={13} />}
               {v}
               {v === "alerts" && (s.state?.alertsOpen ?? 0) > 0 && <span className="badge">{s.state?.alertsOpen}</span>}
             </button>
@@ -177,9 +177,7 @@ export default function App() {
         {s.view === "alerts" && <Alerts />}
         {s.view === "changes" && <Changes />}
         {s.view === "security" && <Security />}
-        {s.view === "settings" && <Settings />}
-        {s.view === "providers" && <Providers />}
-        {s.view === "tools" && <Tools />}
+        {s.view === "settings" && <SettingsPage />}
         {s.view === "system" && <System />}
         </ErrorBoundary>
       </main>

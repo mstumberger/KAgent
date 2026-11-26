@@ -4,7 +4,8 @@
 // Approvals are deliberately not reachable from here.
 import { api } from "./api";
 import { events } from "./events";
-import { getStore, openSession, setView, subscribe, type Store } from "./store";
+import { getStore, openSession, showView, subscribe, type Store } from "./store";
+import { currentSection } from "./settings/registry";
 import { voice } from "./voice/controller";
 
 interface LogEntry {
@@ -40,6 +41,8 @@ function uiState() {
   return {
     tab: TAB,
     view: s.view,
+    // The open settings page (ui-settings.md section 2); only while settings is open.
+    section: s.view === "settings" ? currentSection(s.settingsSection).id : undefined,
     activeSession: s.activeSession,
     running: [...s.running],
     approvalsPending: s.state?.pendingApprovals?.length ?? s.approvals.length,
@@ -81,8 +84,6 @@ function snapshot(requestId: string) {
   void api.post(`/api/ui/snapshot/${encodeURIComponent(requestId)}`, body).catch(() => {});
 }
 
-const VIEWS: Store["view"][] = ["chat", "voice", "tasks", "alerts", "changes", "security", "system", "providers", "tools", "settings"];
-
 function run(command: string, args: Record<string, unknown>) {
   const isOverlay = new URLSearchParams(location.search).has("overlay");
   const liveVoice = (getStore().state?.settings.liveVoice as string) || undefined;
@@ -91,8 +92,8 @@ function run(command: string, args: Record<string, unknown>) {
       snapshot(String(args.requestId ?? ""));
       break;
     case "show": {
-      const v = String(args.view ?? "") as Store["view"];
-      if (VIEWS.includes(v)) setView(v);
+      // `providers` and `tools` open settings pages; `section` names the page (S19).
+      showView(String(args.view ?? ""), typeof args.section === "string" ? args.section : null);
       if (args.session) void openSession(String(args.session));
       window.focus();
       break;

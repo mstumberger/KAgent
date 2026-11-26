@@ -1,0 +1,62 @@
+/* Plan mode (plan-todo.md section 2): the Plan toggle and the "planning" chip of the chat
+   composer, and the card of a plan in the approvals area. The tokens are those of index.css. */
+
+/* The toggle next to Send: on while the session plans, or until the next message is sent. */
+.plan-toggle {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--dim);
+  background: transparent;
+}
+.plan-toggle:hover:not(:disabled) { color: var(--ink); }
+.plan-toggle.on {
+  color: var(--ice);
+  border-color: rgba(124, 196, 255, 0.6);
+  background: rgba(124, 196, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(124, 196, 255, 0.25);
+}
+
+/* The chip above the composer, on the composer's margins. */
+.plan-chip-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 max(16px, calc((100% - 792px) / 2)) 6px;
+}
+.plan-chip {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ice);
+  border: 1px solid rgba(124, 196, 255, 0.4);
+  border-radius: 999px;
+  padding: 1px 9px;
+  background: rgba(124, 196, 255, 0.1);
+}
+.plan-chip-note {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-cancel { flex: 0 0 auto; padding: 1px 10px; font-size: 12px; line-height: 1.5; }
+
+/* The card in the approvals area: the plan as Markdown, then the buttons and the reason. */
+.plan-card .approval-title { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ice); }
+/* The body scrolls inside the card. The cap leaves the chip, the composer and the messages of a
+   700x500 window their room: a taller card squeezed the messages under the chip there. */
+.plan-body {
+  max-height: clamp(120px, calc(100vh - 560px), 420px);
+  overflow: auto;
+  margin: 8px 0 10px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.plan-reason { flex: 1 1 auto; min-width: 0; }

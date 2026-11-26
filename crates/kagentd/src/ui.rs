@@ -17,7 +17,12 @@ use serde_json::{json, Value};
 use tokio::sync::{broadcast, oneshot};
 
 const MAX_LOGS: usize = 300;
-const VIEWS: [&str; 10] = ["chat", "voice", "tasks", "alerts", "changes", "security", "system", "providers", "tools", "settings"];
+/// Tabs `show` may open (ui-settings.md section 1): the same ids as `web/src/nav.ts`.
+const VIEWS: [&str; 8] = ["chat", "voice", "tasks", "alerts", "changes", "security", "system", "settings"];
+/// Settings sections `show` may open (ui-settings.md section 3). The former tabs
+/// `providers` and `tools` are two of them. A stage that adds a section adds its id here
+/// and in `web/src/settings/registry.ts`.
+const SECTIONS: [&str; 12] = ["general", "appearance", "models", "voice", "browser", "desktop", "watchers", "web", "skills", "memory", "tools", "telegram"];
 
 #[derive(Default)]
 pub struct UiHub {
@@ -185,6 +190,35 @@ fn render_logs(logs: &[Value]) -> String {
         .join("\n")
 }
 
+/// The `show` command: its args and what to answer the caller. The former tabs
+/// `providers` and `tools` open the settings sections `models` and `tools`. A section
+/// is kept only for `settings` and only when `SECTIONS` has it: an unknown one is
+/// dropped (the UI opens the page used last) and the answer says so.
+fn show_command(view: &str, session: &str, section: &str) -> Result<(Value, String), String> {
+    if view.is_empty() && session.is_empty() {
+        return Err("give view or session".into());
+    }
+    let (view, former) = match view {
+        "providers" => ("settings", "models"),
+        "tools" => ("settings", "tools"),
+        // No view: only a session is opened.
+        v if v.is_empty() || VIEWS.contains(&v) => (v, ""),
+        _ => return Err(format!("unknown view {view}; one of {}", VIEWS.join(", "))),
+    };
+    let mut args = json!({"view": view, "session": session});
+    let mut note = String::new();
+    if view == "settings" {
+        let keep = if SECTIONS.contains(&section) { section } else { former };
+        if !keep.is_empty() {
+            args["section"] = json!(keep);
+        }
+        if !section.is_empty() && !SECTIONS.contains(&section) {
+            note = format!(" (unknown section {section}, dropped; one of {})", SECTIONS.join(", "));
+        }
+    }
+    Ok((args, format!("show {view}{session}{note}")))
+}
+
 pub struct UiTool {
     contract: ToolContract,
     hub: Arc<UiHub>,
@@ -194,11 +228,12 @@ impl UiTool {
     pub fn new(hub: Arc<UiHub>) -> Self {
         let mut contract = ToolContract::read_only(
             "ui",
-            "KAgent's own web UI as the user sees it in their browser. logs: browser console errors/warnings and crashes (errors_only default true); state: open view, voice status, live transcript tail, pending approvals, theme, window size; snapshot: the visible page text right now; show: switch the UI to a view (chat, voice, tasks, alerts, changes, security, system, providers, tools, settings) or open a session; voice_start / voice_stop; theme: dark|light; orb: orb|spectrum|wave|kitt|hal; reload: reload the page (fixes a stuck UI). Use it when the user says the UI looks broken or asks what is on screen.",
+            "KAgent's own web UI as the user sees it in their browser. logs: browser console errors/warnings and crashes (errors_only default true); state: open view, voice status, live transcript tail, pending approvals, theme, window size; snapshot: the visible page text right now; show: switch the UI to a view (chat, voice, tasks, alerts, changes, security, system, settings; providers and tools are the settings pages models and tools) or open a session; with view settings, section opens one of its pages (general, appearance, models, voice, browser, desktop, watchers, web, skills, memory, tools, telegram); voice_start / voice_stop; theme: dark|light; orb: orb|spectrum|wave|kitt|hal; reload: reload the page (fixes a stuck UI). Use it when the user says the UI looks broken or asks what is on screen.",
             json!({"type":"object","required":["action"],"properties":{
                 "action":{"type":"string","enum":["logs","state","snapshot","show","voice_start","voice_stop","theme","orb","reload"]},
                 "errors_only":{"type":"boolean"},
                 "view":{"type":"string"},
+                "section":{"type":"string"},
                 "session":{"type":"string"},
                 "value":{"type":"string"}
             }}),
@@ -243,17 +278,10 @@ impl Tool for UiTool {
                 )),
                 None => ToolOutput::error("no open UI answered (closed, or the page crashed: check ui logs)"),
             },
-            "show" => {
-                let view = arg("view");
-                let session = arg("session");
-                if view.is_empty() && session.is_empty() {
-                    return Ok(ToolOutput::error("give view or session"));
-                }
-                if !view.is_empty() && !VIEWS.contains(&view.as_str()) {
-                    return Ok(ToolOutput::error(format!("unknown view {view}; one of {}", VIEWS.join(", "))));
-                }
-                sent(self.hub.command("show", json!({"view": view, "session": session})), format!("show {view}{session}"))
-            }
+            "show" => match show_command(&arg("view"), &arg("session"), &arg("section")) {
+                Ok((args, what)) => sent(self.hub.command("show", args), what),
+                Err(e) => ToolOutput::error(e),
+            },
             "voice_start" | "voice_stop" | "reload" => sent(self.hub.command(action, json!({})), action.to_string()),
             "theme" => {
                 let v = arg("value");
@@ -314,5 +342,58 @@ mod tests {
         let ctx = ToolContext::standalone(Duration::from_secs(5), 10_000);
         assert!(t.call(json!({"action": "show", "view": "nope"}), ctx.clone()).await.unwrap().is_error);
         assert!(!t.call(json!({"action": "show", "view": "voice"}), ctx).await.unwrap().is_error);
+    }
+
+    #[test]
+    fn every_section_and_view_is_accepted() {
+        for s in SECTIONS {
+            let (args, answer) = show_command("settings", "", s).unwrap();
+            assert_eq!(args, json!({"view": "settings", "session": "", "section": s}));
+            assert_eq!(answer, "show settings", "nothing dropped");
+        }
+        for v in VIEWS {
+            assert_eq!(show_command(v, "", "").unwrap().0["view"], v, "{v} is a tab");
+        }
+        assert!(!VIEWS.contains(&"providers") && !VIEWS.contains(&"tools"), "the former tabs are settings sections");
+        assert!(show_command("settings", "", "nope").unwrap().1.contains("unknown section nope, dropped"));
+        assert!(show_command("", "", "").is_err());
+    }
+
+    #[tokio::test]
+    async fn show_builds_the_command_the_ui_opens() {
+        let (tx, mut rx) = broadcast::channel(16);
+        let t = UiTool::new(UiHub::new(tx));
+        let ctx = ToolContext::standalone(Duration::from_secs(5), 10_000);
+        // Scenario S19 item 4; `providers` and `tools` are settings sections now.
+        for (input, want) in [
+            (json!({"action": "show", "view": "settings", "section": "browser"}), json!({"view": "settings", "session": "", "section": "browser"})),
+            (json!({"action": "show", "view": "providers"}), json!({"view": "settings", "session": "", "section": "models"})),
+            (json!({"action": "show", "view": "tools"}), json!({"view": "settings", "session": "", "section": "tools"})),
+            (json!({"action": "show", "view": "providers", "section": "tools"}), json!({"view": "settings", "session": "", "section": "tools"})),
+            // No section: the UI opens the page used last.
+            (json!({"action": "show", "view": "settings"}), json!({"view": "settings", "session": ""})),
+            (json!({"action": "show", "view": "settings", "section": "telegram"}), json!({"view": "settings", "session": "", "section": "telegram"})),
+            // Scenario S25 item 5: `ui show settings/memory` opens Memory.
+            (json!({"action": "show", "view": "settings", "section": "memory"}), json!({"view": "settings", "session": "", "section": "memory"})),
+            // Scenario S20 item 1 and ui-settings.md section 9: `ui show settings/skills` opens Skills.
+            (json!({"action": "show", "view": "settings", "section": "skills"}), json!({"view": "settings", "session": "", "section": "skills"})),
+            // A section belongs to `settings` only.
+            (json!({"action": "show", "view": "voice", "section": "tools"}), json!({"view": "voice", "session": ""})),
+            (json!({"action": "show", "session": "s1"}), json!({"view": "", "session": "s1"})),
+        ] {
+            let out = t.call(input.clone(), ctx.clone()).await.unwrap();
+            assert!(!out.is_error, "{input}: {}", out.content);
+            match rx.recv().await.unwrap() {
+                AgentEvent::UiCommand { command, args } => {
+                    assert_eq!(command, "show");
+                    assert_eq!(args, want, "for {input}");
+                }
+                other => panic!("unexpected event {other:?}"),
+            }
+            // None of these is dropped: a section that does not exist is (above).
+            assert!(!out.content.contains("unknown section"), "for {input}: {}", out.content);
+        }
+        assert!(t.call(json!({"action": "show", "view": "nope"}), ctx.clone()).await.unwrap().is_error);
+        assert!(t.call(json!({"action": "show"}), ctx).await.unwrap().is_error);
     }
 }

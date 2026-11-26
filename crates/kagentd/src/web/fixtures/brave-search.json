@@ -1,0 +1,64 @@
+{
+  "query": {
+    "original": "linux kernel",
+    "altered": "linux kernel",
+    "spellcheck_off": false,
+    "show_strict_warning": false
+  },
+  "mixed": {
+    "main": [
+      { "type": "search_result", "index": 0, "all": false },
+      { "type": "search_result", "index": 1, "all": false },
+      { "type": "search_result", "index": 2, "all": false }
+    ],
+    "top": [],
+    "side": []
+  },
+  "type": "search",
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Example One",
+        "url": "https://example.com/one",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The first example   result,   with runs of whitespace and a &lt;tag&gt;.",
+        "page_age": "2026-01-02T00:00:00",
+        "page_fetched": "2026-11-26T00:00:00Z",
+        "profile": {
+          "name": "example",
+          "long_name": "Example",
+          "img": "https://example.com/icon.png"
+        },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result"
+      },
+      {
+        "title": "Second, without a description",
+        "url": "https://example.net/two?q=1&b=2",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "",
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result"
+      },
+      {
+        "title": "No address: not a result",
+        "url": "",
+        "description": "Left out."
+      },
+      {
+        "title": "Third",
+        "url": "https://example.org/three",
+        "description": "The third.",
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result"
+      }
+    ],
+    "family_friendly": true
+  }
+}

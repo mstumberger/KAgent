@@ -6,7 +6,7 @@ use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get, post, put};
+use axum::routing::{any, delete, get, post, put};
 use axum::Router;
 use serde_json::json;
 
@@ -100,6 +100,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}", get(api::get_session).delete(api::delete_session))
         .route("/sessions/{id}/messages", post(api::post_message))
         .route("/sessions/{id}/cancel", post(api::cancel_session))
+        .route("/sessions/{id}/compact", post(crate::compact_api::compact_session))
+        .route("/sessions/{id}/todo", put(crate::todo_api::put_todo))
+        .route("/sessions/{id}/plan", post(crate::plan_api::post_plan))
         .route("/approvals/{id}", post(api::resolve_approval))
         .route("/stop-all", post(api::stop_all))
         .route("/system", get(api::get_system))
@@ -122,12 +125,39 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/tasks", get(crate::tasks::http::list).post(crate::tasks::http::add))
         .route("/tasks/{id}", put(crate::tasks::http::update).delete(crate::tasks::http::delete))
         .route("/tasks/{id}/run", post(crate::tasks::http::run))
+        .route("/tasks/{id}/runs", get(crate::tasks::http::runs))
+        .route("/tasks/{id}/cancel", post(crate::tasks::http::cancel))
+        .route("/tasks/templates", get(crate::tasks::http::templates))
+        .route("/tasks/templates/{id}", post(crate::tasks::http::add_template))
+        .route("/tasks/preview", get(crate::tasks::http::preview))
+        .route("/skills", get(crate::skills_api::list).post(crate::skills_api::create_skill))
+        .route("/skills/rescan", post(crate::skills_api::rescan))
+        .route("/skills/{name}", get(crate::skills_api::get_one).put(crate::skills_api::update_skill).delete(crate::skills_api::delete_skill))
+        .route("/skills/{name}/enabled", put(crate::skills_api::set_enabled))
+        .route("/skills/import-sources", get(crate::skills_sources_api::import_sources))
+        .route("/skills/import", post(crate::skills_sources_api::import))
+        .route("/skills/sources", get(crate::skills_sources_api::list_sources).post(crate::skills_sources_api::add_source))
+        .route("/skills/sources/{id}", delete(crate::skills_sources_api::remove_source))
+        .route("/skills/sources/{id}/sync", post(crate::skills_sources_api::sync_source))
+        .route("/memory", get(crate::memory::http::list).post(crate::memory::http::create))
+        .route("/memory/search", get(crate::memory::http::search))
+        .route("/memory/{name}", put(crate::memory::http::update).delete(crate::memory::http::delete))
+        .route("/memory/{name}/forget", post(crate::memory::http::forget))
         .route("/ui/report", post(crate::ui::http::report))
         .route("/ui/window", post(crate::ui::http::window))
         .route("/ui/frame", post(crate::ui::http::frame))
         .route("/ui/snapshot/{id}", post(crate::ui::http::snapshot))
         .route("/voice/levels", get(crate::voice_levels::http::levels))
         .route("/voice/demo", post(crate::voice_levels::http::demo))
+        .route("/browser/status", get(crate::browser::http::status))
+        .route("/browser/attach/connect", post(crate::browser::http::connect))
+        .route("/browser/attach/disconnect", post(crate::browser::http::disconnect))
+        .route("/telegram", get(crate::bots::http::get).put(crate::bots::http::put))
+        .route("/telegram/token", post(crate::bots::http::set_token).delete(crate::bots::http::delete_token))
+        .route("/telegram/pairing-code", post(crate::bots::http::pairing_code))
+        .route("/telegram/pairing", delete(crate::bots::http::unpair))
+        .route("/telegram/test", post(crate::bots::http::test_message))
+        .route("/web/brave-key", get(crate::web::http::get_key).put(crate::web::http::put_key).delete(crate::web::http::delete_key))
         .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
 
     let app = Router::new()

@@ -1,13 +1,18 @@
 //! Minimal Chrome DevTools Protocol client: HTTP endpoints for tabs, one WebSocket per
-//! call for commands. Works with Brave, Chrome, Chromium, Edge.
+//! call for commands. Works with Brave, Chrome, Chromium, Edge. This is KAgent's own
+//! browser; the owner's running browser goes through `attach`, and both are tabs to
+//! `Browser` by the trait `target::TabTarget` (the page actions live there).
 
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context};
+use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio_tungstenite::tungstenite::Message as WsMsg;
+
+use super::target::{TabInfo, TabTarget};
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -66,10 +71,11 @@ pub fn pick<'a>(tabs: &'a [Tab], needle: &str) -> Option<&'a Tab> {
     tabs.iter().find(|t| t.id == needle).or_else(|| tabs.iter().find(|t| t.title.to_lowercase().contains(&n) || t.url.to_lowercase().contains(&n)))
 }
 
-/// One CDP session on a tab.
+/// One CDP session on a tab: the tab's own WebSocket, open for one action.
 pub struct Session {
     ws: tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
     next: u64,
+    info: TabInfo,
 }
 
 impl Session {
@@ -78,7 +84,7 @@ impl Session {
             bail!("tab {} is attached to another DevTools client", tab.id);
         }
         let (ws, _) = tokio::time::timeout(Duration::from_secs(5), tokio_tungstenite::connect_async(&tab.web_socket_debugger_url)).await.context("CDP connect timeout")??;
-        Ok(Self { ws, next: 1 })
+        Ok(Self { ws, next: 1, info: TabInfo { id: tab.id.clone(), title: tab.title.clone(), url: tab.url.clone() } })
     }
 
     pub async fn call(&mut self, method: &str, params: Value) -> anyhow::Result<Value> {
@@ -101,56 +107,29 @@ impl Session {
         }
     }
 
-    /// Console messages, uncaught exceptions and browser log entries of the page.
-    /// Chrome replays what was logged before `Runtime.enable` / `Log.enable`, so this
-    /// also returns messages from before the call; then it listens for `listen`.
-    pub async fn console(&mut self, listen: Duration, max: usize) -> anyhow::Result<Vec<String>> {
+}
+
+#[async_trait]
+impl TabTarget for Session {
+    async fn call(&mut self, method: &str, params: Value) -> anyhow::Result<Value> {
+        Session::call(self, method, params).await
+    }
+
+    /// The tab's socket, read for `listen`: this socket carries this tab's events only.
+    async fn events(&mut self, listen: Duration) -> Vec<Value> {
+        let deadline = tokio::time::Instant::now() + listen;
         let mut out = Vec::new();
-        for m in ["Runtime.enable", "Log.enable"] {
-            let id = self.next;
-            self.next += 1;
-            self.ws.send(WsMsg::Text(json!({"id": id, "method": m, "params": {}}).to_string().into())).await?;
-        }
-        let deadline = tokio::time::Instant::now() + listen.max(Duration::from_millis(800));
         while let Ok(Some(msg)) = tokio::time::timeout_at(deadline, self.ws.next()).await {
-            let WsMsg::Text(t) = msg? else { continue };
-            let v: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
-            if let Some(line) = console_line(&v) {
-                out.push(line);
-                if out.len() >= max {
-                    break;
-                }
+            let Ok(WsMsg::Text(t)) = msg else { continue };
+            if let Ok(v) = serde_json::from_str(&t) {
+                out.push(v);
             }
         }
-        Ok(out)
+        out
     }
 
-    /// Evaluate an expression and return its JSON value (awaits promises).
-    pub async fn eval(&mut self, expr: &str) -> anyhow::Result<Value> {
-        let r = self.call("Runtime.evaluate", json!({"expression": expr, "returnByValue": true, "awaitPromise": true, "userGesture": true})).await?;
-        if let Some(ex) = r.get("exceptionDetails") {
-            let text = ex.pointer("/exception/description").or_else(|| ex.get("text")).and_then(Value::as_str).unwrap_or("exception");
-            bail!("page script error: {}", text.lines().next().unwrap_or(text));
-        }
-        Ok(r.pointer("/result/value").cloned().unwrap_or(Value::Null))
-    }
-
-    pub async fn click_at(&mut self, x: f64, y: f64) -> anyhow::Result<()> {
-        for t in ["mouseMoved", "mousePressed", "mouseReleased"] {
-            self.call("Input.dispatchMouseEvent", json!({"type": t, "x": x, "y": y, "button": "left", "clickCount": 1})).await?;
-        }
-        Ok(())
-    }
-
-    pub async fn key(&mut self, key: &str) -> anyhow::Result<()> {
-        let (code, vk, text) = key_info(key).ok_or_else(|| anyhow!("unsupported key {key}"))?;
-        let mut down = json!({"type": "keyDown", "key": key, "code": code, "windowsVirtualKeyCode": vk});
-        if let Some(t) = text {
-            down["text"] = json!(t);
-        }
-        self.call("Input.dispatchKeyEvent", down).await?;
-        self.call("Input.dispatchKeyEvent", json!({"type": "keyUp", "key": key, "code": code, "windowsVirtualKeyCode": vk})).await?;
-        Ok(())
+    fn info(&self) -> TabInfo {
+        self.info.clone()
     }
 }
 

@@ -1,14 +1,11 @@
 // Voice: talk to KAgent through the daemon's live model. Uses the active chat session
 // so spoken and typed turns are one conversation. Approval cards appear here too.
 import { useEffect, useRef, useState } from "react";
-import { api, type Template } from "../api";
 import Approvals from "../components/Approvals";
-import Orb, { ORB_THEMES, normalizeTheme, type OrbTheme } from "../voice/Orb";
-import { newSession, openSession, refreshState, setView, useStore } from "../store";
+import Orb, { normalizeTheme, type OrbTheme } from "../voice/Orb";
+import { newSession, openSession, setView, showView, useStore } from "../store";
 import { voice } from "../voice/controller";
 import { useVoice } from "../voice/useVoice";
-
-const THEMES = ORB_THEMES;
 
 export default function Voice() {
   const s = useStore();
@@ -17,8 +14,6 @@ export default function Voice() {
   const detail = v.detail;
   const lines = v.lines;
   const [theme, setTheme] = useState<OrbTheme>(() => normalizeTheme(localStorage.getItem("kagent.orb")));
-  const [voices, setVoices] = useState<string[]>([]);
-  const [liveModels, setLiveModels] = useState<{ ref: string; id: string }[]>([]);
   const [typed, setTyped] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -29,11 +24,6 @@ export default function Voice() {
   useEffect(() => {
     const onOrb = () => setTheme(normalizeTheme(localStorage.getItem("kagent.orb")));
     window.addEventListener("kagent-orb", onOrb);
-    void api.get<Template[] | { templates: Template[] }>("/api/providers/templates").then((t) => {
-      const list = Array.isArray(t) ? t : t.templates;
-      setVoices([...new Set(list.flatMap((x) => x.voices ?? []))]);
-    });
-    void api.get<Record<string, { ref: string; id: string }[]>>("/api/models").then((m) => setLiveModels(m.live ?? []));
     // The session keeps running when the tab changes (tray / overlay / ui tool).
     return () => window.removeEventListener("kagent-orb", onOrb);
   }, []);
@@ -70,13 +60,7 @@ export default function Voice() {
 
   const toggle = () => v.toggle(sid, voiceName());
 
-  const saveSetting = async (patch: Record<string, string>) => {
-    await api.put("/api/settings", patch);
-    await refreshState();
-  };
-
   const liveModel = (s.state?.settings.liveModel as string) || "";
-  const liveVoice = (s.state?.settings.liveVoice as string) || "Kore";
   const active = status !== "idle" && status !== "error";
 
   return (
@@ -84,7 +68,7 @@ export default function Voice() {
       <div className="voice-stage">
         <Orb mic={v.micAnalyser} play={v.playAnalyser} state={v.muted && active ? "muted" : status} theme={theme} />
         <div className={`voice-status st-${status}`}>
-          {({ idle: "Ready", connecting: "Connecting", live: v.muted ? "Mic muted" : "Listening", rolling: "Reconnecting", error: "Voice error" } as Record<string, string>)[status] ?? status}
+          {(status === "live" && v.thinking ? "Thinking" : ({ idle: "Ready", connecting: "Connecting", live: v.muted ? "Mic muted" : "Listening", rolling: "Reconnecting", error: "Voice error" } as Record<string, string>)[status] ?? status)}
           {detail && `: ${detail}`}
         </div>
         <button className={active ? "danger big" : "primary big"} onClick={toggle} disabled={!liveModel && !active}>
@@ -101,35 +85,11 @@ export default function Voice() {
             </label>
           </div>
         )}
-        {!liveModel && <div className="hint">Pick a live model below (Gemini *-live; add a Gemini provider first).</div>}
+        {!liveModel && <div className="hint">Pick a live model in Voice settings (Gemini *-live; add a Gemini provider first).</div>}
         <div className="voice-settings">
-          <label>
-            Live model
-            <select value={liveModel} onChange={(e) => void saveSetting({ liveModel: e.target.value })}>
-              <option value="">(none)</option>
-              {liveModels.map((m) => (
-                <option key={m.ref} value={m.ref}>
-                  {m.ref}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Voice
-            <select value={liveVoice} onChange={(e) => void saveSetting({ liveVoice: e.target.value })}>
-              {[liveVoice, ...voices.filter((v) => v !== liveVoice)].map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Look
-            <select value={theme} onChange={(e) => setTheme(e.target.value as OrbTheme)}>
-              {THEMES.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
+          <button className="link-btn" onClick={() => showView("settings", "voice")}>
+            Voice settings
+          </button>
         </div>
       </div>
       <div className="voice-side">

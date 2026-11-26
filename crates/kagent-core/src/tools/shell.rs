@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::background::Background;
 use super::exec::exec;
 use super::parse;
 use crate::tool::{CallAssessment, Risk, SideEffect, Tool, ToolContext, ToolContract, ToolOutput};
@@ -86,22 +87,31 @@ pub fn assess_read_only(command: &str) -> bool {
 
 pub struct Shell {
     contract: ToolContract,
+    /// The background tasks `background: true` starts (agents.md section 4).
+    tasks: Background,
 }
 
 impl Shell {
     pub fn new() -> Self {
+        Self::with_tasks(Background::shared())
+    }
+
+    /// With a registry of background tasks of the caller's (the daemon's, or a test's).
+    pub fn with_tasks(tasks: Background) -> Self {
         Self {
             contract: ToolContract::read_only(
                 "shell",
-                "Run a bash command line. Read-only commands (ls, cat, grep, ip, journalctl -k, systemctl status, ...) run without approval; anything else asks. Prefer the typed tools (sysctl, systemd, files) when one fits.",
+                "Run a bash command line. Read-only commands (ls, cat, grep, ip, journalctl -k, systemctl status, ...) run without approval; anything else asks. Prefer the typed tools (sysctl, systemd, files) when one fits. background: true starts it and answers at once with a task id (read its output with task_output, stop it with task_stop).",
                 json!({"type":"object","required":["command"],"properties":{
                     "command":{"type":"string","description":"bash command line"},
                     "cwd":{"type":"string"},
-                    "sudo":{"type":"boolean","description":"run as root (always asks)"}
+                    "sudo":{"type":"boolean","description":"run as root (always asks)"},
+                    "background":{"type":"boolean","description":"true: run it in the background; the answer is {taskId, outputFile} at once"}
                 }}),
             )
             .mutating(SideEffect::System, Risk::Medium)
             .timeout(30_000, 120_000),
+            tasks,
         }
     }
 }
@@ -111,6 +121,7 @@ struct ShellArgs {
     command: Option<String>,
     cwd: Option<String>,
     sudo: Option<bool>,
+    background: Option<bool>,
 }
 
 #[async_trait]
@@ -153,6 +164,14 @@ impl Tool for Shell {
             return Ok(ToolOutput::error(
                 "root shell disabled by default; use a typed tool (sysctl, systemd, package, kernel_module) instead",
             ));
+        }
+        // In the background (agents.md section 4): started in its own process group, the
+        // answer comes at once. What the call may do is judged as always (`assess`).
+        if args.background == Some(true) {
+            return Ok(match self.tasks.start(&ctx.session_id, command, args.cwd.clone().map(expand_tilde)).await {
+                Ok(info) => ToolOutput::json(&json!({"taskId": info.id, "outputFile": info.output_file})),
+                Err(reason) => ToolOutput::error(reason),
+            });
         }
         let r = exec(&ctx, &["bash".to_string(), "-c".into(), command.to_string()])
             .cwd(args.cwd.clone().map(expand_tilde))

@@ -1,0 +1,62 @@
+/* The Browser section: the choice of the backend and the status card of the owner's
+   running browser. Shared controls keep their rules in controls.css. */
+.br-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+
+.br-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.br-radio > input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.br-radio > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.br-radio-label {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.br-radio .hint,
+.br-status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.br-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.br-status-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.br-status-name {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.br-instruction code {
+  overflow-wrap: anywhere;
+}

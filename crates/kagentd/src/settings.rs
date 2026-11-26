@@ -1,16 +1,22 @@
-//! settings.json: defaults, load/save (0600, atomic), unknown keys preserved.
+//! settings.json: defaults, load/save (0600, atomic), unknown keys preserved, and the
+//! patch `PUT /api/settings` applies. Typed views of settings objects are in
+//! `sections.rs`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use kagent_core::permission::{AllowRule, PermissionMode};
+use kagent_core::permission::{AllowRule, PermissionMode, ToolOverride};
 use kagent_core::tool::PrivilegeMethod;
 
+use crate::sections::{closest, fields_of, BrowserSection, CompactionSection, SectionError, SkillsSection, TasksSection, VoiceSection};
+use crate::startup::Startup;
+
 pub const DEFAULT_TOOL_GROUPS: &[&str] = &[
-    "system", "kernel", "services", "files", "shell", "hardware", "skills", "change", "desktop", "security", "trace", "tasks",
+    "system", "kernel", "services", "files", "shell", "hardware", "skills", "change", "desktop", "security", "trace", "tasks", "agent", "memory", "web",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -58,44 +64,6 @@ pub struct Settings {
     /// Forward compatibility: unknown keys survive a load/save round trip.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
-}
-
-/// settings.startup: autostart with the session + greeting on daemon start.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Startup {
-    /// Keep the systemd user unit kagentd.service enabled (starts at login).
-    #[serde(default = "default_true")]
-    pub autostart: bool,
-    #[serde(default)]
-    pub greeting: Greeting,
-}
-
-impl Default for Startup {
-    fn default() -> Self {
-        Self { autostart: true, greeting: Greeting::default() }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Greeting {
-    /// Desktop notification greeting once the daemon is up.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// Empty = auto ("Good morning/afternoon/evening, <address>. ...").
-    #[serde(default)]
-    pub text: String,
-}
-
-impl Default for Greeting {
-    fn default() -> Self {
-        Self { enabled: true, text: String::new() }
-    }
-}
-
-fn default_true() -> bool {
-    true
 }
 
 fn default_schema() -> u32 {
@@ -158,6 +126,60 @@ pub struct ModelOptionsSerde {
     pub temperature: Option<f64>,
 }
 
+/// Every tool group a settings file may name: the defaults and the groups of
+/// `GROUP_PRIORITY` (`router`, `other`).
+pub fn known_groups() -> Vec<&'static str> {
+    let mut known: Vec<&'static str> = DEFAULT_TOOL_GROUPS.to_vec();
+    for g in kagent_core::context::GROUP_PRIORITY {
+        if !known.contains(&g) {
+            known.push(g);
+        }
+    }
+    known
+}
+
+/// Merge a patch into `base` the way `PUT /api/settings` does: an object updates only
+/// the keys it names, at every depth; arrays and scalars are replaced.
+pub fn merge_patch(base: &mut Value, patch: &Value) {
+    if let (Value::Object(base), Value::Object(patch)) = (base, patch) {
+        for (key, value) in patch {
+            match base.get_mut(key) {
+                Some(current) if current.is_object() && value.is_object() => merge_patch(current, value),
+                _ => {
+                    base.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
+}
+
+/// `toolGroups` in a patch may only name tool groups.
+fn check_tool_groups(patch: &Value) -> Result<(), String> {
+    let Some(groups) = patch.get("toolGroups").and_then(Value::as_array) else { return Ok(()) };
+    let known = known_groups();
+    for group in groups.iter().filter_map(Value::as_str) {
+        if !known.contains(&group) {
+            return Err(format!("invalid settings: unknown tool group '{group}'"));
+        }
+    }
+    Ok(())
+}
+
+/// `toolOverrides` in a patch may only be `allow`, `ask` or `deny`; `null` removes the
+/// tool's override (the recursive merge cannot drop a key).
+fn check_tool_overrides(patch: &Value) -> Result<(), String> {
+    let Some(overrides) = patch.get("toolOverrides").and_then(Value::as_object) else { return Ok(()) };
+    for (tool, value) in overrides {
+        if value.is_null() {
+            continue;
+        }
+        if ToolOverride::parse(value.as_str().unwrap_or("")).is_none() {
+            return Err(format!("invalid settings: toolOverrides.{tool} must be allow, ask or deny"));
+        }
+    }
+    Ok(())
+}
+
 /// Parse `toolOverrides`; unknown values are ignored with a warning.
 pub fn parse_overrides(raw: &BTreeMap<String, String>) -> std::collections::HashMap<String, kagent_core::permission::ToolOverride> {
     raw.iter()
@@ -184,6 +206,7 @@ impl Settings {
             return Ok(s);
         }
         let mut s: Self = serde_json::from_slice(&std::fs::read(path)?)?;
+        s.validate_sections().map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         if s.migrate_tool_groups() {
             s.save(path)?;
         }
@@ -225,20 +248,28 @@ impl Settings {
         Ok(())
     }
 
-    /// Apply a partial patch (PUT /api/settings). Unknown keys land in `extra`.
-    /// Merge a partial update. An invalid patch (wrong type, unknown enum value) is
-    /// rejected as a whole and reported, never half-applied or silently dropped.
+    /// Apply a partial patch (PUT /api/settings). Objects merge key by key, arrays are
+    /// replaced, unknown keys land in `extra`. An invalid patch (wrong type, unknown
+    /// enum value, unknown tool group, a typo in a typed section) is rejected as a
+    /// whole and reported, never half-applied or silently dropped.
     pub fn patch(&mut self, patch: Value) -> Result<(), String> {
-        let merged = serde_json::to_value(&*self).ok().unwrap_or(Value::Object(Default::default()));
-        let mut merged = match (merged, patch) {
-            (Value::Object(mut m), Value::Object(p)) => {
-                for (k, v) in p {
-                    m.insert(k, v);
+        if !patch.is_object() {
+            return Err("invalid settings: the patch must be an object".into());
+        }
+        // Only what the patch names is checked: an entry already in the file (a hand
+        // edit) must not block an unrelated update.
+        check_tool_groups(&patch)?;
+        check_tool_overrides(&patch)?;
+        let mut merged = serde_json::to_value(&*self).ok().unwrap_or(Value::Object(Default::default()));
+        merge_patch(&mut merged, &patch);
+        // `{"tool": null}` in a `toolOverrides` patch removes that override.
+        if let Some(Value::Object(overrides)) = merged.get_mut("toolOverrides") {
+            for (tool, value) in patch.get("toolOverrides").and_then(Value::as_object).into_iter().flatten() {
+                if value.is_null() {
+                    overrides.remove(tool);
                 }
-                Value::Object(m)
             }
-            (_, p) => p,
-        };
+        }
         if let Value::Object(m) = &mut merged {
             m.remove("schemaVersion");
         }
@@ -247,39 +278,50 @@ impl Settings {
         if !editor.is_empty() && kagent_core::tools::editor::editor_id(&editor).is_none() {
             return Err(format!("invalid settings: unknown desktop.editor '{editor}'"));
         }
+        next.validate_sections().map_err(|e| e.to_string())?;
         *self = next;
         Ok(())
     }
 
-    /// settings.desktop: `{"editor": "vscode", "projectRoots": ["~/SystemInterface"]}`.
-    pub fn desktop_prefs(&self) -> kagent_core::tool::DesktopPrefs {
-        let d = self.extra.get("desktop");
-        let editor = d.and_then(|d| d.get("editor")).and_then(Value::as_str).unwrap_or("").trim().to_string();
-        kagent_core::tool::DesktopPrefs {
-            editor: if editor == "auto" { String::new() } else { editor },
-            project_roots: d
-                .and_then(|d| d.get("projectRoots"))
-                .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(Value::as_str).map(String::from).filter(|s| !s.trim().is_empty()).collect())
-                .unwrap_or_default(),
+    /// One settings object as a typed section. A missing or null section gives the
+    /// type's defaults; unknown keys are left alone (they stay in the file); a key that
+    /// looks like a misspelt field is an error.
+    pub fn section<T>(&self, key: &str) -> Result<T, SectionError>
+    where
+        T: Serialize + DeserializeOwned + Default,
+    {
+        let Some(raw) = self.extra.get(key).filter(|v| !v.is_null()) else {
+            return Ok(T::default());
+        };
+        let Value::Object(fields) = raw else {
+            return Err(SectionError::NotObject { key: key.into() });
+        };
+        let known = fields_of::<T>();
+        for name in fields.keys() {
+            if !known.contains(name) {
+                if let Some(suggestion) = closest(name, &known) {
+                    return Err(SectionError::Typo { key: format!("{key}.{name}"), suggestion: suggestion.clone() });
+                }
+            }
         }
+        serde_json::from_value(raw.clone()).map_err(|e| SectionError::Invalid { key: key.into(), message: e.to_string() })
     }
 
-    /// settings.browser: `{"port": 9333, "binary": ""}` (empty binary = auto-detect).
-    pub fn browser_config(&self) -> (u16, String) {
-        let b = self.extra.get("browser");
-        let port = b.and_then(|b| b.get("port")).and_then(Value::as_u64).filter(|p| (1024..=65535).contains(p)).unwrap_or(9333) as u16;
-        (port, b.and_then(|b| b.get("binary")).and_then(Value::as_str).unwrap_or("").to_string())
+    /// Every typed section, as load and `PUT /api/settings` require them to be.
+    pub fn validate_sections(&self) -> Result<(), SectionError> {
+        self.section::<VoiceSection>("voice")?.validate()?;
+        self.section::<BrowserSection>("browser")?.validate()?;
+        self.section::<TasksSection>("tasks")?.validate()?;
+        self.section::<SkillsSection>("skills")?.validate()?;
+        self.section::<CompactionSection>("compaction")?.validate()?;
+        self.section::<crate::memory::MemorySection>("memory")?.validate()?;
+        self.section::<crate::web::settings::SearchSection>("search")?.validate()?;
+        self.section::<crate::bots::settings::TelegramSection>("telegram")?.validate()
     }
 
     /// settings.startWidget (default true): open the small widget when the daemon starts.
     pub fn start_widget(&self) -> bool {
         self.extra.get("startWidget").and_then(Value::as_bool).unwrap_or(true)
-    }
-
-    /// settings.voice.pauseMedia (default true): pause players during a voice session.
-    pub fn voice_pauses_media(&self) -> bool {
-        self.extra.get("voice").and_then(|v| v.get("pauseMedia")).and_then(Value::as_bool).unwrap_or(true)
     }
 
     pub fn privilege_method(&self) -> PrivilegeMethod {
@@ -305,19 +347,60 @@ mod tests {
         assert!(!s.tool_groups.contains(&"security".to_string()));
     }
 
+    // `desktop_prefs`, `browser_config` and `voice_pauses_media` are tested in sections.rs.
+
     #[test]
-    fn desktop_browser_and_voice_prefs() {
+    fn nested_patch_keeps_its_siblings() {
         let mut s = Settings::defaults();
-        assert_eq!(s.desktop_prefs(), Default::default());
-        assert_eq!(s.browser_config(), (9333, String::new()));
-        assert!(s.voice_pauses_media());
-        s.patch(serde_json::json!({"desktop": {"editor": "VS Code", "projectRoots": ["~/SystemInterface", ""]}, "browser": {"port": 80}, "voice": {"pauseMedia": false}})).unwrap();
-        assert_eq!(s.desktop_prefs().editor, "VS Code");
-        assert_eq!(s.desktop_prefs().project_roots, vec!["~/SystemInterface"]);
-        assert_eq!(s.browser_config().0, 9333, "privileged port rejected");
-        assert!(!s.voice_pauses_media());
-        assert!(s.patch(serde_json::json!({"desktop": {"editor": "notepad"}})).is_err());
-        assert_eq!(s.desktop_prefs().editor, "VS Code", "rejected patch not applied");
+        s.startup.greeting.text = "Pozdravljen!".into();
+        // Scenario S17 item 4.
+        s.patch(serde_json::json!({"startup": {"greeting": {"enabled": false}}})).unwrap();
+        assert!(s.startup.autostart, "autostart is not named by the patch");
+        assert!(!s.startup.greeting.enabled);
+        assert_eq!(s.startup.greeting.text, "Pozdravljen!", "the greeting text is not named by the patch");
+        // Arrays and scalars are replaced, deeper objects merged.
+        s.patch(serde_json::json!({"toolGroups": ["system"], "persona": {"language": "sl"}})).unwrap();
+        assert_eq!(s.tool_groups, vec!["system"]);
+        assert_eq!((s.persona.language.as_str(), s.persona.name.as_str()), ("sl", "KAgent"));
+        assert!(s.patch(serde_json::json!(["not", "an", "object"])).is_err());
+    }
+
+    #[test]
+    fn merge_patch_merges_objects_and_replaces_the_rest() {
+        let mut base = serde_json::json!({"a": {"x": 1, "y": {"deep": 1}}, "list": [1, 2], "n": 1});
+        merge_patch(&mut base, &serde_json::json!({"a": {"y": {"deeper": 2}}, "list": [], "n": null, "new": {"b": 1}}));
+        assert_eq!(
+            base,
+            serde_json::json!({"a": {"x": 1, "y": {"deep": 1, "deeper": 2}}, "list": [], "n": null, "new": {"b": 1}})
+        );
+    }
+
+    #[test]
+    fn invalid_tool_groups_and_overrides_are_rejected() {
+        let mut s = Settings::defaults();
+        let before = s.clone();
+        assert!(s.patch(serde_json::json!({"toolGroups": ["system", "bogus"]})).is_err());
+        assert!(s.patch(serde_json::json!({"toolGroups": ["shell"], "toolOverrides": {"shell": "maybe"}})).is_err());
+        assert_eq!(s, before, "a rejected patch changes nothing, not even its valid part");
+        s.patch(serde_json::json!({"toolGroups": ["shell", "router"], "toolOverrides": {"shell": "ask", "journal": "allow"}})).unwrap();
+        assert_eq!(s.tool_groups, vec!["shell", "router"]);
+        assert_eq!(s.tool_overrides["shell"], "ask");
+        // `null` removes one override (the Tools section's "follows the mode"); the rest stays.
+        s.patch(serde_json::json!({"toolOverrides": {"shell": null, "systemd": null}})).unwrap();
+        assert_eq!(s.tool_overrides.len(), 1);
+        assert_eq!(s.tool_overrides["journal"], "allow");
+        // The whole object is still a map: `null` there would wipe every override.
+        assert!(s.patch(serde_json::json!({"toolOverrides": null})).is_err());
+
+        // An entry already in the file (hand-edited) is tolerated at load and does not
+        // block a patch that does not name it.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, serde_json::json!({"toolGroups": ["system", "bogus"], "toolOverrides": {"shell": "maybe"}}).to_string()).unwrap();
+        let mut s = Settings::load(&path).unwrap();
+        assert!(s.tool_groups.contains(&"bogus".to_string()));
+        s.patch(serde_json::json!({"maxIterations": 12})).unwrap();
+        assert_eq!(s.max_iterations, 12);
     }
 
     #[test]

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- Not a download. On the day S30 was implemented DuckDuckGo answered every request
+     with real results, so no challenge page could be saved. This is written from what
+     such a page is known by: its class (anomaly-modal), its sentence, and the status
+     202 it comes with, which the test adds. -->
+<html lang="en">
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>DuckDuckGo - Protection</title>
+</head>
+<body>
+  <div class="site-wrapper">
+    <div class="anomaly-modal" role="dialog">
+      <h1>Hmm... that didn't work</h1>
+      <p>Unfortunately, bots use DuckDuckGo too. Please complete the following challenge to confirm this search came from a human:</p>
+      <div class="anomaly-modal__puzzle">
+        <p>Enter the characters you see below:</p>
+        <form id="challenge-form" method="POST" action="/anomaly.js">
+          <input type="hidden" name="vqd" value="4-300779713126007230127192783344415142005">
+          <input type="text" name="answer" autocomplete="off">
+          <input type="submit" value="Verify">
+        </form>
+      </div>
+      <p class="anomaly-modal__note">Why does this keep happening? Go to the <a href="https://duckduckgo.com/faq">FAQ</a>.</p>
+    </div>
+  </div>
+  <script type="text/javascript">window.ddg_anomaly = window.ddg_anomaly || {};</script>
+</body>
+</html>

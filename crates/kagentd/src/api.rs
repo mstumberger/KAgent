@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -83,7 +83,7 @@ pub async fn put_settings(State(st): State<Arc<AppState>>, Json(patch): Json<Val
     // Apply the systemd user unit change outside the settings lock (spawns
     // systemctl; slow paths must never hold the lock).
     if let Some(want) = wants_autostart {
-        tokio::task::spawn_blocking(move || crate::startup::apply_autostart(want));
+        tokio::task::spawn_blocking(move || crate::startup::apply_requested(want));
     }
     let settings = st.settings.read().unwrap().clone();
     let _ = st.events.send(AgentEvent::SettingsChanged {
@@ -294,21 +294,28 @@ pub async fn list_tools(State(st): State<Arc<AppState>>) -> ApiResult<Response> 
         .tools()
         .contracts()
         .iter()
-        .map(|c| {
-            let group = tools::group_of(&c.name);
-            json!({
-                "contract": c,
-                "group": group,
-                "enabled": groups.iter().any(|g| g == group),
-                "mcp": mcp.iter().any(|g| g == group),
+            .map(|c| {
+                let group = tools::group_of(&c.name);
+                json!({
+                    "contract": c,
+                    "group": group,
+                    // An empty toolGroups means every group.
+                    "enabled": groups.is_empty() || groups.iter().any(|g| g == group),
+                    "mcp": mcp.iter().any(|g| g == group),
+                })
             })
-        })
-        .collect();
+            .collect();
     Ok(ok_json(json!({"tools": tools})))
 }
 
-pub async fn list_sessions(State(st): State<Arc<AppState>>) -> ApiResult<Response> {
-    let mut metas = st.agent.store().list().await.map_err(internal)?;
+/// `GET /api/sessions?parent=<id>` lists a session's children; without `parent`,
+/// subagent sessions are not listed.
+pub async fn list_sessions(
+    State(st): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Response> {
+    let parent = q.get("parent").map(String::as_str).filter(|p| !p.is_empty());
+    let mut metas = kagent_core::session::SessionStore::visible(st.agent.store().list().await.map_err(internal)?, parent);
     for m in &mut metas {
         m.message_count = st.agent.store().load_messages(&m.id).await.map(|v| v.len()).unwrap_or(0);
     }
@@ -349,10 +356,18 @@ pub async fn post_message(
         Some("voice") => Via::Voice,
         _ => Via::Text,
     };
+    // `/plan <request>` starts the turn in plan mode and loses the prefix (plan-todo.md section 2).
+    let (text, plan) = crate::plan_api::split_plan(text, body.get("plan").and_then(Value::as_bool));
+    if text.trim().is_empty() {
+        return Err(bad_request("text required"));
+    }
     st.agent.store().meta(&id).await.map_err(|e| not_found(format!("{e:#}")))?;
-    let outcome = st.agent.send(&id, text, via).await.map_err(internal)?;
+    // A message that starts with `/<skill>` gives its turn that skill's body (skills.md section 6).
+    let mut opts = st.skills.turn_opts(&text);
+    opts.plan = plan;
+    let outcome = st.agent.send_with(&id, text, via, opts).await.map_err(internal)?;
     let body = match outcome {
-        SendOutcome::Started { turn_id } => json!({"status": "started", "turnId": turn_id}),
+        SendOutcome::Started { turn_id, .. } => json!({"status": "started", "turnId": turn_id}),
         SendOutcome::Queued => json!({"status": "queued"}),
     };
     Ok(ok_json(body))

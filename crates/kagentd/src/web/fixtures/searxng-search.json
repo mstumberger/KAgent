@@ -1,0 +1,54 @@
+{
+  "query": "linux kernel",
+  "number_of_results": 3,
+  "results": [
+    {
+      "url": "https://example.com/one",
+      "title": "Example One",
+      "content": "The first example result, with <b>markup</b> in it.",
+      "thumbnail": null,
+      "engine": "startpage",
+      "engines": ["startpage", "duckduckgo"],
+      "parsed_url": ["https", "example.com", "/one", "", "", ""],
+      "template": "default.html",
+      "category": "general",
+      "score": 1.5
+    },
+    {
+      "url": "https://example.net/two",
+      "title": "Second, without a snippet",
+      "content": "",
+      "engine": "duckduckgo",
+      "engines": ["duckduckgo"],
+      "parsed_url": ["https", "example.net", "/two", "", "", ""],
+      "template": "default.html",
+      "category": "general",
+      "score": 1.0
+    },
+    {
+      "url": "",
+      "title": "No address: not a result",
+      "content": "Left out.",
+      "engine": "duckduckgo",
+      "engines": ["duckduckgo"],
+      "category": "general",
+      "score": 0.5
+    },
+    {
+      "url": "https://example.org/three",
+      "title": "Third",
+      "content": "The third.",
+      "engine": "duckduckgo",
+      "engines": ["duckduckgo"],
+      "parsed_url": ["https", "example.org", "/three", "", "", ""],
+      "template": "default.html",
+      "category": "general",
+      "score": 0.9
+    }
+  ],
+  "answers": [],
+  "corrections": [],
+  "infoboxes": [],
+  "suggestions": ["linux kernel headers"],
+  "unresponsive_engines": []
+}

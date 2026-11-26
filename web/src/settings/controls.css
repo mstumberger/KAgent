@@ -1,0 +1,367 @@
+/* The shared controls of a settings page (ui-settings.md section 4) and the tool
+   contracts. Split from settings.css to keep both files small. */
+
+/* ---- cards, rows, fields */
+.ui-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+
+:root[data-theme="light"] .ui-card {
+  background: #fff;
+}
+
+.ui-card-head {
+  margin-bottom: 6px;
+}
+
+.ui-card-head h3 {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ui-card-head .hint,
+.ui-card > .hint {
+  margin: 0;
+}
+
+.ui-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--rim);
+}
+
+.ui-row:first-child,
+.ui-card-head + .ui-row,
+.ui-row + .ui-row {
+  border-top-color: transparent;
+}
+
+.ui-row.stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* A stacked row is a column: the basis values above are for rows, so nothing grows. */
+.ui-row.stacked .ui-row-text,
+.ui-row.stacked .ui-row-control {
+  flex: 0 0 auto;
+}
+
+.ui-row.stacked .ui-row-control {
+  justify-content: flex-start;
+}
+
+.ui-row-text {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ui-row-label {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.ui-row-control {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ui-row-control > select,
+.ui-row-control > input {
+  width: 100%;
+  max-width: 380px;
+  min-width: 0;
+}
+
+.ui-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ui-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.ui-field-label {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.ui-field > input,
+.ui-field > select,
+.ui-field > textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.ui-field > textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.ui-note {
+  margin: 8px 0 0;
+}
+
+.ui-inline-bad {
+  color: var(--bad);
+  font-size: 12.5px;
+}
+
+/* ---- toggle */
+.ui-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ui-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+}
+
+.ui-toggle-track {
+  position: relative;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--panel2);
+  border: 1px solid var(--rim-strong);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ui-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.ui-toggle input:checked + .ui-toggle-track {
+  background: rgba(124, 196, 255, 0.3);
+  border-color: rgba(124, 196, 255, 0.6);
+}
+
+.ui-toggle input:checked + .ui-toggle-track::after {
+  transform: translateX(14px);
+  background: var(--ice);
+}
+
+.ui-toggle input:focus-visible + .ui-toggle-track {
+  box-shadow: 0 0 0 3px rgba(124, 196, 255, 0.25);
+}
+
+.ui-toggle:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- badges */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rim);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.ui-badge.ui-ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.ui-badge.ui-warn {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 50%, transparent);
+}
+
+.ui-badge.ui-bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 50%, transparent);
+}
+
+.ui-badge.ui-accent {
+  color: var(--ice);
+  border-color: rgba(124, 196, 255, 0.4);
+}
+
+/* ---- empty state */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--dim);
+}
+
+.ui-empty-title {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.ui-empty p {
+  margin: 0;
+}
+
+/* ---- confirm dialog */
+.ui-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 24, 0.55);
+}
+
+.ui-confirm {
+  width: min(420px, 100%);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ink);
+  background: var(--glass);
+  border: 1px solid var(--rim-strong);
+  border-radius: var(--radius-l);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.ui-confirm h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ui-confirm p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.ui-confirm .row {
+  justify-content: flex-end;
+}
+
+/* ---- list-detail (it keeps the .pv-* rules of index.css) */
+.ld-actions {
+  margin-top: 8px;
+}
+
+.ld-add {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pv-model {
+  flex-wrap: wrap;
+}
+
+.pv-model-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The "Models n of m enabled" title keeps one line; the filter takes the rest. */
+.pv-models-head h4 {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.pv-models-head .pv-search.small {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
+}
+
+/* ---- tool contracts */
+.ui-tools {
+  table-layout: fixed;
+}
+
+.ui-tools th:first-child,
+.ui-tools td:first-child {
+  width: 210px;
+}
+
+.ui-tools th:nth-child(2),
+.ui-tools td:nth-child(2) {
+  width: 150px;
+}
+
+.ui-tools td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.ui-tools tr.off td:first-child code {
+  opacity: 0.55;
+}
+
+.ui-tools select {
+  width: 100%;
+  max-width: 136px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.ui-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}

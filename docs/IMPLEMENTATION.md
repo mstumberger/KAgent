@@ -606,15 +606,15 @@ Do:
 - `kagentd/src/skills_import.rs`: the detected sources, the import plan (real path de-duplication, installed and duplicate names), copy and symlink, quarantine into `skills.disabled`.
 - `kagentd/src/skills_sources.rs`: the store, clone and sync plans, the command lines of spec section 8, the hash of a skill.
 - `config/skill-sources.builtin.json` (the catalog).
-- Routes in `skills_api.rs`; the two dialogs `web/src/settings/skills/ImportDialog.tsx` and `SourcesDialog.tsx`; source and review badges in the list.
+- Routes in `skills_sources_api.rs`; the two dialogs `web/src/settings/skills/ImportDialog.tsx` and `SourcesDialog.tsx`; the `off` badge of imported skills in the list.
 Tests: `specs/skills.md` section 11 (sources, import, API validation).
 Check: the standard checks with `web/`; headless Chrome: import from a folder under `/tmp` and add it as a local-path source, sync after a change, remove; scenario S21 (item 4 once, by hand: it needs the network).
 
 ### S22 - Context compaction and session digest (~500 lines)
 Spec: `specs/compaction.md` (all); `specs/config.md` section 11 (`summary`, `summaryUpto`).
-Read: `crates/kagent-core/src/context.rs` (whole, 233 lines), `agent/mod.rs` (`turn_loop`, the fallback), `agent/title.rs:60-105` (a one-shot model call), `session.rs`, `crates/kagentd/src/api.rs:337-364`, `web/src/commands.ts`.
+Read: `crates/kagent-core/src/context.rs` (whole), `agent/mod.rs` (`turn_loop`), `agent/title.rs:60-105` (a one-shot model call), `session.rs`, `crates/kagentd/src/api.rs:337-364`, `web/src/commands.ts`.
 Do:
-- `kagent-core/src/compact.rs`: `should_compact`, the request builder, the summary call, the digest.
+- `kagent-core/src/compact.rs`: `should_compact`, the request builder, the summary call; the digest is `SessionStore::digest` in `session.rs`.
 - `turn_loop`: the trigger where `fit_to_budget` runs; the request is [summary message] + the tail; compaction before the fallback model on a capacity error; `last_input_tokens`.
 - `SessionMeta.summary` and `summaryUpto`; `SessionStore::digest`.
 - `POST /api/sessions/:id/compact`; `/compact` in the composer.
@@ -626,9 +626,9 @@ Check: the standard checks, the gated Ollama test and the smoke script (the loop
 
 ### S23 - Todo lists (~350 lines)
 Spec: `specs/plan-todo.md` section 1; `specs/tools.md` section 19 (`todo_write`, `todo_read`); `specs/api.md` sections 6 (todo) and 7 (`todoUpdated`).
-Read: `crates/kagent-core/src/agent/mod.rs` (`SessionState`), `session.rs`, `protocol.rs` (`AgentEvent`), `crates/kagent-core/src/tools/mod.rs:48-70`, `crates/kagent-core/src/context.rs:104-110` (`GROUP_PRIORITY`), `crates/kagentd/src/settings.rs` (`DEFAULT_TOOL_GROUPS`), `web/src/views/Chat.tsx`, `web/src/views/Overlay.tsx:120-160`, `web/src/events.ts`.
+Read: `crates/kagent-core/src/agent/state.rs` (`SessionState`), `session.rs`, `protocol.rs` (`AgentEvent`), `crates/kagent-core/src/tools/mod.rs` (`group_of`), `crates/kagent-core/src/context.rs` (`GROUP_PRIORITY`), `crates/kagentd/src/settings.rs` (`DEFAULT_TOOL_GROUPS`), `web/src/views/Chat.tsx`, `web/src/views/Overlay.tsx`, `web/src/events.ts`.
 Do:
-- New tool group `agent` (`group_of`, `DEFAULT_TOOL_GROUPS`, `GROUP_PRIORITY`; the group test covers the daemon's tools).
+- New tool group `agent` (`group_of`, `DEFAULT_TOOL_GROUPS`, `GROUP_PRIORITY`; a second group test names the two todo tools, which the daemon registers outside `builtin_registry()`).
 - `kagent-core/src/todo.rs`: `TodoItem`, `normalise`, the per-session list in `SessionState`, saved in the meta; the tools `TodoWrite` and `TodoRead`; the event.
 - `PUT /api/sessions/:id/todo`.
 - Web: `components/TodoPanel.tsx` above the composer; the widget chip; the event in `events.ts`.
@@ -638,12 +638,12 @@ Check: the standard checks with `web/` and the gated Ollama test and smoke scrip
 
 ### S24 - Plan mode (~450 lines)
 Spec: `specs/plan-todo.md` section 2; `specs/tools.md` section 19 (`plan_enter`, `plan_exit`); `specs/api.md` sections 6 (plan rows, `plan` on messages) and 7 (`planUpdated`).
-Read: `crates/kagent-core/src/permission.rs` (`evaluate`), `agent/calls.rs:150-200` (`authorize`), `crates/kagent-core/tests/agent_loop.rs`, `crates/kagent-core/src/todo.rs` (pattern of the S23 tools), `crates/kagentd/src/api.rs:337-359`, `crates/kagentd/src/prompt.rs`, `web/src/components/Approvals.tsx`, `web/src/views/Chat.tsx`.
+Read: `crates/kagent-core/src/permission.rs` (`evaluate`), `agent/calls.rs` (`authorize`), `crates/kagent-core/tests/common/mod.rs` (the scripted model), `crates/kagent-core/src/todo.rs` (how the S23 tools reach the agent), `crates/kagent-core/src/tools/mod.rs` (`group_of`), `crates/kagentd/src/api.rs` (`post_message`), `crates/kagentd/src/prompt.rs`, the `TurnOpts` literals of `crates/kagentd/src/skills.rs` and `tests/agent_loop.rs`, `web/src/components/Approvals.tsx`, `web/src/views/Chat.tsx`.
 Do:
 - `planning` in `SessionState` and the meta; `TurnOpts.plan`.
 - The plan step in `PermissionEngine::evaluate` and `PLAN_ALLOWED`.
 - `kagent-core/src/plan.rs`: `PlanEnter`, `PlanExit` (the `kind: "plan"` request), the plan file, `approvedPlan`, the event.
-- `PromptInput.approved_plan` (`prompt.rs`); `POST /api/sessions/:id/plan`.
+- The approved-plan block in the loop (`agent/mod.rs`, not `PromptInput`: section E); `POST /api/sessions/:id/plan`.
 - Web: `components/PlanCard.tsx`, the planning chip with Cancel plan, `/plan` in the picker.
 Tests: `specs/plan-todo.md` section 3 (plan items).
 Check: the standard checks with `web/` and the gated Ollama test and smoke script (the loop and the prompt are touched); headless Chrome; scenario S24.
@@ -653,36 +653,36 @@ Spec: `specs/memory.md` (all); `specs/tools.md` section 18; `specs/api.md` secti
 Read: `crates/kagent-core/src/skills/frontmatter.rs`, `crates/kagent-core/src/audit.rs:30-50` (the redaction keys, as a pattern), `crates/kagentd/src/prompt.rs`, `crates/kagentd/src/main.rs:225-290` (AppState and the config closure), `crates/kagent-core/src/agent/mod.rs` (`ConfigSource`), `web/src/settings/ui.tsx` and one simple section (for the pattern).
 Do:
 - `ConfigSource` receives a `TurnContext { session_id, user_text }` so the daemon's closure can recall by the latest user message.
-- `kagentd/src/memory/mod.rs` (the store, the parser, `MEMORY.md`), `memory/recall.rs` (the pure scorer), `memory/tools.rs` (`memory_save`, `memory_search`, `memory_get`, `memory_forget`), `memory/session_search.rs`, `memory/http.rs`.
-- The prompt block after the skills index (`PromptInput.memory_block`); the prompt rule; the secret guard.
+- `kagentd/src/memory/mod.rs` (the store, the parser, `MEMORY.md`), `memory/types.rs`, `memory/recall.rs` (the pure scorer), `memory/guard.rs` (the secret guard), `memory/tools.rs` (`memory_save`, `memory_search`, `memory_get`, `memory_forget`), `memory/session_search.rs`, `memory/http.rs`.
+- The prompt block after the skills index (`PromptInput.memory_block`); the prompt rule.
 - New tool group `memory` (as for `agent` in S23).
-- Web: `settings/sections/Memory.tsx`, the event.
+- Web: `settings/sections/Memory.tsx` and `settings/memory/*`; the event.
 Tests: `specs/memory.md` section 9.
-Produces: `memory::recall::score`, `memory::core_text()` (used by S26).
+Produces: `memory::recall::{score, words, rank, Caps, HEADING}` and `MemoryHub::core_text(cap_chars)` (used by S26).
 Check: the standard checks with `web/` and the gated Ollama test and smoke script (the prompt and the loop are touched); headless Chrome on the Memory section; scenario S25.
 
 ### S26 - Voice brain and live context (~900 lines Rust, ~120 lines TS)
 Spec: `specs/voice.md` (all); `specs/tools.md` section 24; `specs/api.md` section 5.
 Read: `crates/kagentd/src/live/mod.rs` (whole, 398 lines), `live/protocol.rs` (whole), `live/approve.rs` (whole), `scripts/test-live.py` (whole), `crates/kagent-core/src/util.rs`, `crates/kagentd/src/memory/recall.rs` and the memory core (S25), `crates/kagent-core/src/session.rs` (`digest`, S22), `scripts/import-zcode-providers.py` (grep `liveModels`), `web/src/settings/sections/Voice.tsx`, `web/src/voice/live.ts:130-160`.
 Do:
-- `live/mod.rs` is at the 400-line budget, so the new logic goes to new files: `live/brain.rs` (`classify_think`, the `think` handler), `live/context.rs` (history turns, the context message, the vocabulary), `live/instruction.rs` (the three instruction builders, moved out of `mod.rs`).
+- `live/mod.rs` is at the 400-line budget, so the new logic goes to new files: `live/brain.rs` (`classify_think`, the `think` handler), `live/context.rs` (history turns, the context message, the vocabulary), `live/instruction.rs` (the three instruction builders, moved out of `mod.rs`). `voice_approvals` moves to `approve.rs` (`VoiceCards`) and `VoiceSection` to `sections/voice.rs`.
 - `live/protocol.rs`: the setup gains `historyConfig` and the custom vocabulary and takes a tool list; the `[SAY]` frame.
 - `think` handling, stop phrases (`approve::is_stop`), `wait_idle`, the `toolCallCancellation` path.
 - `util::speakable`; the `voice` settings section and the model picker hint; `import-zcode-providers.py` lists both live models.
 - Web: the Thinking radio, the tool chips and the two toggles in the Voice section; "thinking" in the Voice status.
-- `scripts/test-live.py`: the fake Gemini server also serves `/v1/chat/completions`; the six checks.
+- `scripts/test-live.py`: the fake Gemini server also serves `/v1/chat/completions`; its checks grow to 34.
 Tests: `specs/voice.md` section 10.
 Check: the standard checks with `web/`; `python3 scripts/test-live.py` passes all its checks; the owner check of spec section 11, once.
 
 ### S27 - Browser: attach to the running Brave (~700 lines)
 Spec: `specs/browser.md` (all); `specs/tools.md` section 23 (the `browser` row); `specs/api.md` section 6 (browser rows).
-Read: `crates/kagentd/src/browser/mod.rs` (whole), `browser/cdp.rs` (whole), `crates/kagentd/src/main.rs:210-222` (the `Browser` registration), `crates/kagent-core/src/permission.rs` (`evaluate`, the always-ask path), `web/src/settings/sections/Browser.tsx`.
+Read: `crates/kagentd/src/browser/mod.rs` (whole), `browser/cdp.rs` (whole), `crates/kagentd/src/main.rs` (the `Browser` registration), `crates/kagent-core/src/permission.rs` (`evaluate`, the always-ask path), `web/src/settings/sections/Browser.tsx`.
 Do:
-- `browser/attach.rs`: `parse_devtools_active_port`, `BrowserSession` (one multiplexed socket), the tab rules.
-- `browser/target.rs`: the `TabTarget` trait with the own-profile and the attached implementations; `Browser::run` uses it for every action.
+- `browser/attach.rs` with `attach/{profile,socket,tabs}.rs`: `parse_devtools_active_port`, `BrowserSession` (one multiplexed socket), the tab rules.
+- `browser/target.rs`: the `TabTarget` trait with the own-profile (`browser/own.rs`) and the attached implementations; `browser/actions.rs` holds the actions, which `Browser::run` uses for both backends.
 - `browser/http.rs`: status, connect, disconnect.
 - The backend decides the tool description at construction; `Browser` keeps the attach state.
-- Web: the attach controls in the Browser section.
+- Web: the attach controls in the Browser section (`settings/browser/*`).
 Tests: `specs/browser.md` section 9 (the fake CDP server is a loopback `TcpListener` in the test).
 Check: the standard checks with `web/`; headless Chrome on the Browser section; the owner check of spec section 10, once.
 
@@ -711,7 +711,7 @@ Check: the standard checks with `web/`; headless Chrome on the Telegram section;
 Spec: `specs/web.md` (all); `specs/tools.md` section 20; `specs/config.md` section 11 (`search`).
 Read: `crates/kagentd/src/screen.rs:120-165` (an HTTP call from a tool), `crates/kagent-core/src/tools/mod.rs:48-70`, `crates/kagent-core/src/context.rs:104-110`, `crates/kagentd/src/settings.rs` (`DEFAULT_TOOL_GROUPS`), `crates/kagentd/src/secrets.rs`.
 Do:
-- `kagentd/src/web/guard.rs` (pure), `web/html.rs` (pure), `web/fetch.rs`, `web/search.rs` (three engines), `web/mod.rs`; fixtures under `crates/kagentd/src/web/fixtures/` (saved real pages).
+- `kagentd/src/web/guard.rs` (pure), `web/html.rs` (pure, with `html/{tags,entities,charset}.rs`), `web/fetch.rs`, `web/search.rs` (three engines), `web/settings.rs` (the `search` section and the Brave key), `web/http.rs` (the key route), `web/mod.rs` (the transport); fixtures under `crates/kagentd/src/web/fixtures/` (saved real pages).
 - New tool group `web`; the `search` settings section and the Brave key.
 - Web: `settings/sections/Web.tsx`.
 Tests: `specs/web.md` section 6.
@@ -1129,6 +1129,1069 @@ Decisions:
 - Not ported from ZCode: plugins, a hosted store, dynamic workflows, remote execution,
   git checkpoints, the TUI and the Bash AST policy.
 
+### Session 2026-11-25 (S17 agent foundations)
+
+- `agent/mod.rs` (495 lines) is split: `agent/state.rs` (`SessionState`, the session
+  map, the history writes), `agent/turn.rs` (`TurnResult`, `TurnHandle`,
+  `wait_idle`), and the tool-group selection moved to `calls.rs`. `turn_loop` stays
+  in `mod.rs` (394 lines).
+- A turn ends under one lock (`SessionState::settle`): the result is published, the
+  session goes idle, and an input queued in the meantime starts the next turn before
+  anything can see the session idle. Otherwise `wait_idle` could return the previous
+  turn's result while a queued one was about to run.
+- **Found by the real-model run, missed by the unit tests**: the result is published
+  with `watch::Sender::send_replace`. `send` drops the value when nobody is waiting
+  yet. The first tests subscribed before the turn ended; a caller asking `wait_idle`
+  only afterwards got "no turn has run". Two tests pin it now.
+- `wait_idle` answers `Failed` ("no turn has run in this session") for a session
+  without a turn, and `Failed` with the error when the session cannot be loaded.
+- `tasks::execute` and `krunner::ask` wait with `wait_idle` (the 45 and 10 minute
+  limits stay) and still show the last assistant message, not `TurnResult.text`: that
+  is every text delta of the turn joined, narration before tool calls included.
+  `krunner::ask` waited on events, not on `is_running`; it now notifies approval
+  cards from a side task.
+- The task prompt is sent `Via::Task` (origin `task`). An alert investigation keeps
+  `Via::Text` with origin `alert`. `SendOutcome` no longer derives `Clone` and
+  `PartialEq` (a handle cannot be cloned); its JSON is unchanged.
+- Typed sections registered in S17: `voice` (the five keys of config.md section 11),
+  `browser`, `tasks`. Each later stage adds its own. A section is `#[serde(default)]`
+  as a whole, so a missing field gets what a missing section gets. The typo check
+  compares lowercased keys. The types and the readers (`desktop_prefs`,
+  `browser_config`, `voice_pauses_media`) are in `kagentd/src/sections.rs`;
+  `section()`, `validate_sections()`, `merge_patch` and the two validators are in
+  `settings.rs`. `Startup` and `Greeting` moved to `startup.rs` to keep
+  `settings.rs` near 400 lines.
+- `PUT /api/settings` checks only the `toolGroups` and `toolOverrides` entries the
+  patch names: a hand-edited entry already in the file does not block an unrelated
+  update. Known groups are `DEFAULT_TOOL_GROUPS` plus `GROUP_PRIORITY` (`router` and
+  `other` included).
+- Load fails, and the daemon does not start, on a typo in a typed section (the message
+  names the file, the key and the suggestion). The owner's `settings.json` of
+  2026-11-25 has no `voice`, `browser` or `tasks` key, so nothing there is rejected.
+- `Notifier`: `notify-send -a KAgent --urgency <level> <title> <body>`, no icon (the
+  old `tasks::notify` used `appointment-soon`), started with `tokio::process` so the
+  child is reaped. `krunner::notify` and `startup::greet` keep their own calls: the
+  spec names only `tasks::notify`, and both pass an icon.
+- Autostart guard: `startup::sync_at_start` for a daemon start,
+  `startup::apply_requested` for `PUT /api/settings` (skipped under `KAGENT_HOME`).
+  Left as it was because the spec does not cover it: a daemon start with
+  `startup.autostart` off still runs `systemctl --user disable`, also from a
+  `KAGENT_HOME` instance.
+- **`scripts/smoke-api.sh` was not run. Do not run it while the owner's daemon is
+  up.** Port 7878 is fixed in the daemon (bind and Host check), so the smoke daemon
+  cannot listen. Worse, zbus 6.5 requests a bus name with `REPLACE_EXISTING` by
+  default (`connection/builder.rs`, `RequestNameFlags::default`): a second daemon
+  takes `org.kagent.KRunner` from the running one and releases it when it exits, so
+  KRunner is dead until the owner's daemon restarts. Read in the zbus source, not
+  tried: trying it is the harm. Substitute, run in process (real loop, real tools,
+  local qwen2.5:7b-instruct): the smoke question made one `kernel_info` call and
+  named the kernel, `wait_idle` equalled the handle, a cancel kept its partial text.
+  The owner's daemon, the unit's `ExecStart` and the bus name were checked before
+  and after: unchanged.
+
+### Session 2026-11-25 (S18 skills library core, S19 settings screen)
+
+Both stages ran as agent runs, one after the other: the side-by-side attempt was
+cancelled, the next was killed by the plan's usage limit after ten minutes without
+a written file. The briefs then required batched reads and a progress file, and
+each stage ran alone.
+
+S18:
+- `skills.rs` is a module directory: `skills/{mod,frontmatter,library,tool}.rs`
+  plus `skills/library/tests.rs` (the library's tests, split out). The daemon side
+  is `kagentd/src/skills.rs` (`SkillHub`: the library behind the lock, `refresh`
+  and `index`), because `main.rs` and `settings.rs` were at the size limit.
+- **Fingerprint**: skills.md section 3 hints "directory mtime and entry count",
+  but section 11 requires detecting an edited skill file, which changes neither.
+  Section 11 won: every root and first-level directory is stamped (mtime, entry
+  count) and every `SKILL.md` (mtime, size). `refresh_if_changed(disabled)` also
+  rescans when `skills.disabled` changes. `skillsChanged` goes out on every
+  rescan; `count` is the number of enabled skills.
+- Fixtures: 13 real frontmatter blocks and 3 synthetic files. No installed skill
+  has a comment in its frontmatter, a name that is not a valid id, or no
+  frontmatter, so `comments.md`, `invalid-name.md` and `no-frontmatter.md` are
+  synthetic. Em dashes of copied text are hyphens.
+- Index budget: only the `- name: description` lines count, added whole; the
+  heading and the names-only line do not. A description over 1024 chars is cut.
+- `parse()` returns `None` only for an invalid frontmatter name; the library
+  validates the directory-name fallback. Only whole-line comments are dropped.
+  The same real path counts once within a root; across roots it is a name clash.
+- `load_skill` refuses a disabled name ("skill 'x' is disabled in settings
+  (skills.disabled)"); an unknown name lists the enabled skills by source.
+  `<data>/skill-usage.json` is written atomically with mode 0600; a damaged file
+  starts empty. `SkillEntry.size_bytes` is the body size. `indexBudgetChars`
+  outside 500..=20000 fails at load and on `PUT /api/settings`.
+- **Scenario S18 item 6 fails with the local model, before and after S18.** In
+  the in-process harness (as in S17) qwen2.5:7b-instruct called `load_skill` in
+  0 of 7 full turns and 0 of 60 first-call runs for "my machine feels slow, check
+  it"; `system_info` was always the first call. The S7 wording fails the same way
+  (0 of 10), so this is not an S18 regression, and seven prompt variants did not
+  change it. "Load the slow-machine skill and summarize its steps." works end to
+  end. Open for the owner: accept it, name the model in the scenario, or change
+  the design. Evidence in `/tmp/kagent-s18-evidence/` (not in the repo).
+- Outdated, not edited: scenario S7 item 4 ("missing frontmatter -> skipped");
+  since skills.md section 1 a skill without frontmatter is valid.
+
+S19:
+- Files beyond the list in ui-settings.md section 6: `settings/controls.css`
+  (split from `settings.css`), `useSettingPatch.ts`, `useDraft.ts`,
+  `sections/ToolContracts.tsx` and `sections/models/{Roles,Advanced,shared}`.
+  Hooks sit in `.ts` files, so component files export components only.
+- The open page lives in the store (`settingsSection`) and is remembered in
+  localStorage; the hash is read at load only and never written.
+- `save()` resolves `undefined` when the daemon refuses and `error` says why;
+  "Saved" shows for 2.5 s; provider actions report in the same header. A save's
+  answer is applied to the store only for the save started last.
+- The browser "Backend" is left out (no field before S27).
+- **Tool group chips, fixed after the first pass.** They read the raw settings
+  lists, so an empty `toolGroups` (every group to the daemon) or an unset
+  `mcpToolGroups` (its five-group default) showed every chip off, and one click
+  saved a one-group list. The old Settings view had the MCP default right. A
+  chip is on when the explicit list names the group, or when the list is empty
+  and a tool of the group reports `enabled` or `mcp` in `GET /api/tools`
+  (`ToolView.mcp`). Checked in the browser with a simulated empty list: 13 of 13
+  chat chips and exactly the five default MCP chips on; switching one off sends
+  one PUT with the other 12 groups. Not exercised in the browser: switching an
+  MCP chip off (the same code path).
+- **`toolOverrides` removal, decided and fixed afterwards (10:45, a second
+  session)**: `merge_patch` merges objects at every depth, so a `toolOverrides`
+  key could not be removed by `PUT /api/settings` (null and "" both got 400) and
+  Tools and permissions showed "Not saved"; allow, ask and deny saved. The
+  decision, now in foundations.md section 3 and config.md section 11: `{tool:
+  null}` removes that tool's override; `null` for the whole map is still
+  rejected. `settings.rs`: `check_tool_overrides` skips a null entry and `patch`
+  drops those keys after the merge (assertions in
+  `invalid_tool_groups_and_overrides_are_rejected`; the file is 430 lines now).
+  Verified by that test and the 223 workspace tests; the page was not re-run in
+  a browser, because a second daemon cannot run next to the owner's. The S19
+  harness check that clears an override expects the old "Not saved" and needs
+  the new rule if it is run again.
+- Seen, not changed: at 700 px the header's tab row scrolls and cuts off the
+  Settings tab (`index.css`, `header nav` max-width 60vw); the hint line of the
+  MCP card is faint on the dark card.
+- Headless pass: 32 of 32 combinations (8 pages, dark and light, 1200x820 and
+  700x500), 192 checks, re-run after the chip fix; behaviour and proxy checks
+  34 of 34. One harness check (clearing an override) can lose a race against the
+  page's own reload of `/api/tools`, because the harness sets the select and
+  fires its change event in two steps (1 of 39 repeats); a real change is one
+  event. Run on an own dev server and an own headless Chrome. Non-GET requests
+  were answered inside the page, so the owner's daemon saw GET requests and the
+  `/ws` stream only. Harness, log and screenshots are under
+  `/tmp/kagent-s19-{harness,shots}` (not in the repo).
+- `web/dist` was not rebuilt, because the daemon serves it live. The build went
+  to `/tmp/kagent-s19-dist`; the owner runs `pnpm -C web build` to switch the
+  live UI (the daemon binary needs a release rebuild and a restart for the new
+  `ui show` sections).
+- Scenario S19 item 5 (a chat message through the dev proxy) was not run: it
+  needs a real turn on the owner's daemon. The proxy was shown to forward a GET
+  (200) and the `/ws` upgrade (101).
+
+Both stages: `scripts/smoke-api.sh` was not run (the S17 decision), no release
+build, no restart. The owner's daemon (PID 386456) and `web/dist` (built
+2026-11-24 22:59) were unchanged before and after. Final check on the combined
+tree: `RUSTFLAGS="-D warnings" cargo build --workspace` clean, 223 workspace
+tests, the gated Ollama test, `pnpm -C web lint` (4 warnings, 0 errors), `tsc -b`
+and the scratch build all pass.
+
+### Session 2026-11-25 (S20 skills screen, self-authoring, slash commands)
+
+One session, after the sibling check found no other run in the tree.
+
+- `TurnOpts { system_suffix }` is the fourth argument of the new `Agent::send_with`;
+  `send` is unchanged (KRunner, tasks and alert investigations call it). The block is
+  appended to the system prompt of every model request of the turn and is never
+  stored. The queue behind a running turn now holds
+  `TurnInput { text, via, system_suffix }` (`agent/state.rs`): a `/<skill>` message
+  sent while a turn runs is steering, and its block is in the prompt from the next
+  model request on.
+- **Spec corrected (skills.md section 6).** It named `PromptInput.skill_body` for the
+  block. `PromptInput` is what the config closure fills, and the closure is
+  `Fn() -> AgentConfig`: it gets no input of a single turn (S25 changes that). The
+  daemon renders the block (`prompt::skill_block`) and `api::post_message` passes it
+  as the suffix.
+- `LoadSkill`'s counter is `SkillCounter`, owned by `SkillHub`: `load_skill`, a
+  `/<name>` message (`SkillHub::turn_opts`) and the API read and write one copy.
+- `skills/author.rs` (+ `author/tests.rs`): the tools `SkillSave` and `SkillDelete`.
+  `skills/author/plan.rs`: what is checked before anything is written and the writing
+  itself (`plan_save`, `plan_delete`, `write_skill`, `remove_skill`), which the skills
+  API uses too.
+  `skills/file.rs` writes a `SKILL.md`: `render` for a new one (what `parse` reads
+  back; a value that is not one plain line becomes a literal block, so the YAML
+  readers of other tools accept it too) and `replace` for a change from the editor,
+  which keeps every other line of the frontmatter (`license`, `metadata`, comments).
+  `frontmatter.rs` is parsing only again.
+- **Found with the real model, fixed in the tool.** For the wording of scenario S20
+  item 3 the turn ended with an empty answer in most runs. A replay of the exact
+  request against the raw Ollama API (0.40.12) shows why: the server generates 120
+  to 260 tokens and then delivers no content and no tool call (`done_reason: stop`),
+  so it dropped a `skill_save` call it could not parse. The cause is the type of
+  `body`: with a `string` the call arrived in 2 of 6 runs (1 of 6 in a second batch,
+  0 of 6 with a shorter description); with an array of lines in 4, 5 and 6 of 6;
+  with the schema accepting either form in 6 of 6. `skill_save.body` is now
+  `anyOf` string or array of strings (tools.md section 17); the tool joins lines
+  and checks the form itself, because `validate_schema` does not look into
+  `anyOf`. The API keeps taking a string. With it, the wording of the scenario made
+  the model call `skill_save` in 12 of 12 runs (it was 1 of 11). The result of the
+  tool now also says how a skill is used: the model had invented a `kagent run`
+  command in 1 of 6 replies, in none of the 6 after. The `/skill-creator` route of
+  the Skills page was 3 of 3 before the change and is 8 of 9 over all runs; in its
+  one miss the server dropped the output again, so the behaviour is rarer, not gone.
+- Seen, not changed (the owner decides): when a provider delivers neither text nor
+  a tool call (Ollama drops a call it cannot parse), the turn ends as completed
+  with an empty answer and no notice. A retry, or a notice, would tell the user
+  what happened. Other tools with a long text argument may hit the same server
+  behaviour. And a call that will be refused still shows its card, saying "Not
+  possible": whether a call needs a card must not depend on a check that can
+  change before the call runs.
+- Refusals of `skill_save` that tools.md did not list (they are in section 17 now): an
+  empty body, a description over 1024 characters, a skill folder that is a symlink or
+  a file. The case rule runs before the name rule, so "ALPHA" is refused with the name
+  of the existing skill.
+- After `skill_save`, `skill_delete` and every write of the API the library is read
+  again at once (`SkillLibrary::reload`) and `skillsChanged` goes out; the tools get
+  an `OnChange` callback from `SkillHub`. `load_skill` finds a new skill in the same
+  turn.
+- `kagentd/src/skills_api.rs`: the work is in functions over the hub (`create`,
+  `update`, `delete`, `disabled_after`), tested without a server (a second daemon
+  cannot run next to the owner's, S17); the axum handlers wrap them. Decisions: a
+  `POST /api/skills` for a name the owner already has is 409, not an overwrite;
+  `SkillView.path` is the folder; `SkillView.updatedAt` was added to api.md because
+  skills.md section 9 asks for "updated N days ago"; the list also holds shadowed
+  skills, flagged, and sends no bodies; empty optional fields are left out.
+- The Skills page draws its own list rows, not `ListDetail` (ui-settings.md section
+  8): each row carries a switch, and `ListDetail` rows are buttons. **The first
+  browser run found a real bug in it**: the detail kept its own copy of the skill and
+  did not follow a switch made in the row. It now takes all but the body from the
+  row, and a write hands its answer to the row (`onPatch`).
+- Composer: `web/src/commands.ts` (the built-in commands, the matching) and
+  `components/CommandInput.tsx` (+ `command.css`). `/new` alone is done by the UI
+  (`newSession()`, nothing is sent). `/compact` and `/plan` are listed as "from
+  S22 / S24" and cannot be picked. Enter with the picker open picks (a second Enter
+  sends), Tab picks, Escape closes it until the word changes.
+- "New skill with the agent" hands `/skill-creator` to a chat that is not open yet
+  through the store (`composerDraft`, taken when Chat mounts) and to an open one as a
+  `kagent-composer` window event (as `kagent-theme` does), so Chat has no setState in
+  an effect (`react(set-state-in-effect)`; the lint baseline stays at 4 warnings).
+- Files beyond the stage's list: `skills/shared.ts` (filters, `ago`, the draft rules
+  mirrored from the daemon, `copyName`), `skills/skills.css`,
+  `components/command.css`; the `book` icon in `Icon.tsx`; `skills` in `ui.rs`
+  `SECTIONS` and in the `ui` tool description.
+- Verification: `RUSTFLAGS="-D warnings" cargo build --workspace` clean; 248
+  workspace tests (223 before the stage); the gated Ollama test; `pnpm -C web lint`
+  (4 warnings, 0 errors, the S19 baseline), `tsc -b` and the scratch build. Headless
+  Chrome on an own dev server and an own profile: the skills routes, which the
+  running daemon does not have yet, and every non-GET request were answered inside
+  the page, so the owner's daemon saw GET requests and the `/ws` stream only. 83 of
+  83 checks on the final UI: the list with badges, switches and usage; the detail;
+  new (invalid, reserved, taken and valid names), change, duplicate, delete with
+  its confirmation; rescan; `ui show settings/skills`; "New skill with the agent";
+  the picker (bare `/`, narrowing, keys, click, Escape, after `skillsChanged`);
+  1200x820 and 700x500, dark and light, no console error. Screenshots in
+  `/tmp/kagent-s20-shots`. Three earlier runs found the bug above and mistakes of
+  the harness itself.
+- Real model (in-process run as in S17 and S18, qwen2.5:7b-instruct on Ollama
+  0.40.12; harness and logs in `/tmp/kagent-s20-evidence/`), on the final code:
+  scenario S20 item 5 passes (`system_info`, then `process_list` by CPU and by
+  memory, the steps of the skill, with no `load_skill`; the block in every model
+  request; the stored user message is only the text; one use counted). Item 3
+  passes by both roads: the model calls `skill_save`, the card shows the name, the
+  description and the body, allowed once the file is under `<config>/skills`,
+  `load_skill` returns it and the prompt index lists it. Item 4 passes: a card for
+  the skill of the owner and its folder is gone; for the bundled skill the tool
+  answers "skill 'slow-machine' is bundled. It comes from .../skills/slow-machine"
+  and the model explains how to switch it off. In one run the first `skill_save`
+  call left `name` out; the loop's validation refused it and the model called
+  again, correctly. Not run with a cloud model. The last of these runs was before
+  `author/plan.rs` was split off `author.rs` (a move, no change in behaviour).
+- `web/dist` was not rebuilt (the scratch build is in `/tmp/kagent-s20-dist`).
+  `scripts/smoke-api.sh` was not run (the S17 decision). The owner's daemon (PID
+  386456) was the same before and after.
+- Left for the owner: a release rebuild and restart of the daemon and
+  `pnpm -C web build`, then scenario S20 items 1 to 6 through the live UI (the
+  headless pass used an in-page copy of the skills API).
+- Seen, not changed: README's skills line (it does not know about Settings -> Skills
+  and `/<name>`); the phase 4 header and the AGENTS.md status line still say "not
+  started" (S19's note).
+
+### Session 2026-11-25 (S21 skill import and git sources)
+
+One background agent, alone (157 tool calls, about 100 minutes). 265 workspace tests
+(248 before). `scripts/smoke-api.sh` was not run, no release build, no restart; the
+owner's daemon was not running before or after (the user service has been inactive
+since 12:12:53).
+- Files beyond the stage's list (to stay under 400 lines):
+  `skills_import/{copy,tests}.rs`, `skills_sources/{validate,git,read,plan,tests}.rs`,
+  and `skills_sources_api.rs` plus `skills_sources_api/{steps.rs,steps/tests.rs}` (the
+  work of the routes; the handlers parse, lock, switch off and apply). `library.rs` got
+  `skill_dirs` and `read_skill`, so an import offers what the library loads.
+  `kagentd/src/skills.rs` has `Installed`, `SkillView.importedFrom`,
+  `SkillHub::with_sources` and `installed()`; its tests moved unchanged to
+  `skills/tests.rs`.
+- **`GET /api/skills/import-sources` lists all nine folders of the table**, with
+  `exists: false` where the tool is missing. skills.md said "each only when the folder
+  exists"; api.md has `exists`, which would then always be true. The spec now says so.
+- **"name exists" is wider than the text.** A name that any skill has (a bundled one
+  too), or that has a folder or link under `skills-imported/`, is skipped. Quarantine is
+  by name: an imported skill named like a bundled one would switch that one off too. It
+  is enforced again when the file is written.
+- **Off before the first file is written.** The handler plans, adds the names to
+  `skills.disabled` through `put_settings`, makes the library read the list, then
+  installs. A failed install leaves the name in the list, where no skill has it.
+- api.md additions (the spec is updated): import answers `disabled` too; a source's
+  first install answers the source plus `added` and `skipped`; a sync answers `skipped`
+  too; adding is 201; `removeSkills` is also read from `?removeSkills=true`.
+  `importedFrom` is `{source, path, hash}`: the source's name, or the tool (a folder's
+  path when it is no known tool), and the skill's folder in the source. Imports by hand
+  are recorded under `imports` in `skill-sources.json`; a damaged file stops the daemon
+  (it names the file).
+- Sources: the id is `<repository>-<8 hex of the address>`; the same address twice is
+  409. A `ref` holds letters, digits, `.`, `_`, `/`, `-`, and no part starts with a dash
+  (`--upload-pack=<command>` as a ref would run a command; a test caught `-x`). Every
+  git call carries `-c core.hooksPath=/dev/null -c protocol.file.allow=user`; without a
+  `ref` a sync fetches `HEAD`, then `checkout --force --detach FETCH_HEAD`; 180 s at
+  most, then the process group is killed. `git` missing: 500 "install git"; a git
+  failure: 502 with the end of its stderr.
+- The 200 MB and 2000 file limits are measured on the whole clone, on the `subdir` of a
+  local path. A copy with the same content that no source recorded (an interrupted
+  sync, a source added again with its skills kept) is recorded, not installed again. A
+  copy removed by hand comes back at the next sync, off. A local path is never removed
+  with its source.
+- Copies are made in `<config>/skills-imported.staging/` and renamed into place in one
+  step; files are opened with `O_NOFOLLOW`; 20 MB is checked when planning and again
+  while writing.
+- UI: `settings/dialog.tsx` (+ `dialog.css`) is the dialog primitive; its rules are not
+  in `controls.css` (it would pass 400 lines). The two dialogs keep their rules in
+  `skills/dialogs.css`. The detail shows the origin and says, for a link, that only the
+  link is deleted. With no skill of the owner's, the empty state has New skill and
+  Import.
+- One test is `#[ignore]`d: it needs the `git` program. By hand:
+  `cargo test -p kagentd --bin kagentd real_git -- --ignored` (passes: git 2.53, a local
+  `file://` transport, and a hook planted in the clone did not run).
+- Verification: `RUSTFLAGS="-D warnings" cargo build --workspace` clean; 265 workspace
+  tests; `pnpm -C web lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the
+  scratch build (`/tmp/kagent-s21-dist`; `web/dist` unchanged). Headless Chrome on an
+  own dev server (5195) and an own headless Chrome (CDP 9341): every `/api/` request and
+  both sockets answered inside the page, nothing sent to 127.0.0.1:7878. 100 of 100
+  checks in the last two runs: import in copy and link mode (a duplicate, an installed
+  name and an oversized skill skipped with reasons), the `off` badge, the five filters,
+  the detail with its origin, delete of a link; a source added (refused, then added),
+  synced (1 added, 1 updated and off again, 1 removed), removed with and without its
+  skills; 1200x820 and 700x500, dark and light; no console error. Nine earlier runs
+  failed on mistakes of the harness and of its stub, one on a button label. One run
+  failed three "nothing wider than the window" checks after the skill-creator detail;
+  not reproduced in seven later runs, cause not found (the check now prints what is too
+  wide and saves a screenshot). The harness is reusable: `/tmp/kagent-s21-harness/`
+  (README inside); screenshots in `/tmp/kagent-s21-shots` (not in the repo).
+- Seen, not changed: `DELETE /api/skills/:name` (S20) leaves the name in
+  `skills.disabled`, so a skill of a source deleted that way comes back at the next
+  sync, off. The description and keywords of the Skills entry in
+  `web/src/settings/registry.ts` do not mention import or sources. The status line of
+  `AGENTS.md` and the phase 4 header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenarios S21 items 2 to 5 through the live UI (item 4
+  needs the network). Open question: the import dialog lists the known tools only,
+  while the route takes any absolute folder; should the dialog take a folder too?
+
+### Session 2026-11-25 (S22 context compaction and session digest)
+
+One background agent, alone (138 tool calls, about 66 minutes). 289 workspace tests
+(265 before). `scripts/smoke-api.sh` was not run, no release build, no restart; the
+daemon was inactive before and after.
+- `AgentConfig` got no field: `agent/turn.rs` (read only) builds it with every field.
+  The daemon sets `Agent::set_compaction_source` (as it sets the tool groups), read
+  before every model request. `is_capacity_error` and the fallback switch moved to
+  `compact/loop_side.rs`; the path `kagent_core::agent::is_capacity_error` stays.
+- Files beyond the list: `agent/config.rs` (the boundary types, a pure move; `mod.rs`
+  is 363 lines), `compact/{loop_side,tests}.rs`, `tests/common/mod.rs` (the rig of
+  `tests/agent_loop.rs`, a pure move), `kagentd/src/compact_api.rs`.
+- **Spec corrected (compaction.md section 3).** A summary request that ends with an
+  assistant message gets an empty answer from the local model (2 of 2 raw replays,
+  Ollama 0.40.12). The request ends with the user message "Summarize the conversation
+  above now." (2 of 2 answered).
+- The soft line brings the estimate plus what the provider last counted beyond it back
+  to `thresholdPct - 20`, only when that makes the request smaller; `last_input_tokens`
+  is reset at each compaction. 32k is 32,768 tokens; an unknown window never compacts.
+- At the hard line room for the new summary is reserved, so the next request is not
+  trimmed again. With a summary `fit_to_budget` cuts among the turns after it.
+- Capacity error: everything before the last user message, once; with `enabled=false`,
+  nothing to summarize or a failed summary, the fallback comes at once.
+- By hand `/compact` runs whatever `enabled` and the window are: 400 under 4 stored
+  messages, or with nothing before the last user message and no summary yet; 200 with
+  the existing summary when nothing is new; 502 `summary_failed`; 404 unknown session.
+  The composer puts `/compact ` in the input and Enter calls the route of the active
+  session; the header notice reports the result.
+- `SessionStore::digest` returns a String: the summary, else `User: ...` and
+  `Assistant: ...` lines, each cut to 600 chars; `max_chars` caps the whole.
+- Real model (qwen2.5:7b-instruct, 16k window, in process): smoke 4 of 4 (one
+  `kernel_info` call); 43 turns at the hard line, all completed, 16 with a trimmed
+  request, 0 summary calls, largest prompt 9467 tokens; the summary request on 78
+  messages answered in 7.8 s. **Scenario item 5 passed 1 of 3 runs**: the 7B summary
+  dropped the fact once, the answer ignored a summary that had it once.
+- Verification: build clean; 289 workspace tests; the gated Ollama test; `pnpm -C web
+  lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s22-dist`; `web/dist` unchanged). Headless pass 32 of 32 (`/compact`
+  listed, picked, the route called once, the notice, the error under 4 messages) on an
+  own dev server (5196) and an own headless Chrome (CDP 9342); nothing sent to
+  127.0.0.1:7878. Harness `/tmp/kagent-s22-harness`, screenshots
+  `/tmp/kagent-s22-shots`, the real-model project `/tmp/kagent-s22-evidence` (not in
+  the repo).
+- Seen, not changed: the summary request carries tool calls and results without tool
+  definitions (shown to work on Ollama only; a provider that refuses it gets the trim
+  path). A context overflow (400 `context_length_exceeded`) is not a capacity error:
+  the turn fails as before. No settings control for `compaction.enabled` and
+  `thresholdPct` (hand-edited in `settings.json`). The stored summary is not shown in
+  the UI. `title.rs` keeps its own one-shot call. `main.rs` is 428 lines, `api.rs` 488,
+  `settings.rs` 431. The status line of `AGENTS.md` and the phase 4 header above still
+  say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenario S22 item 5 through the live UI with a cloud model
+  as `fastModel`. Open question: should `/compact` warn when the chat model is a small
+  local one and no fast model is set?
+
+### Session 2026-11-25 (S23 todo lists)
+
+One background agent, alone (125 tool calls, about 43 minutes). 299 workspace tests
+(289 before). `scripts/smoke-api.sh` was not run, no release build, no restart; the
+daemon was inactive before and after.
+- Files beyond the list: `todo/tests.rs` (the tests of the core) and
+  `components/todo.css`. `agent/mod.rs`, `agent/calls.rs` and `api.rs` needed no
+  change: the group refusal reads `group_of`, and `get_session` serialises the whole
+  meta.
+- **How the tools reach the sessions.** The registry is built before the agent exists
+  and `ToolContext` carries no agent, so both tools hold a `TodoAccess` (a `Weak<Agent>`
+  in a shared handle): `main.rs` creates it, gives it to the tools and calls `attach`
+  after `Agent::new`. The tools are registered in `main.rs`, not in
+  `builtin_registry()`, so a second group test names them.
+- `Agent::todo` and `Agent::set_todo` (`agent/state.rs`): `set_todo` normalises,
+  stores the list in the meta, saves the meta and sends `todoUpdated` under the same
+  lock, so the events keep the order of the stored lists. It leaves `updated_at`
+  alone: a tick in the panel must not reorder the sessions.
+- Limits live in `normalise` (`validate_schema` ignores `maxItems` and `maxLength`):
+  more than 50 items, content over 200 characters (characters, not bytes), an item
+  without content, an unknown field, an unknown status or priority refuse the whole
+  list; nothing is stored and no event goes out. A missing or null status is pending,
+  a missing priority medium; content is trimmed.
+- Both tools answer `[n] [x] content` lines (a `>` marks in progress, ` (high)`
+  follows a high item), or `no todo list`; `{"items": []}` clears.
+  `PUT /api/sessions/:id/todo` answers 400 without `items` or for a refused list, and
+  404 for an unknown session.
+- The group `agent` sits after `tasks` in `GROUP_PRIORITY` and at the end of
+  `DEFAULT_TOOL_GROUPS`; at the daemon's next start the migration adds it to
+  `toolGroups` of the owner's `settings.json`, once.
+- Panel: a click marks a pending or in_progress item completed and a completed one
+  pending; one PUT at a time; the answer and the event both feed the store; nothing is
+  shown for an empty list. The chip's rule is in `components/todo.css`.
+- **Found with the real model:** `rename_all = "lowercase"` made `InProgress`
+  `inprogress`, so every call with `in_progress` was refused. It is `snake_case` now,
+  and the unit tests pin it.
+- **Scenario S23 item 3 fails with the local model in its last part, like S18 item
+  6.** qwen2.5:7b-instruct (in process, read-only mode, the builtin registry, 16k
+  window) wrote the list in 9 of 9 runs and answered in 9, and updated the statuses
+  in 0. A closing line in the result of `todo_write` gave 3 of 9, but in 2 of 9 runs
+  the model then walked the list to done without a diagnostic call and invented the
+  findings, so it is not in the code. A sharper description alone gave 1 of 3.
+  Evidence in `/tmp/kagent-s23-evidence`.
+- The agent group is 2 tools, 1387 chars: `budget_tools` keeps it from 16k tokens on
+  and drops it at 8k and below.
+- Verification: build clean; 299 tests; the gated Ollama test; smoke 3 of 3 (one
+  `kernel_info` call, no todo call for the single answer); `pnpm -C web lint`
+  (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s23-dist`; `web/dist` unchanged). Headless pass 41 of 41, twice (the
+  panel, the event, the ticks, Clear, reopening, 1200x820 and 700x500 in dark and
+  light, fifty items, the chip at both sizes) on an own dev server (5197) and an own
+  headless Chrome (CDP 9343); nothing sent to 127.0.0.1:7878. Harness
+  `/tmp/kagent-s23-harness`, screenshots `/tmp/kagent-s23-shots` (not in the repo).
+- Seen, not changed: `title.rs` saves a copy of the meta read from the file, so a todo
+  change stored in between is overwritten on disk until the next save (the message
+  count has the same hole). `GROUP_HINTS` has no entry for `agent`: "todo" raises
+  `tasks`. The daemon's tools outside `builtin_registry()` still have no group test.
+  `main.rs` is 434 lines. The settings page shows the new group as a chip named
+  `agent`, with no label.
+- Left for the owner: a release rebuild, a restart and `pnpm -C web build`, then
+  scenario S23 items 3 and 4 through the live UI. Open: the local model and the
+  status updates (accept it, name the model in the scenario, or change the design).
+
+### Session 2026-11-25 (S24 plan mode)
+
+One background agent, alone (146 tool calls, about 69 minutes). 317 workspace tests
+(299 before). `scripts/smoke-api.sh` was not run, no release build, no restart; the
+daemon was inactive before and after.
+- **Spec corrected (plan-todo.md section 2, the stage text).** The approved plan is
+  not `PromptInput.approved_plan`: the config closure gets no session (S20).
+  `agent/mod.rs` appends the block to the system prompt of every request, read from
+  the session's meta before each one: there from the request after the approval, and
+  after any compaction. The history budget counts it.
+- **Plan mode has a prompt block** (`plan::PLAN_PROMPT`; the spec named none). Without
+  it a turn started with `/plan` gives the model no hint until a call is refused. The
+  wording was sharpened after the real-model runs ("never write the plan as answer
+  text"; the description of `plan_exit` says the same).
+- The engine keeps the set of planning sessions as it keeps the session rules
+  (`set_planning`, `is_planning`). `Agent::set_planning` changes meta, file, engine and
+  event under one meta lock; `Agent::state` syncs the engine when a session is loaded
+  (plan mode is in the meta and outlives a restart); `forget` clears it. `evaluate`
+  gained one step through `plan::plan_denial`; the rule, its text and the table tests
+  are in `plan.rs`. `permission/tests.rs` holds the unit tests of `permission.rs` (a
+  pure move: the file was 404 lines).
+- The flag is the session's, not the turn's: it stays until a plan is approved or the
+  owner cancels (tools.md's "for the rest of the turn" read loosely). `plan_enter`
+  while planning is an error that says what to do next.
+- Cancel (`POST .../plan {active: false}`, or the Plan toggle while planning) also
+  denies the plan card that waits ("the user cancelled plan mode"), so the turn goes on
+  in the normal mode instead of hanging on a card.
+- A rejected plan is a result, not an error: "Plan rejected: <reason>. Revise the plan
+  and call plan_exit again." (without a reason: "the user denied this plan").
+  Approved: the text of tools.md plus the path. `AllowSession` and `AllowAlways` approve
+  too and add no rule. One audit record (`Approval`, tool `plan`) per answer.
+- `plan_exit`: `plan` takes one text or an array of lines (`anyOf`, joined; the form is
+  checked in the tool). Empty, over 12 KB bytes, or neither form: error, no card. The
+  call may wait an hour, longer than the approval timeout (600 s by default).
+- `approvedPlan` is `{path, text}`: the trimmed plan, saved as
+  `<data>/plans/<sessionId>-<n>.md` with the first free `n`. The next approved plan
+  replaces it; nothing clears it.
+- `POST /api/sessions/:id/plan`: `active` is required and a boolean (400 otherwise, 404
+  for an unknown session); `{active: true}` plans without a turn. A bare `/plan` in a
+  message is 400 `text required`; the UI turns a bare `/plan` into the Plan toggle.
+- UI: the Plan toggle is armed for the next message and on while the session plans (a
+  click then cancels the plan). `/plan <request>` is stripped in the UI and sent with
+  `plan: true`. The chip (`PlanChip`) sits above the composer. `PlanCard` shows in Voice
+  and the overlay too (they share Approvals). The plan body is capped by a clamp: 40vh
+  pushed the composer out of a 700x500 window.
+- Files beyond the list: `permission/tests.rs`, `plan.css`, and three forced edits:
+  `tools/mod.rs` (`group_of`: without it the plan tools are in group `other`, hidden
+  and refused), `kagentd/src/skills.rs` and `tests/agent_loop.rs`
+  (`..Default::default()` in `TurnOpts` literals).
+- **The local model and `plan_exit`** (qwen2.5:7b-instruct, in process, `ask` mode, the
+  daemon's registry behind a guard that refuses what is not research). Final wording,
+  15 runs: started in plan mode 15 of 15; `plan_exit` arrived 4 (4 of 12 with "plan how
+  to free disk space on this machine", 0 of 3 with "free 20 GB of disk"); card
+  `kind: "plan"` 4 of 4; approved, file written, `approvedPlan` set 4 of 4; the
+  approved-plan block in all 7 requests after them; mutating `shell` calls refused with
+  the plan message 4; nothing changed after an approval. The first wording: 0 of 2, the
+  plan as answer text. The other turns ended in answer text or in an empty answer (3 of
+  15; 262 output tokens in the one measured). Replays of one such request: `plan_exit`
+  3 of 8 as shipped, 0 of 8 with a lines-leaning description, 1 of 8 with the array
+  first (and 2 dropped calls of 305 and 325 tokens), 0 of 8 with a string-leaning one:
+  the schema stays. The model called `plan_enter` although already planning in 15 of 15
+  runs (the error says what to do). Deny with a reason: 0 of 2 runs reached a card; only
+  the scripted test covers it. Smoke 3 of 3.
+- The `agent` group is 4 tools, 2656 chars: kept from 16k tokens on, dropped at 8k and
+  below.
+- Verification: build clean; 317 tests; the gated Ollama test; `pnpm -C web lint`
+  (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s24-dist`; `web/dist` unchanged). Headless 51 of 51, twice on the final
+  tree, on an own dev server (5198) and an own Chrome (CDP 9344); nothing sent to
+  127.0.0.1:7878. Harness `/tmp/kagent-s24-harness`, screenshots
+  `/tmp/kagent-s24-shots`, the real-model project `/tmp/kagent-s24-evidence` (not in
+  the repo).
+- Seen, not changed: a planning turn may end with the plan as answer text (the session
+  stays planning); `approvedPlan` never expires (up to 12 KB in every later request);
+  `.approvals` has no height cap (tool cards push the composer out of a 700x500
+  window); a direct `execute_call` into a planning session that this daemon run never
+  loaded is not restricted (the engine learns the flag when the session's state is
+  loaded); the `title.rs` hole of S23 covers the plan fields on disk; an empty answer
+  ends the turn as completed (S20's note) in 3 of 15 plan turns.
+- Left for the owner: a release rebuild, a restart and `pnpm -C web build`, then
+  scenario S24 items 4 and 5 through the live UI. Open: the local model and the card
+  (accept it, name the model in the scenario, or let the loop nudge once when a
+  planning turn ends in a plain answer); should `approvedPlan` expire (a new topic, a
+  command)?
+
+### Session 2026-11-26 (S25 memory and session search)
+
+Two agent runs. The first (2026-11-25, 19:32 to 20:00) was killed after 28 minutes,
+most likely by the coding plan's usage limit, with the Rust side written and never
+compiled; the second (2026-11-26, 02:15 to 03:23, 178 tool calls) built it, fixed it
+and finished the stage. 353 workspace tests (317 before). `scripts/smoke-api.sh` was
+not run, no release build, no restart; the daemon was inactive before and after.
+- What the first run left was kept: the design and nearly all of `memory/` and the
+  edits in core and daemon (`TurnContext`, `MemoryChanged`, the group `memory`, the
+  prompt block and rule, the routes, the settings section). Fixed to compile (23
+  errors after the first build): a syntax error in a recall test, missing imports, a
+  private `http` module, `NaiveDate::parse` (not in chrono 0.4.45), error mapping, two
+  borrows. Its never-run tests then showed 14 failures, all real: `and` was not a
+  stop word; a save accepted empty content; `sk_live_` keys passed the guard; a
+  session's `updatedAt` was never read; POST with a core name answered 409 (now 400);
+  a save before the first prompt wrote an index without the core files.
+- Files: `kagentd/src/memory/{mod,types,file,store,guard,recall,session_search,tools,http}.rs`
+  with `tests.rs`, `hub_tests.rs`, `tools/tests.rs`, `http/tests.rs` (`mod.rs` was
+  split: 514 lines into 349 plus `types.rs`);
+  `web/src/settings/sections/Memory.tsx` and
+  `settings/memory/{client.ts,shared.ts,CoreEditor.tsx,MemoryEditor.tsx,MemoryDetail.tsx,memory.css}`.
+  `web/src/api.ts` is unchanged: the client of the routes is
+  `settings/memory/client.ts`.
+- Forced edits: the test rigs that broke on the `ConfigSource` signature (`||` to
+  `|_|`: `agent/turn.rs`, `plan/tests.rs`, `todo/tests.rs`, `tests/common/mod.rs`,
+  `tests/compaction.rs`, `tests/plan_mode.rs`, `compact_api.rs`, `plan_api.rs`,
+  `todo_api.rs`) and `agent/title.rs:91` (`(self.config)()` to `self.config()`, the
+  same value).
+- Decisions:
+  - `POST /api/memory/:name/forget` added: api.md had no route for the Forget button
+    of memory.md section 7. Core -> 409, unknown -> 404. POST with the name of a core
+    file is 400.
+  - The folder is 0700 and its files 0600 (a folder of 0600 could not be entered).
+  - The small-window caps apply under 32,000 tokens; an unknown window gets the full
+    sizes.
+  - The scorer matches a shared start of 5 or more bytes (a plural, a case ending).
+    An unknown type loads as `user`; a core file ignores `validUntil` and
+    `supersededBy`.
+  - `session_search` leaves out the asking session, and takes its snippet from the
+    message with the most query words (of equals a reply, then the later one); when
+    that is a question of an earlier session, from the answer that followed it. Found
+    with the real model: before the change the snippet was the earlier question in 5
+    of 6 runs and one answer was wrong; after: 12 of 12 right.
+  - All five memory tools answer "memory is off" while `memory.enabled` is false; the
+    API and the UI still edit the files.
+  - `memory_save` may overwrite a memory of the same name and its card says so; POST
+    may not (409).
+  - A change to the store creates the core files too (first use). `MEMORY.md` lists
+    the core files, by name. `reviewed: true` alone also sets `updated` to today.
+  - The Memory page handles `memoryChanged` itself (the store was out of scope) and
+    picks nothing on opening, because opening one marks it reviewed. No memory icon
+    exists in `Icon.tsx`: the menu item uses `talk`.
+- `memory_save.content` is `anyOf` string or array of lines (the S20 trap). In
+  process, 10 of 12 clean runs produced the call (both misses replayed 6 of 6 on the
+  raw API). The local model writes the body as a short phrase and puts the context in
+  the description, and files a printer under `user`.
+- Real model (qwen2.5:7b-instruct, in process, `/tmp/kagent-s25-evidence`: a copy of
+  `prompt.rs` and `memory/` in a throwaway cargo project, because `kagentd` is a
+  binary crate): smoke 3 of 3; "Remember that my printer is in the hallway":
+  `memory_save` in 10 of 12, the card, the file `config/memory/printer-location.md`
+  (0600, source agent, not reviewed); three new sessions with "where is my
+  printer?": 3 of 3 requests hold the related memory and the answer names the
+  hallway; "What did we decide about the router last week?" after an older session:
+  `session_search` in 12 of 12 and the right answer in 12 of 12.
+- Verification: build clean; 353 tests; the gated Ollama test; `pnpm -C web lint`
+  (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s25-dist`; `web/dist` unchanged). Headless 116 of 116 on the Memory
+  section, on an own dev server (5196) and an own Chrome (CDP 9342); 926 requests,
+  none to 127.0.0.1:7878. The owner's `~/.config/kagent` has no `memory/` folder
+  before or after. Harness `/tmp/kagent-s25-harness`, screenshots
+  `/tmp/kagent-s25-shots` (not in the repo).
+- Accident: before its own `pass.mjs` was in place, the second run started the
+  unmodified copy of the S21 harness, which rewrote the logs and screenshots of
+  `/tmp/kagent-s21-harness` and `/tmp/kagent-s21-shots` (the pass came out 100 of 100
+  again). The S21 sources are as they were. Nothing in the repo was touched.
+- Seen, not changed: `main.rs` is 454 lines and `settings.rs` 432; a global `header`
+  rule of `index.css` makes every `.ui-card-head` a row, so a two-word title wraps in
+  a narrow card (worked around in `memory.css` only); words split at an apostrophe
+  (`dont`, `isnt`) are not stop words; the status line of `AGENTS.md` and the phase 4
+  header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon (the first start
+  creates `~/.config/kagent/memory/` with `user.md` and `machine.md`; the group
+  `memory` is switched on once for existing settings) and `pnpm -C web build`, then
+  scenario S25 items 4 to 6 through the live UI.
+
+### Session 2026-11-26 (S26 voice brain and live context)
+
+One background agent, alone (177 tool calls, about 81 minutes). 370 workspace tests
+(353 before). No release build, no restart of the owner's daemon (it was inactive
+before and after); the only daemons were the test daemons of `scripts/test-live.py`.
+- Files: `live/brain.rs`, `live/context.rs`, `live/instruction.rs` (with unit tests);
+  `sections/voice.rs` (`VoiceSection` and `VoiceBrain`, moved out of `sections.rs`, a
+  pure move, plus `validate` and `Settings::voice_config()`); `voice_approvals` moved
+  into `live/approve.rs` as `VoiceCards` (`hear`, `resolve`), because `live/mod.rs`
+  was at its budget (400 lines now). `live/mod.rs` also logs what goes upstream
+  (`gemini <-`) at `RUST_LOG=kagentd::live=debug`. `scripts/test-live.py` grew from 142
+  to 551 lines. `main.rs`, `voice_levels.rs` and `web/src/voice/live.ts` needed no
+  change.
+- Decisions:
+  - Calls are registered in the audio loop before their task starts, so a
+    `toolCallCancellation` that follows a call at once finds it (the end-to-end test
+    found the race).
+  - `toolCallCancellation`: the card is resolved first and the token cancelled 100 ms
+    later, so the stored reason is "cancelled: the user interrupted" (the broker also
+    watches the token and would win the race at random).
+  - The transcript path stays the first line in every mode. A `think` for the same
+    words within 8 s, at most 3 words, is `handled`; a longer text goes to the brain.
+  - A `think` call queued behind a running brain turn brings that turn's reply; the
+    calls that waited for it answer `cancelled`. A reply is never spoken twice.
+  - A brain turn that ends with no text (the Ollama trap of S20) is `failed`: "Sorry, I
+    could not think: the brain gave no answer", not silence.
+  - `voice.toolGroups`: `[]` means no tools (not every group, as for chat). A group
+    that is off for chat gives no tool; its chip says "(off for chat)" and cannot be
+    picked. A call to a tool not declared to the live model is refused ("not available
+    in this voice session"). An unknown group is refused with 400 on PUT and on load.
+  - The `think` event on `/live`: `started`, then `ok`, `error` or `cancelled`. The tab
+    shows "Thinking" until the next state of that call; a roll or a barge-in keeps it,
+    idle, error and connecting clear it.
+  - The fake chat endpoint of `test-live.py` is a second loopback port (18766),
+    because the `websockets` server cannot answer HTTP bodies. The old ten checks now
+    use `system_info`: `kernel_info` (group `kernel`) is no longer declared by default.
+  - The Thinking radio is a row of buttons with `role="radio"` (the pattern of the
+    permission mode). The hint is part of the model's line, and a note shows under the
+    picker while that model is picked.
+  - Vocabulary: memory and skill names are said with spaces (`printer location`). A
+    "capitalized word" has a capital, is not a plain lower-case word elsewhere in the
+    core files, and is not only at the start of a sentence, or is an acronym, or has a
+    capital inside (`hEX`).
+  - `initialHistoryInClientContent` was checked against the Live API reference: the
+    server takes `clientContent` until `turnComplete` is true, and this initial
+    history does not trigger a model call.
+- Verification: build clean; 370 tests; `python3 scripts/test-live.py`
+  `LIVE OK: 34/34` three runs in a row (live 15, routed 12, cancellation 2, auto 2, no
+  chat model 1, settings 2), each ending `CLEANUP OK: no kagentd process, nothing
+  listens on 7878`; the gated Ollama test; the in-process smoke 1 of 1; `pnpm -C web
+  lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s26-dist`; `web/dist` unchanged). Headless 51 of 51, twice, on the
+  Voice section and the Voice tab, on an own dev server (5199) and an own Chrome (CDP
+  9346); 758 requests of the page, none to 127.0.0.1:7878. Harness
+  `/tmp/kagent-s26-harness`, screenshots `/tmp/kagent-s26-shots`, the real-model
+  project `/tmp/kagent-s26-evidence` (not in the repo).
+- Accident: the first headless run loaded `page-init.js` without calling `pageInit()`,
+  so the page's requests went to the dev server, whose proxy tried 127.0.0.1:7878
+  (`/api/state`, `/api/skills`, `/api/sessions`, `/api/ui/report`, the `/ws` upgrade).
+  Nothing listens there: all were refused, the pass stopped at its first wait, and the
+  harness sent no PUT. The pass now proves the stub on `about:blank` before the app
+  loads and checks `vite.log`.
+- Each `test-live.py` run lets its test daemon hold the D-Bus name `org.kagent.KRunner`
+  and release it at exit (the owner's daemon was stopped throughout).
+- Seen, not changed: the header chip of the Voice tab (`App.tsx`) shows "listening"
+  while the status line says "Thinking". Any utterance with no, stop, wait or cancel
+  denies a waiting card on the transcript path (so "stop the music" does);
+  `classify_think` keeps the card first, as the spec orders. A model request that
+  waits for its headers is not ended by cancelling the turn (`complete_inner` awaits
+  `send()` outside its cancel select): a stuck brain turn can outlive its 5 minutes.
+  `TurnResult.text` is spoken whole, narration before a tool call too (as for tasks).
+  The Voice entry of `settings/registry.ts` does not mention thinking. The status line
+  of `AGENTS.md` and the phase 4 header above still say "not started".
+- Left for the owner: the owner check of voice.md section 11 and scenarios S26 items 3
+  to 6, after a release rebuild and a restart of the daemon and `pnpm -C web build`.
+  Open: should `voice.toolGroups: []` mean no tools (as built) or every group, as for
+  chat?
+
+### Session 2026-11-26 (S27 browser: attach to the running Brave)
+
+One background agent, alone (115 tool calls, about 76 minutes). 385 workspace tests
+(370 before), 2 ignored: the one of S21 and the round trip on a real browser. No
+release build, no restart; the owner's daemon was inactive throughout, and the owner's
+own Brave was not touched (its profile still has no `DevToolsActivePort`).
+- Files: `browser/{attach,target,http,own,actions}.rs` and
+  `attach/{profile,socket,tabs}.rs` with the tests `attach/{tests,fake}.rs`;
+  `sections/browser.rs` (`BrowserSection` moved out of `sections.rs`, three fields
+  more); `web/src/settings/browser/{api.ts,AttachCard.tsx,browser.css}`. The status
+  types and client are in `settings/browser/api.ts`, not in `api.ts` (395 lines).
+  `AppState` got the field `browser`. The browser module is about 2650 lines of Rust
+  (about 750 of them tests) and 330 lines of TS and CSS.
+- Decisions:
+  - **`always_ask` is let through by `full` control**, so the strict rules and `eval`
+    use the engine's `destructive` gate: a card in every mode, never rememberable, and
+    by voice only the explicit confirmation answers. A card for "scroll in the owner's
+    tab" therefore says "potentially destructive".
+  - `eval` asks in every mode in attach mode, in an agent tab too (browser.md section
+    8, "Eval always asks"). In the own window it is as before: no card in `full`.
+  - Enforced when the call runs, not only in the assessment. `assess` cannot resolve
+    the tab: it takes a call without `tab` as an agent tab while one is open, and an
+    exact agent tab id as one; a word of a title or URL is the owner's. `run` keeps
+    what the engine was shown for that input and refuses the call when the tab it
+    resolved to needs more ("not executed ... Call it again"). A needle of 32 hex
+    characters is an id and matches by id only. A call that was never assessed is held
+    to the agent rules.
+  - Rule keys differ by tab: `browser@owner <action>` for a call judged for the
+    owner's tab, `browser <action>` otherwise. An allowance remembered for one kind of
+    tab, or in the own window, never covers the other. The card summary ends with
+    "(the owner's tab)" or "(an agent tab)".
+  - `launch` stays in the schema enum and is refused when the call runs, with the
+    spec's sentence.
+  - The profile folder is read again by the three routes and by every call, so a saved
+    folder applies at once; the backend and the trust apply after a restart.
+    `attachProfile` must be an absolute path or start with `~/` (400 on a patch,
+    refused on load).
+  - `POST /api/browser/attach/connect` answers 200 with the status also when the
+    attempt failed (`attach.detail` says why); a timed-out attempt reads "waiting for
+    Allow in the browser"; `browser` is the product name once connected, else the
+    profile's browser; `port` comes from the port file when not connected.
+  - The ping is a `Browser.getVersion` every 10 s (no answer in 5 s closes the
+    socket). The calls of one batch share one connect attempt, and none is retried
+    for 3 s after a failure.
+  - The attach description follows the trust level. The own description is pinned
+    word by word by a test.
+  - `tabs` marks the agent's tabs "(opened by the agent)"; `open` says the new tab is
+    the agent's.
+- Verification: build clean; 385 tests; `cargo test -p kagentd --bin kagentd browser`:
+  18 passed (the port file table, the profile folder, one socket with two attached
+  targets, the ping, the reopen and the idle close, the status outputs, the tool on
+  the owner's browser, the tab rules table also through `PermissionEngine` in `full`
+  mode with a stored rule, the target choice, the status route). Round trip on a
+  throwaway browser (Brave 156.0.8078.80, headless, own profile,
+  `--remote-debugging-port=0`), `KAGENT_S27_REAL=1 ... real_browser -- --ignored`:
+  1 passed on the final tree (connect, list pages, open, read, console, click, type,
+  navigate, back, scroll, screenshot, activate, close the agent tab, the refusal to
+  close the owner's page, read the owner's page, disconnect). The throwaway browser is
+  gone: three instances, each stopped by its process group; no process and no listener
+  left; the profile folders are removed. The gated Ollama test; the in-process smoke
+  1 of 1; `pnpm -C web lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the
+  scratch build (`/tmp/kagent-s27-dist`; `web/dist` unchanged). Headless 51 of 51,
+  twice, on the Browser section, on an own dev server (5197) and an own Chrome (CDP
+  9348); 611 requests of the page, none to 127.0.0.1:7878. Harness
+  `/tmp/kagent-s27-harness`, screenshots `/tmp/kagent-s27-shots`,
+  `/tmp/kagent-s27-evidence` (not in the repo). Not run: a turn of the real local
+  model with the browser tool itself (the smoke harness has no browser tool).
+- Seen, not changed: `back` in the owner's tab needs no approval with `strict` trust
+  (a row of the table) while `navigate` asks, and it changes the page of that tab.
+  `toolOverrides: browser = allow` lets click, type and key through in the owner's
+  tabs with `normal` trust (not with `strict`). The Browser entry of
+  `web/src/settings/registry.ts` still says "The DevTools port and binary of the agent
+  browser." The comment on `PermissionMode::Full` in kagent-core lists "browser eval"
+  among what `full` runs without a card: now only in the own window. `settings.rs`
+  (432 lines) and `main.rs` (457) were over 400 before. The own window form still
+  saves `port` and `binary` in one PUT, as before. The status line of `AGENTS.md` and
+  the phase 4 header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then the owner check of browser.md section 10. Open: should
+  `back` ask in the owner's tab with `strict` trust? And the cards of the strict rules
+  say "potentially destructive" (the gate they use); a label of their own would need a
+  change in the permission engine.
+
+### Session 2026-11-26 (S28 automations: scheduled tasks)
+
+One background agent, alone (124 tool calls, about 166 minutes). 419 workspace tests
+(385 before), 2 ignored. No release build, no restart (the owner's daemon was inactive
+before and after); the only daemons were the test daemons of
+`/tmp/kagent-s28-evidence/e2e.py`, each under a temporary `KAGENT_HOME` and stopped by
+its script. The owner's `tasks.json` and systemd unit file were untouched.
+- Files beyond the stage's list (to stay under 400 lines): `tasks/cron.rs`,
+  `tasks/schedule/parse.rs`, `tasks/store/{record,claim}.rs`, the tests in
+  `tasks/{schedule,store,runner}/tests.rs`;
+  `web/src/views/tasks/{api.ts,TaskForm.tsx,TaskHistory.tsx,tasks.css}` (types and
+  client in `api.ts`). `tasks/{mod,schedule}.rs` and `web/src/views/Tasks.tsx` were
+  rewritten; `notify.rs` needed no line.
+- **Spec corrected (automations.md section 1).** An interval of several days, of weeks
+  or of months has no field for its phase: `from` (a date) is added, set by the parser
+  to the first run's day; a schedule without it counts from Monday 1970-01-05.
+  `weekdays` is allowed for `week` too. These intervals are computed from their period
+  (every 200 weeks still has a next run); only cron searches minute by minute, within
+  366 days.
+- `runs` holds a `running` entry while a run goes (`TaskRun.status` gains `running`).
+  A file from before kept a number: it is read as `runsBefore` and the count is kept.
+  A record that cannot be read is left out with an error in the log (before: the whole
+  file started empty, without a word) and is lost at the next save.
+- A policy field that a record or a request leaves out takes `settings.tasks` when the
+  file is read or the request is made. `timeoutMin` is 1..1440, `maxConcurrent` 1..8,
+  `deliver` only known channels (400, and refused on load).
+- A clock time the clocks skipped (spring forward) runs an hour later; one that comes
+  twice runs at the first. Cron: day of month and day of week both set means either.
+- A missed slot is one `missed` entry (for the slot that was due), and the schedule
+  goes on from now. "Run now" on a task whose slot is late runs it. Resume after the
+  time computes the next slot from then.
+- **Deny is the runner answering each card of the run at once** through the broker:
+  the card shows for a moment and is resolved as denied (in the audit log too). The
+  broker has no other door and kagent-core was out of scope. Skipped calls are listed
+  after the model's answer. `TaskRunner` has `send`, `wait_idle`, `cancel` and also
+  `session`, `deny`, `events` (the agent has no accessor for its event stream).
+- The 45 minute wait of S17 is replaced by `timeoutMin`. After a timeout or a cancel
+  the turn is cancelled and the runner waits 5 s more for its partial text. A
+  cancelled run is not announced; a failed or timed-out one is. A turn without an
+  answer is `failed` ("the agent gave no answer"); in a reused session it does not
+  show the answer of the run before. Every delivery is one log line that says whether
+  the desktop sink is off (`KAGENT_NO_NOTIFY`).
+- **Spec corrected (automations.md section 5, api.md section 6).** Every tasks route
+  answers the whole list `{tasks}` (the code answered one task), 201 for the two POST
+  that add, 404 for an unknown id, 409 for a run on a running task. Three routes were
+  added for the UI: `GET /api/tasks/preview?schedule=` (the "Runs:" preview is the
+  daemon's parse, so it cannot disagree with what is stored),
+  `GET /api/tasks/templates`, `POST /api/tasks/templates/:id` (adds the paused task).
+  `when`, the old name of the schedule text, is still accepted on POST and PUT: the UI
+  in `web/dist` (built 2026-11-24) sends it.
+- Tool: `when` became `schedule`; `what` is `anyOf` string or lines; a key that is not
+  a field is refused; `list` is one line per task; `history` the last 10, oldest
+  first. Found by reading after the tests: `update` passed `action` and `id` on and was
+  refused; fixed, with a test.
+- **Spec corrected (automations.md section 6).** Disk report is "every monday 09:00":
+  "monday 09:00" alone is a single run by the words of section 2.
+- UI: a policy field the owner does not touch is left out of the POST, and the daemon
+  takes `settings.tasks`. The first browser pass found the form reading the settings
+  once at mount: on a deep link the answer had not arrived and the approval select
+  showed the built-in default. "Runs: N so far" counts finished runs only. The
+  brace-less effect of the old `Tasks.tsx:53` is gone.
+- **Real model** (qwen2.5:7b-instruct through a test daemon, `ask` mode, the groups
+  system, files and tasks). Scenario item 5 passes in 2 of 2 daemon runs: `list_dir`
+  ran, `write_file` was refused with the sentence of the spec, the result lists it,
+  the history shows `ok`, the file was not written. Item 6: the doctor score is 87, so
+  the run summarizes (`ok`); the NOTHING branch did not occur, and 0 of 3 direct
+  probes got NOTHING. `tasks` behind the model: 6 of 6 turns called `tasks add`,
+  `what` as a string in 6; `delay_minutes` in 0 of 3 for "remind me in a minute" (the
+  model wrote "in 1m", the same `once`); a long instruction was condensed by the model
+  in 3 of 3.
+- Verification: build clean; 419 tests; the gated Ollama test; the in-process smoke 1
+  of 1. End to end (`python3 /tmp/kagent-s28-evidence/e2e.py {remind,agent,tool}`):
+  `remind` 25 of 25 on the final binary (item 3: an old file with `Every` and `Daily`
+  records loads and runs; item 4: `delayMinutes: 1` fired once at the minute and is
+  done), `agent` 12 of 12, `tool` 5 of 5 (on the binary before the last two edits).
+  After every run: no `kagentd` process, nothing listens on 7878, `kagentd.service`
+  still enabled and inactive, its file untouched. `pnpm -C web lint` (4 warnings,
+  0 errors, the baseline), `tsc -b` and the scratch build (`/tmp/kagent-s28-dist`;
+  `web/dist` unchanged). Headless 82 of 82, twice, on the Tasks tab, on an own dev
+  server (5198) and an own Chrome (CDP 9349); nothing sent to 7878. Harness
+  `/tmp/kagent-s28-harness`, screenshots `/tmp/kagent-s28-shots` (not in the repo).
+- Seen, not changed: `startup::sync_at_start`: a daemon under `KAGENT_HOME` with
+  `startup.autostart` false still runs `systemctl --user disable` (the note of S17).
+  `GET /api/sessions/:id` has no `running` in `meta` (api.md section 2 lists it).
+  `PUT /api/providers/:id` ignores `models[].config`. New daemon with the old
+  `web/dist`: adding works, but the schedule column of the old Tasks tab is empty.
+  `main.rs` is 457 lines and `settings.rs` 432; the status line of `AGENTS.md` and the
+  phase 4 header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenario S28 items 4 to 6 through the live UI with a cloud
+  model. The first start of the new daemon reads the owner's `tasks.json` in the new
+  shape and writes it so at its next save; no copy is kept. Item 6 as written needs a
+  doctor score of 90 or more. Open: should the form offer the timeout of a task and a
+  page for `settings.tasks` (both are reached by the tool and the API only)?
+
+### Session 2026-11-26 (S29 Telegram bot)
+
+Two agent runs. The first (09:02 to 09:45) was stopped, most likely by the coding
+plan's usage limit, with the client, the formatting and the bot of the chat written
+and four files never compiled; the second (10:31 to 11:18, 128 tool calls) built it
+(85 errors at the first build: dead code and one unused import), fixed it and finished
+the stage. 477 workspace tests (419 before), 2 ignored, 56 of them under `bots::`. No
+release build, no restart, no `kagentd` running; nothing reached api.telegram.org
+(there is no bot token, and the owner's `~/.config/kagent` has no Telegram file).
+- Kept from the first run: `bots/{format,cards,settings,voice,telegram_api}.rs`
+  (`TokenStore` in `secrets.rs`), the `Telegram` channel of the notifier, `AlertPush`
+  in `watch/mod.rs`, `Via::Telegram`, `TelegramStatus`. Fixed: a `MutexGuard` over an
+  await in `session()`; the placeholder is sent before the turn starts (one failing at
+  once left "Working on it..." for good); an edit names its keyboard, so a resolved
+  card loses its buttons; the token is checked before it goes into a URL path;
+  `getUpdates` and `answerCallbackQuery` sent `null` fields; `telegram.rs` had 517
+  lines (split in four).
+- Files: `bots/{mod,agent,poll,forward,http,fakes,tests}.rs` with `tests/routes.rs`,
+  `bots/telegram/{turns,press,tests}.rs`, `bots/format/html.rs`;
+  `web/src/settings/sections/Telegram.tsx` and `settings/telegram/{api.ts,telegram.css}`.
+  `Bots` (`bots/mod.rs`) keeps the token in memory only and owns the state of the poll
+  task; a `telegramStatus` event goes out on every change. The poll runs while a token
+  is set and `enabled` is on, paired or not (the pairing message must arrive); a change
+  wakes it. An error stays until a poll succeeds (a retry every 5 s); `lastError`
+  outlives the error. Deleting the token forgets the chat and leaves `enabled` as it is.
+- The `ui` tool description lists `telegram` among its sections (10 characters of
+  prompt; the gated Ollama test passes); in `ui.rs` the test that pinned `telegram` as
+  an unknown section was updated.
+- **Spec corrected (api.md section 6).** `GET /api/telegram` answers `status` too; a
+  missing optional field is `null`. A token is stored only when `getMe` confirms it
+  (400 for a wrong shape or a refusal, 502 `telegram_unreachable` without an answer). A
+  pairing code is 400 with no token or while switched off, 409 when a chat is paired.
+  `POST /api/telegram/test` is 200 with `ok: false` when no chat is paired.
+  `PUT /api/telegram` is 400 for any other key, saves as `PUT /api/settings` does and
+  sends `settingsChanged`.
+- **Spec corrected (bots.md sections 3 and 4, automations.md section 3):** the last
+  assistant message replaces the placeholder; an edited card loses its buttons; the
+  `telegram` channel of a task reaches the paired chat.
+- A card answered on the desktop is forgotten; its message keeps its buttons and a
+  press answers "Already resolved". The rule is applied again after the delay.
+- No Telegram icon in `Icon.tsx`: the menu item uses `talk`, as Memory does. The
+  Telegram page handles `telegramStatus` itself and reads the status again.
+- Verification: build clean (`cargo build --workspace` and `cargo test --workspace
+  --no-run` with `-D warnings`); 477 tests. The loopback fake of the Bot API (base URL
+  injected) covers `getMe`, one long poll (30 s, 40 s), `sendMessage` with the
+  keyboard, `editMessageText` with an empty keyboard, `answerCallbackQuery`,
+  `retry_after`, 20 calls a minute, a refused call, a file by a plain path only, no
+  token in any error, no other address. The whole flow with fakes, through the polling
+  task and the work of the routes: a message of the paired chat starts a turn through
+  `BotAgent`; a second chat is dropped before anything; a card forwarded after its
+  delay and resolved by Allow once, then "Already resolved"; destructive and plan cards
+  never, a root card as `allowPrivileged` says; a card answered on the desktop is not
+  forwarded; alerts (info no, review in the quiet hours no, high yes) with Ack; the
+  `Telegram` channel of the notifier; `telegramStatus` on every change; deleting the
+  token unpairs; the keys of the route. The gated Ollama test once; no in-process
+  model run (the loop and the prompt are unchanged apart from the 10 characters
+  above). `pnpm -C web lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the
+  scratch build (`/tmp/kagent-s29-dist`; `web/dist` unchanged). Headless 69 of 69,
+  twice, on the Telegram section, on an own dev server and an own Chrome; 754
+  requests, none to 127.0.0.1:7878. Harness `/tmp/kagent-s29-harness`, screenshots
+  `/tmp/kagent-s29-shots` (not in the repo). `scripts/smoke-api.sh` was not run.
+- Seen, not changed: `web/src/views/Chat.tsx:53` shows a pill for `via === "voice"`
+  only, so a Telegram message had no `telegram` pill (`views/` was out of the list;
+  the line is added with S30). Nothing limits wrong pairing codes: six digits in ten
+  minutes can be guessed by many messages. A card answered on the desktop keeps its
+  buttons on the phone. `crates/kagentd/src/sections.rs` still says "Telegram (nothing
+  until S29)". `main.rs` is 464 lines and `settings.rs` 433, both over before. The
+  gated Ollama test leaves its home in `/tmp` (one more now). The status line of
+  `AGENTS.md` and the phase 4 header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon (the first start
+  waits up to 5 s for the Secret Service) and `pnpm -C web build`, then scenario S29
+  items 2 to 5 with a real bot. Open: a limit of guesses for the pairing code.
+
+### Session 2026-11-26 (S30 web tools: fetch and search)
+
+One background agent, alone (189 tool calls, about 113 minutes). 518 workspace tests
+(477 before), 2 ignored (+41: 40 under `web::`, 1 in the group tests of core). No
+release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was not run.
+- Files: `crates/kagentd/src/web/{mod,guard,html,fetch,search,settings,http}.rs` with
+  `html/{tags,entities,charset}.rs`, the tests next to them and `fake.rs` (the
+  loopback fake); fixtures under `crates/kagentd/src/web/fixtures/`;
+  `web/src/settings/sections/Web.tsx`, `settings/web/{api.ts,web.css}`. `mod.rs` holds
+  the transport (`Transport`, `Request`, `Answer`, `Fail`) that the tools use and the
+  tests replace. The `telegram` pill of S29 (one line in `web/src/views/Chat.tsx`) was
+  added here.
+- Decisions:
+  - **Spec corrected (api.md section 6):** three routes on `/api/web/brave-key`
+    (`GET` answers `{configured}`, never the key; `PUT {key}` answers
+    `{configured: true}`, or 400 for a key that is not 16 to 128 printable ASCII
+    characters without a space; `DELETE` answers 204). The key is not checked against
+    Brave when it is saved; a wrong key shows at the first search.
+  - **`TokenStore` not used for the keyring.** Its keyring calls are bound to the
+    Telegram attributes, so `web/settings.rs` uses `TokenStore::File` for the file and
+    repeats the three keyring calls for `app=kagent, kind=search, id=brave`.
+    Follow-up: generalise `TokenStore` over kind, id and file name.
+  - Addresses are pinned into the client, so the name is not looked up a second time.
+    A test found that `Url::host_str` keeps the brackets of an IPv6 host: `[::1]` read
+    as a name and passed until the brackets were stripped.
+  - `searxUrl` gets no address rule (the owner's setting; may be a local instance); it
+    must be http(s) with a host and no password. The DuckDuckGo and Brave requests go
+    through the guard; no engine follows a redirect.
+  - The cache is asked by the address requested; the answer is kept under the final
+    address and under the requested one.
+  - Links come from the part of the page that is read; http and https only; left out:
+    a fragment of the page, a link without text (the `alt` of its image when there is
+    one), a second link to one address. A `<main>` that says nothing is not the page.
+    A row of a table stays on one line.
+  - Charsets: by `Content-Type`, else `<meta charset>`; windows-1252 and windows-1250
+    decoded (tables generated from Python's codecs), UTF-16 by its mark, any other with
+    U+FFFD. A body with no type is a page when it starts like one, else text.
+  - `max_chars` and `limit` outside their range are read as the nearest end; a query
+    over 400 characters is an error. An answer is at most 23 500 bytes: the links go
+    first, then the text.
+  - DuckDuckGo: blocks marked `result--ad` are left out (from memory of the markup);
+    a challenge is a status of 202 or 403, or the words of one; a status 200 with
+    neither results nor a known marker is "answered a page this tool cannot read".
+  - Fixtures: the DuckDuckGo page of 2026-11-26 holds direct addresses, so the `uddg=`
+    form is tested with an inline sample of the older markup; no challenge page could
+    be saved, so the challenge, Brave and SearXNG fixtures are hand-written and say so.
+  - `html.rs` was 585 lines and was split by concern. `main.rs` (472) and
+    `settings.rs` (434) were over 400 before and grew by 8 and 2 lines.
+  - UI: the types and the client are in `settings/web/api.ts` (`api.ts` is at its
+    budget). The icon is `globe`, shared with Browser.
+- Verification: build clean (`cargo build --workspace` and `cargo test --workspace
+  --no-run` with `-D warnings`); 518 tests; the gated Ollama test; the in-process
+  smoke 7 of 7 (13 tools in the registry; one `kernel_info` call; at a 4096-token
+  window 8 of 13 tools are kept, 6 before: the `web` group displaces nothing). By
+  hand, through the tool's code path on the final tree: `web_fetch
+  https://www.kernel.org/` gave the title, 3195 chars and 30 links in 0.1 s;
+  `web_search "latest stable linux kernel"` (limit 3) gave kernel.org twice and
+  github.com/torvalds/linux in 0.7 s; `web_fetch http://127.0.0.1:9333/json/list` was
+  refused by the guard before any request; with the engine Off the tool says search is
+  off. `pnpm -C web lint` (4 warnings, 0 errors, the baseline), `tsc -b` and the
+  scratch build (`/tmp/kagent-s30-dist`; `web/dist` unchanged). Headless 113 of 113,
+  twice, on the Web section and the Chat pill, on an own dev server (5201) and an own
+  Chrome (CDP 9351); nothing sent to 127.0.0.1:7878. Harness `/tmp/kagent-s30-harness`,
+  screenshots `/tmp/kagent-s30-shots`, the real-model project
+  `/tmp/kagent-s30-evidence` (not in the repo).
+- Network of this stage: 17 public GET requests (the brief said about ten): 12 for the
+  fixtures (two did not connect, two public SearXNG instances answered HTML), one for
+  the kernel.org fixture, and the by-hand pair twice. No credentials, no other host.
+- Seen, not changed: `GROUP_HINTS` in `context.rs` has no `web` entry, and `desktop`
+  holds "web page", "url", "http" and "website", so a request for a web page boosts
+  `desktop` first. A page with many `<article>` and no `<main>` gives the first article
+  only (the rule of web.md section 2 as written). `api.ts` types `Message.via` as
+  `"text" | "voice"` (the `telegram` pill reads it through a cast). `api.rs` is 494
+  lines. `sections.rs` still says "Telegram (nothing until S29)"; tools.md section 0
+  lists nine default groups. The status line of `AGENTS.md` and the phase 4 header
+  above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon (the group `web` is
+  switched on once for existing settings) and `pnpm -C web build`, then scenario S30
+  items 3 to 5 through the live UI. DuckDuckGo limits a client that sends many
+  searches; the tool then says so (Settings -> Web has Brave, which needs a key, or
+  SearXNG).
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -1150,20 +2213,20 @@ Decisions:
 - [x] S16 eBPF trace  -> Phase 3
 
 Phase 4 (planned 2026-11-24, not started; the order is the dependency order)
-- [ ] S17 agent foundations
-- [ ] S18 skills library core
-- [ ] S19 settings screen with a side menu
-- [ ] S20 skills screen, self-authoring, slash commands
-- [ ] S21 skill import and git sources
-- [ ] S22 context compaction and session digest
-- [ ] S23 todo lists
-- [ ] S24 plan mode
-- [ ] S25 memory and session search
-- [ ] S26 voice brain and live context
-- [ ] S27 browser: attach to the running Brave
-- [ ] S28 automations: scheduled tasks
-- [ ] S29 Telegram bot
-- [ ] S30 web tools: fetch and search
+- [x] S17 agent foundations
+- [x] S18 skills library core (scenario item 6 fails with qwen2.5:7b-instruct, before and after S18: section E)
+- [x] S19 settings screen with a side menu (scenario item 5, a real chat turn, left for the owner)
+- [x] S20 skills screen, self-authoring, slash commands (items 1 to 6 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
+- [x] S21 skill import and git sources (items 2 to 5 through the live UI and item 4, which needs the network, left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
+- [x] S22 context compaction and session digest (items 1 to 4 automatic; item 5 with the local model 1 of 3 runs: section E; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
+- [x] S23 todo lists (items 1, 2 and 4 automatic; item 3 with the local model: the list is written, the statuses are not updated in the turn, section E; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
+- [x] S24 plan mode (items 1 to 3 automatic; item 4 with the local model in process: the plan card in 4 of 15 runs, section E; items 4 and 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
+- [x] S25 memory and session search (items 1 to 3 automatic; items 4 and 6 with the local model in process; item 5 in the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
+- [x] S26 voice brain and live context (items 1, 2 and the first half of 5 automatic; the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; the owner check of voice.md section 11 is left)
+- [x] S27 browser: attach to the running Brave (items 1 and 2 automatic, and the round trip on a throwaway Brave; item 3 automatic for the tool and in the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; the owner check of browser.md section 10 is left; section E)
+- [x] S28 automations: scheduled tasks (items 1 to 4 automatic; items 5 and 6 with the local model through a test daemon under a temporary home: item 5 passes, item 6 ran with a doctor score of 87, so its summary branch; the NOTHING branch is unit-tested only; the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`)
+- [x] S29 Telegram bot (item 1 automatic; items 2 to 5 need the owner's bot: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; the `telegram` pill of item 3 was added with S30; section E)
+- [x] S30 web tools: fetch and search (items 1 to 5 automatic; items 3 to 5 by hand through the tool's code path with two requests to the web; the Settings -> Web page in the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
 - [ ] S31 subagents and background tasks
 - [ ] S32 hooks
 - [ ] S33 inline widgets

@@ -16,7 +16,8 @@ plan for a single approval before it changes anything.
 - Event: `todoUpdated {sessionId, items}` after every change.
 - UI:
   - Chat: a panel above the composer while the list is not empty. Checkbox per item
-    (click toggles pending and completed), a mark for `high`, "3 of 7", and Clear.
+    (a click marks a pending or in_progress item completed, and a completed one
+    pending), a mark for `high`, "3 of 7", and Clear.
     Clicks go to `PUT /api/sessions/:id/todo`. The daemon normalises what it receives
     like `todo_write` does.
   - Widget: a progress chip "3/7".
@@ -51,11 +52,17 @@ plan for a single approval before it changes anything.
     by step with the normal permissions.
   - Denied with a reason: still planning; the result carries the reason.
 - Cancel: "Cancel plan" in the chat header area (`POST /api/sessions/:id/plan
-  {active: false}`) clears `planning`; the rest of a running turn follows the normal
-  mode.
+  {active: false}`) clears `planning` and denies the plan card that waits for an
+  answer; the rest of a running turn follows the normal mode.
 - Every change of the flag emits `planUpdated {sessionId, active}`.
-- After compaction the prompt carries the approved plan ("Approved plan, follow it:")
-  while `approvedPlan` is set: `PromptInput` gains `approved_plan`.
+- The flag is the session's, not the turn's: it stays until a plan is approved or the
+  owner cancels it.
+- While planning, every request carries a plan-mode block that names `plan_exit`
+  (`plan::PLAN_PROMPT`).
+- After compaction the prompt carries the approved plan ("Approved plan, follow it:"
+  plus the plan) while `approvedPlan` is set: the agent loop appends it to the system
+  prompt of every model request of the session, read from the meta before each request
+  (the config closure gets no session).
 - Voice: a plan card is answered like any other card (`voice.md`); the changes that
   follow still go through the normal permission mode.
 - UI: a `PlanCard` in the approvals area (title "Plan", Markdown body, Approve, Reject

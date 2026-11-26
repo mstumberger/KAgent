@@ -88,7 +88,7 @@ impl super::Agent {
     /// Ask the model for a short title in the background; the file and the UI get it as
     /// soon as it is ready, the in-memory meta at its next save.
     pub(super) fn refine_title(&self, session_id: &str, text: String) {
-        let (model, model_ref) = (self.model.clone(), (self.config)().model_ref);
+        let (model, model_ref) = (self.model.clone(), self.config().model_ref);
         let (refined, store, events, sid) = (self.refined.clone(), self.store.clone(), self.events.clone(), session_id.to_string());
         tokio::spawn(async move {
             let Some(t) = summarize(model, &model_ref, &text).await else { return };

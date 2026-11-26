@@ -275,7 +275,8 @@ lists under "Tests".
    the plan block.
 3. **[auto]** Deny with a reason: still planning; the tool result carries the reason.
 4. `/plan free 20 GB of disk`: the agent researches read-only and shows the plan card;
-   Approve: the steps run under the normal permission mode.
+   Approve: the steps run under the normal permission mode. (With qwen2.5:7b-instruct,
+   in process, the card came in 4 of 15 runs: section E.)
 5. Voice: "yes" to a plan card approves it (an ordinary card).
 
 ## S25 memory
@@ -293,7 +294,8 @@ lists under "Tests".
    older session.
 
 ## S26 voice brain
-1. **[auto script]** `scripts/test-live.py`: the six checks of `voice.md` section 10.
+1. **[auto script]** `scripts/test-live.py`: the checks of `scripts/test-live.py` (34
+   in six groups).
 2. **[auto]** `speakable` turns an answer with a table and a code block into plain
    sentences.
 3. `routed`: "what is my CPU temperature" -> the chat model's answer is spoken word for
@@ -327,7 +329,8 @@ lists under "Tests".
 5. A weekdays task whose prompt needs an approval, in `ask` mode: the call is refused,
    the result lists what was skipped, the history shows `ok`.
 6. The template "Morning health check" enabled: the next due run writes a run with an
-   empty result and no notification when the score is 90 or more.
+   empty result and no notification when the score is 90 or more (or any agent task
+   whose prompt has nothing to report).
 
 ## S29 Telegram bot
 1. **[auto]** Pairing table; splitting; Markdown to HTML; forwarding rules.

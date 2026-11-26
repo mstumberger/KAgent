@@ -524,7 +524,8 @@
     "gemini-3.8-flash"
    ],
    "liveModels": [
-    "gemini-3.8-live"
+    "gemini-3.8-live",
+    "gemini-3.8-live-extended-thinking"
    ],
    "voices": [
     "Kore",

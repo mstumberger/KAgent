@@ -170,8 +170,9 @@ pub fn running_process_groups() -> usize {
     RUNNING.lock().unwrap().len()
 }
 
-/// Best-effort process-group kill: TERM first, KILL after 2 s (kill switch, S6).
-fn kill_group(pid: u32, signal: &str) {
+/// Best-effort process-group kill: TERM first, KILL after 2 s (kill switch, S6). Also the
+/// path a background task is stopped on (tools/background.rs).
+pub(super) fn kill_group(pid: u32, signal: &str) {
     let pgid = format!("-{pid}");
     let _ = std::process::Command::new("kill")
         .args([format!("-{signal}").as_str(), pgid.as_str()])

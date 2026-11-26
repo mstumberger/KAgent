@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "name": "Anthropic skills",
+      "url": "https://github.com/anthropics/skills",
+      "subdir": "skills",
+      "note": "document and example skills, Apache 2.0"
+    },
+    {
+      "name": "Superpowers",
+      "url": "https://github.com/obra/superpowers",
+      "subdir": "skills",
+      "note": "workflow skills, MIT"
+    },
+    {
+      "name": "OpenAI skills",
+      "url": "https://github.com/openai/skills",
+      "subdir": "skills/.curated",
+      "note": "deprecated upstream, kept for its content"
+    }
+  ]
+}

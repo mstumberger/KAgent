@@ -19,6 +19,12 @@ pub enum Via {
     #[default]
     Text,
     Voice,
+    /// A scheduled task's prompt (session origin `task`).
+    Task,
+    /// A Telegram chat message (S29).
+    Telegram,
+    /// To or from a subagent (S31).
+    Agent,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,6 +168,13 @@ pub enum AgentEvent {
     },
     #[serde(rename_all = "camelCase")]
     SessionUpdated { session_id: String, title: String },
+    /// The todo list of a session was replaced (plan-todo.md section 1): `items` is the
+    /// whole list, empty when it was cleared.
+    #[serde(rename_all = "camelCase")]
+    TodoUpdated { session_id: String, items: Vec<crate::todo::TodoItem> },
+    /// The session entered (`active`) or left plan mode (plan-todo.md section 2).
+    #[serde(rename_all = "camelCase")]
+    PlanUpdated { session_id: String, active: bool },
     #[serde(rename_all = "camelCase")]
     SettingsChanged { settings: serde_json::Value },
     /// A change was journaled or its status changed (undo).
@@ -174,4 +187,25 @@ pub enum AgentEvent {
     Notice { level: String, text: String },
     /// A command for the open web UI (from the `ui` tool or the tray).
     UiCommand { command: String, args: serde_json::Value },
+    /// The skills library was rescanned: a skill added, removed or edited, or
+    /// `skills.disabled` changed. `count` is the number of enabled skills.
+    SkillsChanged { count: usize },
+    /// A memory file was written, changed, reviewed or forgotten (memory.md section 7);
+    /// `removed` when its file was deleted.
+    MemoryChanged { name: String, removed: bool },
+    /// The task list was saved: a task added, changed, claimed or finished
+    /// (automations.md section 3).
+    TasksChanged,
+    /// A run of a task was recorded; `run` is a `TaskRun` (api.md section 6).
+    #[serde(rename_all = "camelCase")]
+    TaskRun { task_id: String, run: serde_json::Value },
+    /// The Telegram bot changed state (bots.md section 6): `status` is `off`,
+    /// `disabled`, `unpaired`, `polling` or `error`; `detail` says more.
+    #[serde(rename_all = "camelCase")]
+    TelegramStatus { status: String, detail: String },
+    /// A subagent of `session_id` changed state (agents.md section 3): `child` is a
+    /// `ChildView` (id, title, profile, startedAt) and `status` one of `queued`, `running`,
+    /// `done`, `failed`, `cancelled`.
+    #[serde(rename_all = "camelCase")]
+    SubagentUpdated { session_id: String, child: crate::agent::children::ChildView, status: crate::agent::children::ChildStatus },
 }

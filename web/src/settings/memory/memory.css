@@ -1,0 +1,201 @@
+/* Memory (memory.md section 7): the stats line, the two core files, the list of the
+   topic memories and one of them. The list and the detail keep the `.pv-*` rules of
+   index.css. */
+
+.mem-stats {
+  margin: 4px 0 0;
+}
+
+/* ---- the two core files, side by side */
+.mem-core {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.mem-core textarea.mem-core-input {
+  min-height: 130px;
+}
+
+/* The head of a card is a row (the `header` rule of index.css): the title keeps one line. */
+.mem-core .ui-card-head h3 {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.mem-core .ui-form .row {
+  margin: 0;
+}
+
+/* ---- list rows: the name with its badges, the description, the time */
+.mem-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mem-toolbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mem-toolbar select {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 112px;
+  padding: 5px 6px;
+  font-size: 12px;
+}
+
+.pv-nav-item.mem-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.mem-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* A long name is cut, never pushed out of the row. */
+.mem-n {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mem-desc,
+.mem-meta {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mem-meta {
+  font-size: 11px;
+}
+
+/* Forgotten or replaced: last in the list, and quieter. */
+.mem-row.retired .mem-name,
+.mem-row.retired .mem-desc,
+.mem-row.retired .mem-meta {
+  opacity: 0.62;
+}
+
+/* ---- one memory */
+.mem-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.mem-detail-head h3 {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.mem-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mem-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.mem-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mem-facts .hint {
+  margin: 0;
+}
+
+.mem-fact code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The text as it is in the file: its line breaks stay. */
+.mem-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-top: 1px solid var(--rim);
+  padding-top: 12px;
+}
+
+.mem-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rim);
+}
+
+.mem-actions .danger {
+  margin-left: auto;
+}
+
+.mem-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 12.5px;
+}
+
+.mem-editor textarea.mem-content-input {
+  min-height: 200px;
+}
+
+@media (width < 900px) {
+  /* The list column is 150 px wide here. */
+  .mem-core {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mem-desc,
+  .mem-meta {
+    display: none;
+  }
+
+  /* Search above the filter: side by side neither fits the narrow column. */
+  .mem-toolbar {
+    flex-direction: column;
+  }
+
+  .mem-toolbar select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .mem-actions .danger {
+    margin-left: 0;
+  }
+}

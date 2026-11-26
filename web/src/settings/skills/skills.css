@@ -1,0 +1,230 @@
+/* Skills (skills.md section 9): the list of skills, one skill, and its editor. */
+
+.sk-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.sk-toolbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sk-toolbar select {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 104px;
+  padding: 5px 6px;
+  font-size: 12px;
+}
+
+/* ---- list rows: a switch, then the skill */
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+
+.sk-row.active {
+  background: rgba(124, 196, 255, 0.12);
+}
+
+.sk-row.off .sk-name,
+.sk-row.off .sk-desc {
+  opacity: 0.6;
+}
+
+.sk-row .ui-toggle {
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+
+.sk-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 8px 8px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  color: var(--ink);
+}
+
+.sk-select:hover:not(:disabled) {
+  border-color: transparent;
+}
+
+.sk-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* A long name is cut, never pushed out of the row. */
+.sk-n {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sk-desc,
+.sk-meta {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sk-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 11px;
+  white-space: normal;
+}
+
+.sk-meta span {
+  white-space: nowrap;
+}
+
+/* Where an imported skill came from: the source, then its folder there. */
+.sk-origin {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- one skill */
+.sk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sk-head h3 {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.sk-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sk-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.sk-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sk-facts .hint {
+  margin: 0;
+}
+
+.sk-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.sk-path {
+  display: block;
+  max-width: 100%;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.sk-path code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.sk-body {
+  border-top: 1px solid var(--rim);
+  padding-top: 12px;
+  font-size: 13.5px;
+}
+
+.sk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rim);
+}
+
+.sk-actions .danger {
+  margin-left: auto;
+}
+
+.sk-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 12.5px;
+}
+
+.sk-editor textarea.sk-body-input {
+  min-height: 280px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+@media (width < 900px) {
+  /* The list column is 150 px wide here. */
+  .sk-desc,
+  .sk-meta {
+    display: none;
+  }
+
+  .sk-row .ui-toggle {
+    margin-left: 4px;
+  }
+
+  .sk-select {
+    padding: 8px 6px;
+  }
+
+  /* Search above the filter: side by side neither fits the narrow column. */
+  .sk-toolbar {
+    flex-direction: column;
+  }
+
+  .sk-toolbar select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .sk-actions .danger {
+    margin-left: 0;
+  }
+}

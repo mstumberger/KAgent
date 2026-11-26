@@ -113,38 +113,38 @@ async fn ask(st: Arc<AppState>, question: String, open: bool) {
     if open {
         open_ui(&st, Some(&meta.id));
     }
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(600);
-    loop {
-        let ev = tokio::select! {
-            ev = rx.recv() => ev,
-            _ = tokio::time::sleep_until(deadline) => return,
-        };
-        match ev {
-            Ok(AgentEvent::ApprovalRequested(req)) if req.session_id == meta.id => {
-                notify("KAgent needs your approval", &format!("{}\nOpen KAgent to allow or deny.", req.summary), "critical");
+    // Approval cards still reach the desktop while the turn waits for the user.
+    let sid = meta.id.clone();
+    let approvals = tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(AgentEvent::ApprovalRequested(req)) if req.session_id == sid => {
+                    notify("KAgent needs your approval", &format!("{}\nOpen KAgent to allow or deny.", req.summary), "critical");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                _ => {}
             }
-            Ok(AgentEvent::TurnFinished { session_id, status, error, .. }) if session_id == meta.id => {
-                let answer = st
-                    .agent
-                    .messages(&meta.id)
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .rev()
-                    .find(|m| m.role == Role::Assistant && !m.content.trim().is_empty())
-                    .map(|m| m.content)
-                    .unwrap_or_default();
-                let body = match status {
-                    TurnStatus::Completed => kagent_core::util::truncate_str(&answer, 600).to_string(),
-                    _ => error.unwrap_or_else(|| "stopped".into()),
-                };
-                notify(&format!("KAgent: {}", kagent_core::util::truncate_str(&question, 60)), &body, "normal");
-                return;
-            }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
-            _ => {}
         }
-    }
+    });
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(600), st.agent.wait_idle(&meta.id)).await;
+    approvals.abort();
+    // Still running after 10 minutes: nothing is shown, as before.
+    let Ok(result) = ended else { return };
+    let answer = st
+        .agent
+        .messages(&meta.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .rev()
+        .find(|m| m.role == Role::Assistant && !m.content.trim().is_empty())
+        .map(|m| m.content)
+        .unwrap_or_default();
+    let body = match result.status {
+        TurnStatus::Completed => kagent_core::util::truncate_str(&answer, 600).to_string(),
+        _ => result.error.clone().unwrap_or_else(|| "stopped".into()),
+    };
+    notify(&format!("KAgent: {}", kagent_core::util::truncate_str(&question, 60)), &body, "normal");
 }
 
 /// Claim the bus name and serve. Failure (no session bus) is logged, not fatal.

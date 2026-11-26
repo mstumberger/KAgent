@@ -1,0 +1,199 @@
+/* The Tasks tab (automations.md section 6): the presets, the preview, the delivery
+   checkboxes and the policy of the form, the history of a row, the status pills and the
+   templates. The list itself keeps the rules of index.css ("tasks"). */
+
+/* ---- the form */
+.task-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.task-presets .chip {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: transparent;
+}
+.task-preview {
+  min-height: 18px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.task-preview .task-next-run {
+  margin-left: 12px;
+  color: var(--ink);
+}
+.task-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.task-checks legend {
+  padding: 0;
+  margin-bottom: 2px;
+}
+.task-checks label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+.task-checks input:disabled + span,
+.task-checks label:has(input:disabled) {
+  cursor: default;
+}
+.task-policy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.task-policy label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.task-policy select {
+  min-width: 190px;
+}
+
+/* ---- the history of a row */
+.task-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.task-run {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+.task-run-time {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.task-run-result {
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-run .hint {
+  margin-left: 4px;
+}
+
+/* ---- status pills */
+.run-pill {
+  padding: 1px 8px;
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
+  justify-self: start;
+}
+.run-pill.ok,
+.task-state.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+.run-pill.failed,
+.run-pill.timeout,
+.task-state.failed,
+.task-state.timeout {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+}
+.run-pill.missed,
+.run-pill.running,
+.task-state.missed,
+.task-state.running {
+  color: var(--signal);
+  border-color: color-mix(in srgb, var(--signal) 50%, transparent);
+}
+.run-pill.cancelled {
+  border-style: dashed;
+}
+.task-state.paused {
+  color: var(--dim);
+}
+
+/* ---- the templates, while there are fewer than three tasks */
+.task-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 0 0 22px;
+}
+.task-template {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  color: var(--ink);
+}
+.task-template:hover {
+  border-color: var(--rim-strong);
+}
+.task-template .task-template-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.task-template .task-template-what {
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.task-template .task-template-when {
+  font-size: 11.5px;
+  color: var(--ice);
+}
+
+@media (max-width: 700px) {
+  /* A narrow window: time and status on one line, the result and its link on the next. */
+  .task-run {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "time pill"
+      "result more";
+  }
+  .task-run-time {
+    grid-area: time;
+  }
+  .task-run > .run-pill {
+    grid-area: pill;
+    justify-self: end;
+    align-self: center;
+  }
+  .task-run-result {
+    grid-area: result;
+  }
+  .task-run > button {
+    grid-area: more;
+  }
+  .task-policy select {
+    min-width: 0;
+    width: 100%;
+  }
+}

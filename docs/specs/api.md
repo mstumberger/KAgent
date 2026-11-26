@@ -79,8 +79,9 @@ type AuditRecord = /* config.md section 6 */;
 | GET `/api/net/top?device=&minutes=60` | | `[{dst, dport, proto, bytes}]` |
 
 Note: `allowSession` is an addition to the drafted `ApprovalDecision` enum in
-`permission.rs` (S4 adds it): allowed for the rest of this daemon run, per tool +
-rule_key, kept in memory only.
+`permission.rs` (S4 adds it): allowed for the rest of this daemon run, in this session
+only (per tool + rule_key, kept in memory only). A call made from another session, or
+with no session id, never matches it.
 
 ## 4. WebSocket `/ws`
 
@@ -128,6 +129,9 @@ Server -> client:
 ```
 - One live socket per session; a second one gets `status:error detail:"busy"`.
 - No live model configured -> `status:error detail:"no live model"` then close.
+- The `tool` event also names `think` (states `started`, `ok`, `error`, `cancelled`),
+  and a `status` carries `detail: "no chat model: the live model thinks"` when
+  `routed` falls back to `live` (voice.md).
 
 ## 6. Phase 4 endpoints (S17-S33)
 
@@ -141,41 +145,48 @@ for a plan, `preview` holds the plan text.
 |---|---|---|---|
 | skills | GET `/api/skills` | | `{skills: SkillView[]}` (enabled and disabled) |
 | | GET `/api/skills/:name` | | `SkillView` with `body` |
-| | POST `/api/skills` | `{name, description, whenToUse?, body}` | `SkillView` (201), user skill |
-| | PUT `/api/skills/:name` | `{description?, whenToUse?, body?}` | `SkillView`; user skills only, else 409 |
+| | POST `/api/skills` | `{name, description, whenToUse?, body}` | `SkillView` (201), user skill; a name the owner has already: 409 |
+| | PUT `/api/skills/:name` | `{description?, whenToUse?, body?}` | `SkillView`; user skills only, else 409. A field left out keeps its value, and the file keeps every other line of its frontmatter (other keys, comments) |
 | | DELETE `/api/skills/:name` | | 204; user and imported skills, bundled -> 409 |
 | | PUT `/api/skills/:name/enabled` | `{enabled: boolean}` | `SkillView` |
 | | POST `/api/skills/rescan` | | `{count}` |
 | | GET `/api/skills/import-sources` | | `{sources: [{agent, path, exists, skills: [{name, description, path, realPath, installed, duplicateOf?}]}]}` |
-| | POST `/api/skills/import` | `{path, names: string[], mode: "copy"\|"symlink"}` | `{imported: string[], skipped: [{name, reason}]}` |
+| | POST `/api/skills/import` | `{path, names: string[], mode: "copy"\|"symlink"}` | `{imported: string[], skipped: [{name, reason}], disabled: string[]}` |
 | | GET `/api/skills/sources` | | `{sources: SourceView[], catalog: [{name, url, subdir, note}]}` |
-| | POST `/api/skills/sources` | `{url, ref?, subdir?, name?}` | `SourceView` (clones and installs) |
-| | POST `/api/skills/sources/:id/sync` | | `{added: string[], updated: string[], removed: string[]}` |
-| | DELETE `/api/skills/sources/:id` | `{removeSkills?: boolean}` | 204 |
+| | POST `/api/skills/sources` | `{url, ref?, subdir?, name?}` | `SourceView` plus `added: string[]` and `skipped: [{name, reason}]` (201; clones and installs) |
+| | POST `/api/skills/sources/:id/sync` | | `{added: string[], updated: string[], removed: string[], skipped: [{name, reason}]}` |
+| | DELETE `/api/skills/sources/:id` | `{removeSkills?: boolean}`, or `?removeSkills=true` | 204 |
 | memory | GET `/api/memory` | | `{enabled, core: MemoryView[], memories: MemoryView[], stats: {files, bytes, unreviewed}}` |
 | | GET `/api/memory/search?q=` | | `MemoryView[]` |
-| | POST `/api/memory` | `{name, description?, type, content}` | `MemoryView` (201) |
+| | POST `/api/memory` | `{name, description?, type, content}` | `MemoryView` (201); 400 with the name of a core file, 409 when the name exists |
 | | PUT `/api/memory/:name` | `{description?, type?, content?, reviewed?}` | `MemoryView` |
+| | POST `/api/memory/:name/forget` | | `MemoryView`; marks it `validUntil` today. Core files -> 409, unknown -> 404 |
 | | DELETE `/api/memory/:name` | | 204; core files -> 409 |
-| compaction | POST `/api/sessions/:id/compact` | | `{summary: string, keptMessages: number}` |
-| todo, plan | PUT `/api/sessions/:id/todo` | `{items: TodoItem[]}` | `{items: TodoItem[]}` |
-| | POST `/api/sessions/:id/plan` | `{active: false}` | `{planning: boolean}` |
+| compaction | POST `/api/sessions/:id/compact` | | `{summary: string, keptMessages: number}`; 400 under 4 stored messages or with nothing before the last user message, 404 unknown session, 502 `summary_failed` |
+| todo, plan | PUT `/api/sessions/:id/todo` | `{items: TodoItem[]}` | `{items: TodoItem[]}`; 400 `invalid_input` without `items` or for a list `todo_write` refuses, 404 unknown session |
+| | POST `/api/sessions/:id/plan` | `{active: boolean}` | `{planning: boolean}`; 400 without a boolean `active`, 404 unknown session |
 | | POST `/api/sessions/:id/messages` | `{text, via?, plan?: boolean}` (S24) | as section 3; `plan: true` or a text starting with `/plan ` starts the turn in plan mode |
 | browser | GET `/api/browser/status` | | `{backend, own: {running, port, tabs}, attach: {profile, browser, port, debugging: "on"\|"off"\|"unknown", connected, tabs, detail}}` |
-| | POST `/api/browser/attach/connect` | | same as status, after one connect attempt (waits up to 20 s for Allow) |
+| | POST `/api/browser/attach/connect` | | 200 with the status after one connect attempt (waits up to 20 s for Allow), also when it failed: `attach.detail` says why (`attach.port` is a number or null) |
 | | POST `/api/browser/attach/disconnect` | | 204 |
 | tasks | GET `/api/tasks`, POST `/api/tasks` | | `{tasks: Task[]}`; `automations.md` (existing routes, specified there) |
 | | PUT, DELETE `/api/tasks/:id` | partial `Task` | `{tasks: Task[]}` |
 | | POST `/api/tasks/:id/run` | | `{tasks: Task[]}` |
 | | GET `/api/tasks/:id/runs` | | `{runs: TaskRun[]}` |
 | | POST `/api/tasks/:id/cancel` | | `{cancelled: boolean}` |
-| telegram | GET `/api/telegram` | | `{enabled, configured, botUsername, paired, chatId, pairedAt, lastError, pendingCode}` |
-| | PUT `/api/telegram` | `{enabled?, notifyAlerts?, forwardApprovals?, approvalForwardSec?, allowPrivileged?}` | same as GET |
-| | POST `/api/telegram/token` | `{token}` | `{botUsername}`: stores the token in Secret Service, calls `getMe` |
+| | GET `/api/tasks/templates` | | `{templates: [{id, title, what, kind, schedule, scheduleText}]}` |
+| | POST `/api/tasks/templates/:id` | | `{tasks: Task[]}` (201): the task of a template, paused |
+| | GET `/api/tasks/preview?schedule=` | | `{schedule, scheduleText, nextRun}`; 400 when the text does not parse |
+| telegram | GET `/api/telegram` | | `{enabled, configured, status, botUsername, paired, chatId, pairedAt, lastError, pendingCode}`; a missing optional field is `null` |
+| | PUT `/api/telegram` | `{enabled?, notifyAlerts?, forwardApprovals?, approvalForwardSec?, allowPrivileged?}` | same as GET; 400 for any other key |
+| | POST `/api/telegram/token` | `{token}` | `{botUsername}`: calls `getMe`; stores the token in Secret Service only when Telegram knows it: 400 for a wrong shape or a refusal, 502 `telegram_unreachable` without an answer |
 | | DELETE `/api/telegram/token` | | 204; also unpairs |
-| | POST `/api/telegram/pairing-code` | | `{code, expiresAt}` |
+| | POST `/api/telegram/pairing-code` | | `{code, expiresAt}`; 400 with no token or while switched off, 409 when a chat is paired |
 | | DELETE `/api/telegram/pairing` | | 204 |
-| | POST `/api/telegram/test` | | `{ok, error?}` |
+| | POST `/api/telegram/test` | | `{ok, error?}`; 200 with `ok: false` when no chat is paired |
+| web | GET `/api/web/brave-key` | | `{configured}`; never the key |
+| | PUT `/api/web/brave-key` | `{key}` | `{configured: true}`; 400 for a key that is not 16 to 128 printable ASCII characters without a space |
+| | DELETE `/api/web/brave-key` | | 204 |
 | subagents | GET `/api/agents` | | `{agents: AgentProfileView[]}` |
 | | PUT `/api/agents/:name` | `{description, model?, toolGroups?, maxIterations?, prompt}` | `AgentProfileView`: creates or updates; built-in names -> 409 |
 | | DELETE `/api/agents/:name` | | 204 |
@@ -191,19 +202,25 @@ for a plan, `preview` holds the plan text.
 type SkillView = { name: string; description: string; whenToUse?: string;
   source: "bundled" | "user" | "imported"; path: string; realPath: string; enabled: boolean;
   shadowed: boolean; sizeBytes: number; body?: string; uses: number; lastUsed?: string;
-  symlink: boolean; importedFrom?: { source: string; path: string; hash: string } };
+  symlink: boolean; updatedAt?: string; importedFrom?: { source: string; path: string; hash: string } };
 type SourceView = { id: string; name: string; url: string; ref: string; subdir: string;
   commit?: string; lastSync?: string; lastError?: string; skills: [{ name: string; hash: string; syncedAt: string }] };
 type MemoryView = { name: string; description: string; type: string; path: string; bytes: number;
   createdAt: string; updatedAt: string; source: "user" | "agent"; reviewed: boolean;
   validUntil?: string; supersededBy?: string; content?: string };
 type TodoItem = { content: string; status: "pending" | "in_progress" | "completed"; priority: "high" | "medium" | "low" };
-type TaskRun = { at: string; status: "ok" | "failed" | "cancelled" | "timeout" | "missed"; durationSec?: number;
+type TaskRun = { at: string; status: "running" | "ok" | "failed" | "cancelled" | "timeout" | "missed"; durationSec?: number;
   sessionId?: string; result?: string };
 type AgentProfileView = { name: string; description: string; builtIn: boolean; source: "builtin" | "user";
   model: string; toolGroups: string[]; maxIterations: number; prompt: string };
 type HookView = /* config.md section 11, Hook */;
 ```
+
+`SkillView`: `path` is the skill's folder as found and `realPath` the same with links
+resolved; `updatedAt` is when `SKILL.md` was last written (RFC 3339). Empty optional
+fields are left out. `GET /api/skills` lists the skills that own their name and, flagged
+`shadowed`, those they hide, without bodies; every other skills route answers with the
+body. A refused write is 400 (`invalid_input`) or 409 (`conflict`).
 
 ## 7. Events added in phase 4 (`/ws`)
 

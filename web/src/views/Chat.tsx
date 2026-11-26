@@ -1,8 +1,11 @@
 import Approvals from "../components/Approvals";
+import CommandInput from "../components/CommandInput";
 import Markdown from "../components/Markdown";
+import TodoPanel from "../components/TodoPanel";
+import { PlanChip } from "../components/PlanCard";
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../api";
-import { cancelSession, deleteSession, getStore, newSession, openSession, sendMessage, setView, useStore } from "../store";
+import { cancelSession, deleteSession, getStore, newSession, openSession, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
 import Icon from "../components/Icon";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
@@ -48,6 +51,7 @@ function Bubble({ m, streaming, thinking }: { m: Message; streaming?: string; th
   return (
     <div className={`bubble ${isUser ? "user" : "assistant"}`}>
       {(m as { via?: string }).via === "voice" && <span className="via">voice</span>}
+      {(m as { via?: string }).via === "telegram" && <span className="via">telegram</span>}
       {thinking && (
         <details className="thinking">
           <summary>thinking</summary>
@@ -61,11 +65,32 @@ function Bubble({ m, streaming, thinking }: { m: Message; streaming?: string; th
 
 export default function Chat() {
   const s = useStore();
-  const [text, setText] = useState("");
+  // Opens with the text another view left for the composer ("New skill with the agent" in Settings > Skills).
+  const [text, setText] = useState(s.composerDraft);
+  // The Plan toggle next to Send: armed for the next message until it is sent, and on while
+  // the session plans (the chip above the composer says so, with Cancel plan).
+  const [planNext, setPlanNext] = useState<{ session: string | null; on: boolean }>({ session: null, on: false });
+  const [planBusy, setPlanBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const messages = s.activeSession ? (s.messages[s.activeSession] ?? []) : [];
   const streaming = s.activeSession ? s.streaming[s.activeSession] : undefined;
   const running = s.activeSession ? s.running.has(s.activeSession) : false;
+  const planning = s.activeSession ? (s.planning[s.activeSession] ?? false) : false;
+  const armed = !planning && planNext.on && planNext.session === s.activeSession;
+  const togglePlan = async () => {
+    if (planning && s.activeSession) {
+      setPlanBusy(true);
+      try {
+        await setPlan(s.activeSession, false);
+      } catch {
+        // The store shows why, as a notice in the header.
+      } finally {
+        setPlanBusy(false);
+      }
+      return;
+    }
+    setPlanNext({ session: s.activeSession, on: !armed });
+  };
   const v = useVoice();
   const talking = v.active && v.sessionId === s.activeSession;
   const pendingText = v.pending.map((l) => l.text).join("|").length;
@@ -73,6 +98,14 @@ export default function Chat() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, streaming, pendingText]);
+
+  useEffect(() => {
+    const onComposer = (e: Event) => setText(String((e as CustomEvent).detail));
+    window.addEventListener("kagent-composer", onComposer);
+    // The text taken as the first one is consumed here.
+    if (getStore().composerDraft) takeComposerDraft();
+    return () => window.removeEventListener("kagent-composer", onComposer);
+  }, []);
 
   return (
     <div className="chat-layout">
@@ -123,12 +156,22 @@ export default function Chat() {
           <div ref={endRef} />
         </div>
 
+        <TodoPanel sessionId={s.activeSession} />
+        <PlanChip sessionId={s.activeSession} />
+
         <form
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
-            void sendMessage(text);
+            if (text.trim() === "/plan") {
+              // The command alone: the next message starts in plan mode.
+              setPlanNext({ session: s.activeSession, on: true });
+              setText("");
+              return;
+            }
+            void sendMessage(text, armed);
             setText("");
+            setPlanNext({ session: null, on: false });
           }}
         >
           <button
@@ -141,11 +184,23 @@ export default function Chat() {
           >
             <Icon name={talking ? "stop" : "mic"} size={16} />
           </button>
-          <input
+          <CommandInput
             value={text}
-            placeholder={talking ? "Listening... you can also type" : s.state?.chatModelValid ? "Ask about this machine..." : "Pick a chat model in Providers first"}
-            onChange={(e) => setText(e.target.value)}
+            skills={s.skills}
+            onChange={setText}
+            onPick={setText}
+            placeholder={talking ? "Listening... you can also type" : s.state?.chatModelValid ? "Ask about this machine... ( / for skills )" : "Pick a chat model in Providers first"}
           />
+          <button
+            type="button"
+            className={`plan-toggle${planning || armed ? " on" : ""}`}
+            aria-pressed={planning || armed}
+            title={planning ? "Plan mode is on: click to cancel the plan" : armed ? "The next message starts in plan mode" : "Plan first: the agent researches and shows a plan before anything changes"}
+            disabled={planBusy || !s.activeSession}
+            onClick={() => void togglePlan()}
+          >
+            Plan
+          </button>
           {running ? (
             <button type="button" className="danger" onClick={() => void cancelSession()}>
               Stop

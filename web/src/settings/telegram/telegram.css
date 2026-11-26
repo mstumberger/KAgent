@@ -1,0 +1,52 @@
+/* The Telegram section: the status card of the bot. Shared controls keep their rules in
+   controls.css. */
+.tg-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.tg-status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tg-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tg-name {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.tg-bad {
+  color: var(--bad, #d33);
+}
+
+.tg-code {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
+  border-radius: 8px;
+}
+
+.tg-code-digits {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.tg-code code {
+  overflow-wrap: anywhere;
+}

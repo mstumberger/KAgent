@@ -5,7 +5,7 @@
 //! auto-allows unprivileged side effects. `always_ask` / privileged calls ask in every
 //! mode and can never be satisfied by a stored rule.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
@@ -71,8 +71,13 @@ pub struct PermissionEngine {
     overrides: RwLock<std::collections::HashMap<String, ToolOverride>>,
     mode: RwLock<PermissionMode>,
     rules: RwLock<Vec<AllowRule>>,
-    /// "Allow for this session" rules: memory only, gone when the daemon stops.
-    session_rules: RwLock<Vec<AllowRule>>,
+    /// "Allow for this session" rules per session id: memory only, gone when the daemon
+    /// stops, and never seen from another session.
+    session_rules: RwLock<HashMap<String, Vec<AllowRule>>>,
+    /// The sessions in plan mode (plan-todo.md section 2): memory only. The agent sets it
+    /// with the session's meta, as it does the session rules; the plan step of `evaluate`
+    /// reads it, so no mode, rule or override gets past it.
+    planning: RwLock<HashSet<String>>,
 }
 
 impl PermissionEngine {
@@ -81,7 +86,8 @@ impl PermissionEngine {
             overrides: RwLock::new(Default::default()),
             mode: RwLock::new(mode),
             rules: RwLock::new(rules),
-            session_rules: RwLock::new(Vec::new()),
+            session_rules: RwLock::new(HashMap::new()),
+            planning: RwLock::new(HashSet::new()),
         }
     }
 
@@ -103,18 +109,37 @@ impl PermissionEngine {
             rules.push(rule);
         }
     }
-    pub fn add_session_rule(&self, rule: AllowRule) {
+    /// Remember an allowance for the rest of this daemon run, in `session_id` only.
+    pub fn add_session_rule(&self, session_id: &str, rule: AllowRule) {
         let mut rules = self.session_rules.write().unwrap();
-        if !rules.contains(&rule) {
-            rules.push(rule);
+        let list = rules.entry(session_id.to_string()).or_default();
+        if !list.contains(&rule) {
+            list.push(rule);
         }
+    }
+
+    /// Put `session_id` in or out of plan mode for `evaluate`: the agent does this with
+    /// the session's `planning` flag.
+    pub fn set_planning(&self, session_id: &str, planning: bool) {
+        let mut set = self.planning.write().unwrap();
+        if planning {
+            set.insert(session_id.to_string());
+        } else {
+            set.remove(session_id);
+        }
+    }
+
+    pub fn is_planning(&self, session_id: &str) -> bool {
+        self.planning.read().unwrap().contains(session_id)
     }
 
     pub fn set_overrides(&self, overrides: std::collections::HashMap<String, ToolOverride>) {
         *self.overrides.write().unwrap() = overrides;
     }
 
-    pub fn evaluate(&self, tool: &str, call: &CallAssessment) -> Decision {
+    /// The decision for a call made in `session_id` (session allowances are looked up
+    /// there and nowhere else).
+    pub fn evaluate(&self, session_id: &str, tool: &str, call: &CallAssessment) -> Decision {
         let ovr = self.overrides.read().unwrap().get(tool).copied();
         if ovr == Some(ToolOverride::Deny) {
             return Decision::Deny { reason: format!("'{tool}' is set to deny in tool overrides") };
@@ -130,6 +155,10 @@ impl PermissionEngine {
             return Decision::Deny {
                 reason: "KAgent is in read-only mode; switch the permission mode to run this".into(),
             };
+        }
+        // Plan mode (plan-todo.md section 2): before anything that could allow the call.
+        if let Some(reason) = crate::plan::plan_denial(self.is_planning(session_id), tool, call) {
+            return Decision::Deny { reason: reason.into() };
         }
         // Destructive: asks in every mode (full control too), before overrides and rules.
         if call.destructive {
@@ -153,12 +182,13 @@ impl PermissionEngine {
             _ => {}
         }
         let matched = self.rules.read().unwrap().iter().any(|r| r.tool == tool && call.rule_key.starts_with(&r.prefix))
-            || self
-                .session_rules
-                .read()
-                .unwrap()
-                .iter()
-                .any(|r| r.tool == tool && call.rule_key.starts_with(&r.prefix));
+            || (!session_id.is_empty()
+                && self
+                    .session_rules
+                    .read()
+                    .unwrap()
+                    .get(session_id)
+                    .is_some_and(|rules| rules.iter().any(|r| r.tool == tool && call.rule_key.starts_with(&r.prefix))));
         if matched {
             return Decision::Allow { reason: "matched an always-allow rule".into() };
         }
@@ -173,6 +203,15 @@ impl PermissionEngine {
     }
 }
 
+/// What a card is about: a tool call, or a plan to approve (plan mode, `plan_exit`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ApprovalKind {
+    #[default]
+    Tool,
+    Plan,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalRequest {
@@ -180,6 +219,9 @@ pub struct ApprovalRequest {
     pub session_id: String,
     pub call_id: String,
     pub tool: String,
+    /// A tool call, or a plan to approve; a card from before S24 is a tool call.
+    #[serde(default)]
+    pub kind: ApprovalKind,
     pub input: Value,
     pub summary: String,
     pub reason: String,
@@ -270,112 +312,4 @@ impl PermissionBroker {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn call(read_only: bool, needs_approval: bool, privileged: bool) -> CallAssessment {
-        CallAssessment {
-            read_only,
-            needs_approval,
-            always_ask: privileged,
-            privileged,
-            concurrency_safe: read_only,
-            risk: Risk::Medium,
-            summary: String::new(),
-            rule_key: "systemctl restart nginx".into(),
-            destructive: false,
-        }
-    }
-
-    #[test]
-    fn destructive_always_asks_even_with_full_control_and_rules() {
-        let e = PermissionEngine::new(PermissionMode::Full, vec![AllowRule { tool: "system_power".into(), prefix: "".into() }]);
-        let mut ovr = std::collections::HashMap::new();
-        ovr.insert("system_power".to_string(), ToolOverride::Allow);
-        e.set_overrides(ovr);
-        let reboot = call(false, true, false).destructive();
-        assert!(matches!(e.evaluate("system_power", &reboot), Decision::Ask { .. }), "full control + allow rule + allow override still ask");
-        e.set_mode(PermissionMode::ReadOnly);
-        assert!(matches!(e.evaluate("system_power", &reboot), Decision::Deny { .. }));
-    }
-
-    #[test]
-    fn modes_and_rules() {
-        let e = PermissionEngine::new(PermissionMode::Ask, vec![]);
-        assert!(matches!(e.evaluate("systemd", &call(true, false, false)), Decision::Allow { .. }));
-        assert!(matches!(e.evaluate("systemd", &call(false, true, false)), Decision::Ask { .. }));
-        e.add_rule(AllowRule { tool: "systemd".into(), prefix: "systemctl restart".into() });
-        assert!(matches!(e.evaluate("systemd", &call(false, true, false)), Decision::Allow { .. }));
-        // Privileged calls ignore rules and trusted mode.
-        e.set_mode(PermissionMode::Trusted);
-        assert!(matches!(e.evaluate("systemd", &call(false, true, true)), Decision::Ask { .. }));
-        e.set_mode(PermissionMode::ReadOnly);
-        assert!(matches!(e.evaluate("systemd", &call(false, true, false)), Decision::Deny { .. }));
-    }
-
-    #[test]
-    fn overrides() {
-        let e = PermissionEngine::new(PermissionMode::Ask, vec![]);
-        let mut o = std::collections::HashMap::new();
-        o.insert("systemd".to_string(), ToolOverride::Deny);
-        o.insert("journal".to_string(), ToolOverride::Ask);
-        o.insert("shell".to_string(), ToolOverride::Allow);
-        e.set_overrides(o);
-        assert!(matches!(e.evaluate("systemd", &call(true, false, false)), Decision::Deny { .. }));
-        assert!(matches!(e.evaluate("journal", &call(true, false, false)), Decision::Ask { .. }));
-        assert!(matches!(e.evaluate("shell", &call(false, true, false)), Decision::Allow { .. }));
-        // allow never relaxes privileged calls, and read-only mode still wins.
-        assert!(matches!(e.evaluate("shell", &call(false, true, true)), Decision::Ask { .. }));
-        e.set_mode(PermissionMode::ReadOnly);
-        assert!(matches!(e.evaluate("shell", &call(false, true, false)), Decision::Deny { .. }));
-    }
-
-    #[tokio::test]
-    async fn broker_resolves_and_cancels() {
-        let (tx, _rx) = broadcast::channel(16);
-        let broker = PermissionBroker::new(tx, Duration::from_secs(5));
-        let req = ApprovalRequest {
-            request_id: "r1".into(),
-            session_id: "s".into(),
-            call_id: "c".into(),
-            tool: "t".into(),
-            input: Value::Null,
-            summary: String::new(),
-            reason: String::new(),
-            risk: Risk::Low,
-            privileged: false,
-            destructive: false,
-            can_remember: true,
-            rule_key: String::new(),
-            preview: None,
-        };
-        let b2 = broker.clone();
-        let waiter = tokio::spawn({
-            let req = req.clone();
-            async move { b2.request(req, &CancellationToken::new()).await }
-        });
-        while broker.pending().is_empty() {
-            tokio::task::yield_now().await;
-        }
-        assert!(broker.resolve("r1", ApprovalDecision::AllowOnce));
-        assert_eq!(waiter.await.unwrap(), ApprovalDecision::AllowOnce);
-
-        let cancel = CancellationToken::new();
-        cancel.cancel();
-        let d = broker.request(ApprovalRequest { request_id: "r2".into(), ..req }, &cancel).await;
-        assert!(matches!(d, ApprovalDecision::Deny { .. }));
-    }
-
-    #[test]
-    fn full_control_allows_everything_but_root() {
-        let e = PermissionEngine::new(PermissionMode::Full, vec![]);
-        let mut always = call(false, true, false);
-        always.always_ask = true;
-        assert!(matches!(e.evaluate("terminal", &always), Decision::Allow { .. }));
-        assert!(matches!(e.evaluate("package", &call(false, true, true)), Decision::Ask { .. }), "root still asks");
-        let mut ovr = std::collections::HashMap::new();
-        ovr.insert("shell".to_string(), ToolOverride::Deny);
-        e.set_overrides(ovr);
-        assert!(matches!(e.evaluate("shell", &call(false, true, false)), Decision::Deny { .. }), "deny overrides win");
-    }
-}
+mod tests;

@@ -57,9 +57,17 @@ pub struct AlertManager {
     audit: Option<Arc<kagent_core::audit::AuditLog>>,
     notify: bool,
     quiet: Mutex<Option<(u32, u32)>>,
+    /// The Telegram push (bots.md section 5); `None` until the bots module registers it.
+    telegram: Mutex<Option<Arc<dyn AlertPush>>>,
 }
 
 const MAX_ALERTS: usize = 500;
+
+/// What the Telegram push of alerts needs; the bots module registers it.
+pub trait AlertPush: Send + Sync {
+    /// An alert was raised, or its severity rose: the cases the desktop is told of.
+    fn raised(&self, alert: &Alert);
+}
 
 /// "23:00-07:00" -> minutes-of-day range.
 pub fn parse_quiet(s: &str) -> Option<(u32, u32)> {
@@ -89,7 +97,13 @@ impl AlertManager {
             audit,
             notify,
             quiet: Mutex::new(parse_quiet("23:00-07:00")),
+            telegram: Mutex::new(None),
         })
+    }
+
+    /// Register the Telegram push (S29).
+    pub fn set_alert_push(&self, push: Arc<dyn AlertPush>) {
+        *self.telegram.lock().unwrap() = Some(push);
     }
 
     pub fn set_quiet_hours(&self, s: &str) {
@@ -206,6 +220,9 @@ impl AlertManager {
                 let _ = a.append(kagent_core::audit::AuditKind::Alert, "watch", json!({"id": alert.id, "rule": alert.rule, "severity": alert.severity, "title": alert.title}));
             }
             self.desktop_notify(&alert);
+            if let Some(push) = self.telegram.lock().unwrap().clone() {
+                push.raised(&alert);
+            }
         } else {
             let _ = self.events.send(AgentEvent::AlertUpdated { alert: v });
         }
@@ -258,7 +275,7 @@ pub mod http {
         let Some(a) = st.alerts.get(&id) else {
             return (axum::http::StatusCode::NOT_FOUND, Json(json!({"error": {"code": "not_found", "message": "no such alert"}}))).into_response();
         };
-        let meta = match st.agent.store().create(&format!("Alert: {}", a.title)).await {
+        let meta = match st.agent.store().create_with(&format!("Alert: {}", a.title), kagent_core::session::SessionOrigin::Alert, None).await {
             Ok(m) => m,
             Err(e) => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": {"code": "internal", "message": e.to_string()}}))).into_response(),
         };

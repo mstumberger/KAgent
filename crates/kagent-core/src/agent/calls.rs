@@ -1,5 +1,6 @@
-//! Tool execution for the agent loop: grouping, validation, permission, the call
-//! itself, audit and events. Also the entry point for voice and MCP callers.
+//! Tool execution for the agent loop: which tools are on offer, grouping, validation,
+//! permission, the call itself, audit and events. Also the entry point for voice and
+//! MCP callers.
 
 use std::time::{Duration, Instant};
 
@@ -7,13 +8,38 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::Agent;
-use crate::permission::{AllowRule, ApprovalDecision, ApprovalRequest, Decision};
+use crate::permission::{AllowRule, ApprovalDecision, ApprovalKind, ApprovalRequest, Decision};
 use crate::protocol::{AgentEvent, Message, ToolCall, ToolCallStatus};
 use crate::scheduler::parallel_groups;
 use crate::tool::{CallAssessment, PrivilegeMethod, ToolContext};
 use crate::util::{budget_output, normalize_input, truncate_str, validate_schema};
 
 impl Agent {
+    /// Restrict which tool groups are advertised to the model (tool budget).
+    pub fn set_tool_groups(&self, groups: Option<Vec<String>>) {
+        *self.tool_groups.lock().unwrap() = groups;
+    }
+
+    /// Whether a tool may run: it must belong to an enabled group (an empty or unset
+    /// list means all groups). Hidden tools are also refused, so a model cannot call a
+    /// disabled tool it learned about earlier in the conversation.
+    pub fn tool_enabled(&self, name: &str) -> bool {
+        match self.tool_groups.lock().unwrap().as_ref() {
+            Some(groups) if !groups.is_empty() => groups.iter().any(|g| g == crate::tools::group_of(name)),
+            _ => true,
+        }
+    }
+
+    /// Tool specs the model may see (enabled groups only). Used by voice and MCP.
+    pub fn advertised_specs(&self) -> Vec<crate::tool::ToolSpec> {
+        self.advertised_tools()
+    }
+
+    /// No session named: every enabled tool, whatever a restricted session would lose.
+    pub(super) fn advertised_tools(&self) -> Vec<crate::tool::ToolSpec> {
+        self.tools_for("")
+    }
+
     /// Run a batch of calls: assess, group, then execute group by group.
     pub async fn execute_calls(
         &self,
@@ -50,7 +76,7 @@ impl Agent {
     ) -> (Message, ToolCallStatus) {
         let started = Instant::now();
         let Some(tool) = self.tools.get(&call.name) else {
-            let msg = format!("unknown tool '{}'. Available: {}", call.name, self.tool_names());
+            let msg = format!("unknown tool '{}'. Available: {}", call.name, self.tool_names_for(session_id));
             return self.finish(session_id, turn_id, call, ToolCallStatus::Error, msg, started, "unknown tool".into());
         };
         if !self.tool_enabled(&call.name) {
@@ -58,7 +84,7 @@ impl Agent {
                 "tool '{}' is disabled (group '{}' is off in settings). Available: {}",
                 call.name,
                 crate::tools::group_of(&call.name),
-                self.tool_names()
+                self.tool_names_for(session_id)
             );
             return self.finish(session_id, turn_id, call, ToolCallStatus::Denied, msg, started, "disabled tool".into());
         }
@@ -66,6 +92,11 @@ impl Agent {
         let input = normalize_input(&contract.input_schema, call.input.clone());
         let call = ToolCall { input, ..call.clone() };
         let assessment = tool.assess(&call.input);
+        // What a subagent's profile takes (agents.md section 2): enforced here, when the
+        // call runs, so a tool the model remembered from elsewhere is refused too.
+        if let Some(reason) = self.child_refusal(session_id, &call.name, &assessment) {
+            return self.finish(session_id, turn_id, &call, ToolCallStatus::Denied, format!("not executed: {reason}"), started, assessment.summary);
+        }
         let _ = self.events.send(AgentEvent::ToolCallStarted {
             session_id: session_id.into(),
             turn_id: turn_id.into(),
@@ -95,7 +126,7 @@ impl Agent {
             services: self.services.clone(),
         };
         // Dry run for the approval card, only when we are going to ask.
-        let preview = if matches!(self.permissions.evaluate(&call.name, &assessment), Decision::Ask { .. }) {
+        let preview = if matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }) {
             tokio::time::timeout(Duration::from_secs(20), tool.preview(&call.input, &ctx)).await.ok().flatten()
         } else {
             None
@@ -134,7 +165,7 @@ impl Agent {
         preview: Option<String>,
         cancel: &CancellationToken,
     ) -> Result<(), String> {
-        match self.permissions.evaluate(&call.name, assessment) {
+        match self.permissions.evaluate(session_id, &call.name, assessment) {
             Decision::Allow { .. } => Ok(()),
             Decision::Deny { reason } => Err(reason),
             Decision::Ask { reason } => {
@@ -143,6 +174,7 @@ impl Agent {
                     session_id: session_id.into(),
                     call_id: call.id.clone(),
                     tool: call.name.clone(),
+                    kind: ApprovalKind::Tool,
                     input: call.input.clone(),
                     summary: assessment.summary.clone(),
                     reason,
@@ -171,7 +203,7 @@ impl Agent {
                     ApprovalDecision::AllowOnce => Ok(()),
                     ApprovalDecision::AllowSession => {
                         if can_remember {
-                            self.permissions.add_session_rule(AllowRule {
+                            self.permissions.add_session_rule(session_id, AllowRule {
                                 tool: call.name.clone(),
                                 prefix: assessment.rule_key.clone(),
                             });

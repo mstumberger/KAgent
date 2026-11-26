@@ -18,9 +18,16 @@ with a summary that is kept with the session.
   resolves. Otherwise (a small local model, no fast model) there is no soft line, and
   the hard line keeps today's behaviour, trim with the note: a 7B model summarizing
   inside a 16k window is slower and worse.
+- 32k is 32,768 tokens; an unknown window never trims or compacts.
 - `compaction.enabled=false`: always trim.
+- The soft line brings the estimate plus what the provider last counted beyond it back
+  to `thresholdPct - 20`, and only when that makes the request smaller. At the hard
+  line room for the new summary is reserved; with a summary `fit_to_budget` cuts among
+  the turns after it.
 - Capacity error from the provider mid-turn: compact once and retry the same model
-  once; only then switch to `fallbackModel` (today the switch comes at once).
+  once; only then switch to `fallbackModel`. The compaction is everything before the
+  last user message; with `compaction.enabled=false`, nothing to summarize, or a failed
+  summary, the fallback comes at once.
 
 ## 2. What is summarized
 
@@ -40,7 +47,9 @@ with a summary that is kept with the session.
   happened, open tasks and todo items, approvals given or refused. Leave out greetings
   and repetition. At most 1200 words. Output the summary only."
 - Messages: the summary so far as a first user message ("Summary of the earlier
-  conversation:"), then the messages to compact, each tool result cut to 1500 chars.
+  conversation:"), then the messages to compact, each tool result cut to 1500 chars,
+  then one user message "Summarize the conversation above now." (a request that ends
+  with an assistant answer gets an empty answer from the local model).
 - Failure (error, empty text, cancel): trim instead, log a warning. A failed summary
   never fails the turn.
 
@@ -57,15 +66,19 @@ with a summary that is kept with the session.
   summary is cut at 4000 chars, at a sentence boundary.
 - Manual: `POST /api/sessions/:id/compact` and `/compact` in chat summarize everything
   before the last user message and return `{summary, keptMessages}`. Fewer than 4
-  stored messages -> 400. `/compact` is a built-in command, not a skill.
+  stored messages -> 400, also with nothing before the last user message and no summary
+  yet; by hand it runs whatever `compaction.enabled` and the window are; a failed
+  summary -> 502. `/compact` is a built-in command, not a skill.
 - `fastModel` gets its first consumer here. The picker for it comes with S19 (Models,
   "Roles").
 
 ## 5. Digest for other features
 
-- `SessionStore::digest(id, max_chars)`: the summary when there is one, else the last
-  user and assistant messages, each cut to 600 chars, oldest first. Users: voice
-  (`voice.md` section 4) and subagent hand-offs (`agents.md` section 2).
+- `SessionStore::digest(id, max_chars)` returns a String: the summary when there is
+  one, else the last user message and the last assistant message with text, as
+  `User: ...` and `Assistant: ...` lines, each cut to 600 chars, oldest first;
+  `max_chars` caps the whole text. Users: voice (`voice.md` section 4) and subagent
+  hand-offs (`agents.md` section 2).
 - Plan mode re-injects the approved plan after compaction (`plan-todo.md` section 2).
 
 ## 6. Token estimate
@@ -77,16 +90,17 @@ with a summary that is kept with the session.
 
 ## 7. Tests (no root, no network)
 
-- `compact.rs`: `should_compact` table (79 percent of the window -> nothing; 81
+- `compact/tests.rs`: `should_compact` table (79 percent of the window -> nothing; 81
   percent -> compact back to 60 percent; a small window without a fast model -> trim; a
   small window with a fast model -> summarize; disabled -> trim; a cut never separates
-  a tool call from its results); the request builder puts the old summary first and
-  cuts tool results; a long summary is cut at a sentence.
+  a tool call from its results); the request builder puts the old summary first, cuts
+  tool results and ends with the user message; a long summary is cut at a sentence.
 - `session.rs`: `summary` and `summaryUpto` round trip; old meta loads.
 - `context.rs`: with a summary the request is [summary message] + messages from N;
   without one it is unchanged.
-- `tests/agent_loop.rs` (scripted model): a history that overflows a 32k window causes
-  one summarize call and a request that starts with the summary message; a failing
-  summarize call falls back to the note; a capacity error compacts before the fallback
-  model is used.
-- API: manual compact returns the summary; under 4 messages -> 400.
+- `tests/compaction.rs` (scripted model; the rig is in `tests/common/mod.rs`): a
+  history that overflows a 32k window causes one summarize call and a request that
+  starts with the summary message; a failing summarize call falls back to the note; a
+  capacity error compacts before the fallback model is used.
+- `kagentd/src/compact_api.rs`: manual compact returns the summary; under 4 messages
+  -> 400.

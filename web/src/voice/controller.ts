@@ -28,6 +28,8 @@ export const voice = {
   /** The chat session this voice conversation belongs to. */
   sessionId: null as string | null,
   version: 0,
+  /** A brain turn runs for what was just said (the `think` call of the live model); the status line says so. */
+  thinking: false,
 
   get active(): boolean {
     return client?.active ?? false;
@@ -55,6 +57,7 @@ export const voice = {
     if (sessionId !== voice.sessionId) voice.lines = [];
     voice.sessionId = sessionId;
     voice.pending = [];
+    voice.thinking = false;
     client = new LiveClient(handle);
     client.setVolume(voice.volume);
     client.setMuted(voice.muted);
@@ -94,6 +97,8 @@ function handle(e: LiveEvent) {
     case "status":
       voice.status = e.status;
       voice.detail = e.detail ?? "";
+      // A roll or a barge-in does not end the thinking; the end of the session does.
+      if (e.status === "idle" || e.status === "error" || e.status === "connecting") voice.thinking = false;
       break;
     case "session":
       voice.sessionId = e.sessionId;
@@ -113,7 +118,12 @@ function handle(e: LiveEvent) {
       break;
     }
     case "tool":
-      voice.lines = [...voice.lines, { who: "tool", text: `${e.name}: ${e.state}` }];
+      if (e.name === "think") {
+        // From the moment the brain is asked until it has answered.
+        voice.thinking = e.state === "started";
+      } else {
+        voice.lines = [...voice.lines, { who: "tool", text: `${e.name}: ${e.state}` }];
+      }
       break;
   }
   changed();

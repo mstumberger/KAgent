@@ -7,7 +7,7 @@ use crate::protocol::{Message, Role};
 
 /// Rough chars-per-token used for budgeting. Deliberately low (real text is ~4) so the
 /// estimate errs on the safe side for code, JSON and non-English text.
-const CHARS_PER_TOKEN: usize = 3;
+pub(crate) const CHARS_PER_TOKEN: usize = 3;
 
 /// Repair history before sending it: drop tool results whose call is missing and add
 /// synthetic results for calls without one (e.g. the daemon died mid-turn).
@@ -43,7 +43,7 @@ pub fn sanitize_history(messages: &[Message]) -> Vec<Message> {
     out
 }
 
-fn message_chars(m: &Message) -> usize {
+pub(crate) fn message_chars(m: &Message) -> usize {
     m.content.len()
         + m.tool_calls.iter().map(|c| c.name.len() + c.input.to_string().len() + 16).sum::<usize>()
         + 16
@@ -64,8 +64,16 @@ pub fn history_budget_tokens(context_tokens: usize, max_output: usize, system_ch
 /// message, so an assistant tool call is never separated from its results. The most
 /// recent user message is always kept. Returns the kept messages and how many were
 /// dropped; when something was dropped the first kept user message is prefixed with a
-/// short note so the model knows the history is partial.
+/// short note so the model knows the history is partial. `request_history` starts a
+/// compacted request with its summary message.
 pub fn fit_to_budget(messages: Vec<Message>, budget_tokens: usize) -> (Vec<Message>, usize) {
+    fit_keeping(messages, budget_tokens, 0)
+}
+
+/// `fit_to_budget` with the first `head` messages kept whatever their size (the
+/// summary message a compacted request starts with): the cut is taken among the user
+/// messages after them. `dropped` counts what was dropped, the head not included.
+pub(crate) fn fit_keeping(messages: Vec<Message>, budget_tokens: usize, head: usize) -> (Vec<Message>, usize) {
     if budget_tokens == usize::MAX {
         return (messages, 0);
     }
@@ -74,24 +82,30 @@ pub fn fit_to_budget(messages: Vec<Message>, budget_tokens: usize) -> (Vec<Messa
     if total <= budget_chars {
         return (messages, 0);
     }
-    let Some(last_user) = messages.iter().rposition(|m| m.role == Role::User) else {
+    let Some(mut last_user) = messages.iter().rposition(|m| m.role == Role::User) else {
         return (messages, 0);
     };
-    // Earliest user message whose suffix (it and everything after) fits; else the last
-    // user message, even if that alone is over budget.
+    if last_user < head {
+        return (messages, 0); // only the head holds a user message: nothing to cut
+    }
+    last_user = last_user.max(head);
+    // Earliest user message whose suffix (it and everything after, the head in front) fits; else the last user message, even if that alone is over budget.
+    let head_chars: usize = messages[..head].iter().map(message_chars).sum();
     let mut suffix = total;
     let mut cut = last_user;
     for (i, m) in messages.iter().enumerate().take(last_user + 1) {
-        if m.role == Role::User && suffix <= budget_chars {
+        if i >= head && m.role == Role::User && head_chars + suffix <= budget_chars {
             cut = i;
             break;
         }
         suffix -= message_chars(m);
     }
-    let dropped = cut;
-    let mut kept: Vec<Message> = messages.into_iter().skip(cut).collect();
+    let dropped = cut - head;
+    let mut rest = messages.into_iter();
+    let mut kept: Vec<Message> = rest.by_ref().take(head).collect();
+    kept.extend(rest.skip(dropped));
     if dropped > 0 {
-        if let Some(first) = kept.first_mut() {
+        if let Some(first) = kept.get_mut(head) {
             first.content = format!(
                 "[Note: {dropped} earlier messages were omitted to fit the context window.]\n\n{}",
                 first.content
@@ -101,9 +115,35 @@ pub fn fit_to_budget(messages: Vec<Message>, budget_tokens: usize) -> (Vec<Messa
     (kept, dropped)
 }
 
+/// The summary a compacted request starts with (compaction.md section 4): the
+/// synthetic user message and the number of stored messages it covers.
+#[derive(Debug, Clone, Copy)]
+pub struct HistorySummary<'a> {
+    pub message: &'a Message,
+    pub upto: usize,
+}
+
+/// The history of a model request (compaction.md section 4): with a summary, that one
+/// synthetic user message, then the stored messages from `upto` on; without one, every
+/// stored message, as before. Repaired, then trimmed by `fit_to_budget` when still too
+/// long (the summary counts, and stays while a user turn after it can go). The
+/// synthetic message is never written to the session.
+pub fn request_history(stored: &[Message], summary: Option<HistorySummary<'_>>, budget_tokens: usize) -> (Vec<Message>, usize) {
+    match summary {
+        None => fit_to_budget(sanitize_history(stored), budget_tokens),
+        Some(s) => {
+            let upto = s.upto.min(stored.len());
+            let mut history = Vec::with_capacity(1 + stored.len() - upto);
+            history.push(s.message.clone());
+            history.extend(sanitize_history(&stored[upto..]));
+            fit_keeping(history, budget_tokens, 1)
+        }
+    }
+}
+
 /// Tool groups in the order they are kept when the window is small: diagnosis first,
 /// then changes, then the rest.
-pub const GROUP_PRIORITY: [&str; 14] = ["system", "kernel", "services", "hardware", "skills", "tasks", "files", "security", "change", "desktop", "shell", "trace", "router", "other"];
+pub const GROUP_PRIORITY: [&str; 17] = ["system", "kernel", "services", "hardware", "skills", "tasks", "agent", "memory", "files", "web", "security", "change", "desktop", "shell", "trace", "router", "other"];
 
 pub fn spec_chars(t: &crate::tool::ToolSpec) -> usize {
     t.name.len() + t.description.len() + t.input_schema.to_string().len() + 40
@@ -130,6 +170,18 @@ pub fn hinted_groups(text: &str) -> Vec<&'static str> {
 /// local models drown in 50 tool schemas). Groups the request mentions (`hint`, the
 /// latest user message) go first, then GROUP_PRIORITY order. Unknown window: all.
 pub fn budget_tools(specs: Vec<crate::tool::ToolSpec>, context_tokens: usize, share: f64, hint: &str) -> Vec<crate::tool::ToolSpec> {
+    budget_tools_with(specs, context_tokens, share, hint, crate::tools::group_of)
+}
+
+/// `budget_tools` with the group lookup as a parameter, so a test can name a group
+/// the registry does not have.
+fn budget_tools_with(
+    specs: Vec<crate::tool::ToolSpec>,
+    context_tokens: usize,
+    share: f64,
+    hint: &str,
+    group_of: impl Fn(&str) -> &'static str,
+) -> Vec<crate::tool::ToolSpec> {
     if context_tokens == 0 {
         return specs;
     }
@@ -139,11 +191,19 @@ pub fn budget_tools(specs: Vec<crate::tool::ToolSpec>, context_tokens: usize, sh
         return specs;
     }
     let boosted = hinted_groups(hint);
-    let order: Vec<&str> = boosted.iter().copied().chain(GROUP_PRIORITY.iter().copied().filter(|g| !boosted.contains(g))).collect();
+    let mut order: Vec<&str> = boosted.iter().copied().chain(GROUP_PRIORITY.iter().copied().filter(|g| !boosted.contains(g))).collect();
+    // A group missing from GROUP_PRIORITY (a later stage forgot the list) is still a
+    // candidate: after the known ones, in registry order.
+    let groups: Vec<String> = specs.iter().map(|t| group_of(&t.name).to_string()).collect();
+    for g in &groups {
+        if !order.contains(&g.as_str()) {
+            order.push(g);
+        }
+    }
     let mut kept_groups: Vec<&str> = Vec::new();
     let mut used = 0;
     for g in order {
-        let size: usize = specs.iter().filter(|t| crate::tools::group_of(&t.name) == g).map(spec_chars).sum();
+        let size: usize = specs.iter().filter(|t| group_of(&t.name) == g).map(spec_chars).sum();
         if used + size > budget && !kept_groups.is_empty() {
             continue; // a later, smaller group may still fit
         }
@@ -151,7 +211,7 @@ pub fn budget_tools(specs: Vec<crate::tool::ToolSpec>, context_tokens: usize, sh
         kept_groups.push(g);
     }
     // Keep the registry order so the prompt is stable between turns.
-    specs.into_iter().filter(|t| kept_groups.contains(&crate::tools::group_of(&t.name))).collect()
+    specs.into_iter().filter(|t| kept_groups.contains(&group_of(&t.name))).collect()
 }
 
 #[cfg(test)]
@@ -194,6 +254,26 @@ mod tests {
     }
 
     #[test]
+    fn a_summary_starts_the_request_and_only_the_messages_after_it_follow() {
+        let summary = Message::user("Conversation so far (summary of the first 8 messages):\nEarlier: q0 and q1 were answered.");
+        // Without a summary the request is what it was.
+        let (plain, dropped) = request_history(&convo(3, 10), None, usize::MAX);
+        assert_eq!((dropped, plain.len()), (0, 12));
+
+        let (messages, dropped) = request_history(&convo(3, 10), Some(HistorySummary { message: &summary, upto: 8 }), usize::MAX);
+        assert_eq!((dropped, messages.len()), (0, 5), "the summary message, then the stored messages from 8 on");
+        assert_eq!(messages[0].content, summary.content, "the summary message comes first");
+        assert!(messages[1].content.starts_with("q2"), "{:?}", messages[1].content);
+        assert!(messages.iter().skip(1).all(|m| !m.content.starts_with("[Note:")), "nothing was dropped, so there is no note");
+
+        // Still too long: the summary stays and the oldest turns after it go, with the note.
+        let (small, dropped) = request_history(&convo(5, 10), Some(HistorySummary { message: &summary, upto: 4 }), 60);
+        assert_eq!((dropped, small.len()), (12, 5), "three whole turns after the summary, the last one kept");
+        assert_eq!(small[0].content, summary.content, "the summary is never what is dropped");
+        assert!(small[1].content.starts_with("[Note: 12 earlier messages were omitted to fit the context window.]\n\nq4"), "the note is on the first kept user message: {}", small[1].content);
+    }
+
+    #[test]
     fn always_keeps_the_last_user_turn() {
         let (kept, _) = fit_to_budget(convo(3, 50_000), 10);
         assert_eq!(kept.len(), 4);
@@ -213,6 +293,27 @@ mod tests {
         // The request names a group: it is kept first.
         let kept: Vec<String> = budget_tools(specs, 1000, 0.35, "Run this bash command").into_iter().map(|t| t.name).collect();
         assert_eq!(kept, vec!["shell", "system_info"]);
+    }
+
+    #[test]
+    fn a_group_missing_from_the_priority_list_is_still_kept() {
+        use crate::tool::ToolSpec;
+        let mk = |name: &str, description: usize| {
+            ToolSpec { name: name.into(), description: "x".repeat(description), input_schema: json!({"type":"object"}) }
+        };
+        // "newgroup" is in no list, so it is considered last, in registry order.
+        let specs = vec![mk("known", 300), mk("big", 700), mk("fresh", 300)];
+        let groups = |name: &str| match name {
+            "known" => "system",
+            "big" => "shell",
+            _ => "newgroup",
+        };
+        let names = |context: usize| {
+            budget_tools_with(specs.clone(), context, 0.35, "", groups).into_iter().map(|t| t.name).collect::<Vec<_>>()
+        };
+        // ~1480 chars of specs in a 1050-char budget: system and newgroup fit, shell does not.
+        assert_eq!(names(1000), vec!["known", "fresh"]);
+        assert_eq!(names(400), vec!["known"], "when it does not fit, it yields like any other group");
     }
 
     #[test]

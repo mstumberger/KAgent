@@ -18,7 +18,14 @@ export type AgentEvent =
   | { type: "alertUpdated"; alert: unknown }
   | { type: "changeRecorded"; change: unknown }
   | { type: "liveStatus"; sessionId: string; status: string; detail: string }
-  | { type: "uiCommand"; command: string; args: unknown };
+  | { type: "uiCommand"; command: string; args: unknown }
+  | { type: "skillsChanged"; count: number }
+  | { type: "todoUpdated"; sessionId: string; items: import("./api").TodoItem[] }
+  | { type: "planUpdated"; sessionId: string; active: boolean }
+  | { type: "memoryChanged"; name: string; removed: boolean }
+  | { type: "tasksChanged" }
+  | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
+  | { type: "telegramStatus"; status: string; detail: string };
 
 type Handler = (ev: AgentEvent) => void;
 

@@ -415,8 +415,8 @@ other tools.
 | Tool | Assess | Input | What |
 |---|---|---|---|
 | `load_skill` (updated in S18) | RO | `{name: string (required)}` | body of an **enabled** skill from the merged library (user > imported > bundled), frontmatter removed, `${CLAUDE_SKILL_DIR}` / `${ZCODE_SKILL_DIR}` / `${KAGENT_SKILL_DIR}` replaced by the skill's directory. Body capped at 100 KB. Counts one use in `<data>/skill-usage.json`. Unknown or disabled name -> error listing the enabled names grouped by source |
-| `skill_save` (S20) | MUT, risk low, unprivileged, approval per mode (rememberable) | `{name, description: string (<= 1024), when_to_use?: string, body: string (<= 64 KB)}` | writes `<config>/skills/<name>/SKILL.md` atomically (new, or overwrites a user skill). `name` `^[a-z0-9][a-z0-9-]{0,63}$`. Refuses reserved names (`skill-creator`, `widget-design`) and names equal to an existing one except for case. Overwriting a user skill that shadows a bundled skill says so in the result. `preview()` = name, description and the first 30 lines of the body |
-| `skill_delete` (S20) | MUT, risk low, unprivileged, approval per mode | `{name: string}` | removes a **user** skill directory. Bundled and imported skills -> error saying where they come from. The path must resolve inside `<config>/skills` and must not be a symlink before anything is deleted |
+| `skill_save` (S20) | MUT, risk low, unprivileged, approval per mode (rememberable) | `{name, description: string (<= 1024), when_to_use?: string, body: string (<= 64 KB)}`. `body` may also come as an array of lines, joined with line breaks: the schema says `anyOf` string or array of strings. Reason (S20, measured on the raw Ollama 0.40.12 API with qwen2.5:7b-instruct, 6 runs each): with a `string` body the model's `skill_save` call arrived in 2 of 6 runs (1 of 6 in a second batch, 0 of 6 with a shorter description) and was otherwise generated and then dropped by the server; with an array of lines in 4, 5 and 6 of 6, with either form in 6 of 6 | writes `<config>/skills/<name>/SKILL.md` atomically (new, or overwrites a user skill). `name` `^[a-z0-9][a-z0-9-]{0,63}$`. Refuses reserved names (`skill-creator`, `widget-design`), names equal to an existing one except for case, an empty body, and a `<name>` folder that is a symlink or a file. The result says when the skill replaces one, hides one of a lower root (new or replaced), or is switched off in `skills.disabled`. Then the library is read again at once. `preview()` = new or replaced, name, description and the first 30 lines of the body |
+| `skill_delete` (S20) | MUT, risk low, unprivileged, approval per mode | `{name: string}` | removes a **user** skill directory. Bundled and imported skills -> error saying where they come from; an unknown name -> error. The path must resolve inside `<config>/skills` and must not be a symlink before anything is deleted. The result says when a skill of a lower root is in use again. `preview()` = the folder and its files. Then the library is read again at once |
 
 ## 18. Memory (group `memory`; S25)
 
@@ -424,20 +424,23 @@ Store, recall and review rules: `memory.md`.
 
 | Tool | Assess | Input | What |
 |---|---|---|---|
-| `memory_save` | MUT, risk low, unprivileged, approval per mode (rememberable) | `{name, description?: string, type: enum [user, feedback, machine, project, reference], content: string (<= 4000), replaces?: string}` | writes `<config>/memory/<name>.md` with frontmatter `name, description, type, created, updated, source: agent, reviewed: false`. `name` `^[a-z0-9][a-z0-9-]{0,63}$`. Empty description = first line of the content (<= 140 chars). `replaces` = name of the memory this one supersedes: that file gets `validUntil: today` and `supersededBy`. `preview()` = `Remember <name> (<type>): <first 400 chars>` |
-| `memory_search` | RO | `{query: string, limit?: 1..10 (default 5)}` | lexical search with the recall scorer over all current memories -> `name (type, updated): description` + first 300 chars of the content. `memory.enabled=false` -> error "memory is off" |
+| `memory_save` | MUT, risk low, unprivileged, approval per mode (rememberable) | `{name, description?: string, type: enum [user, feedback, machine, project, reference], content: string or an array of lines (<= 4000; the schema says `anyOf`, S20), replaces?: string}` | writes or replaces `<config>/memory/<name>.md` with frontmatter `name, description, type, created, updated, source: agent, reviewed: false` (the card says when it replaces a memory of the same name). `name` `^[a-z0-9][a-z0-9-]{0,63}$`. Empty description = first line of the content (<= 140 chars). `replaces` = name of the memory this one supersedes: that file gets `validUntil: today` and `supersededBy`. `preview()` = `Remember <name> (<type>): <first 400 chars>` |
+| `memory_search` | RO | `{query: string, limit?: 1..10 (default 5)}` | lexical search with the recall scorer over all current memories -> `name (type, updated): description` + first 300 chars of the content |
 | `memory_get` | RO | `{name: string}` | full content of one memory, or of a superseded one |
 | `memory_forget` | MUT, risk low, no approval | `{name: string}` | marks the memory `validUntil: today` (kept on disk for the user, excluded from recall and search). Core files `user` and `machine` -> error "edit them in Settings -> Memory" |
-| `session_search` | RO | `{query: string, limit?: 1..10 (default 5)}` | lexical search over the 200 most recently updated sessions (user and assistant text only, files > 5 MB skipped) -> `sessionId \| date \| title` + a 240-char snippet around the best match |
+| `session_search` | RO | `{query: string, limit?: 1..10 (default 5)}` | lexical search over the 200 most recently updated sessions (user and assistant text only, files over 5 MB skipped; the asking session is left out) -> `sessionId \| date \| title` + a snippet of at most 240 characters from the message with the most words of the query (of equals a reply, then the later one; a question asked in an earlier session gives the answer that followed it) |
+
+With `memory.enabled=false` the five memory tools answer "memory is off"; the API and
+the UI still read and edit the files.
 
 ## 19. Todo and plan (group `agent`; S23, S24)
 
 | Tool | Assess | Input | What |
 |---|---|---|---|
-| `todo_write` | RO-equivalent (no approval; works in read-only and plan mode) | `{items: [{content: string (<= 200), status?: enum [pending, in_progress, completed], priority?: enum [high, medium, low]}]} (<= 50 items)` | replaces the session's list, normalised: at most one `in_progress` (the first; later ones become pending), missing priority = medium. Returns the list as `[1] [x] content` lines. Emits `todoUpdated` |
+| `todo_write` | RO-equivalent (no approval; works in read-only and plan mode) | `{items: [{content: string (<= 200), status?: enum [pending, in_progress, completed], priority?: enum [high, medium, low]}]} (<= 50 items; a missing status is pending; an item without content, content over 200 characters, an unknown field or an unknown status or priority refuses the whole list, which then stays as it was)` | replaces the session's list, normalised: at most one `in_progress` (the first; later ones become pending), missing priority = medium. Returns the list as `[1] [x] content` lines (a `>` marks in progress, a space pending, ` (high)` follows a high item; `no todo list` for an empty list). Emits `todoUpdated` |
 | `todo_read` | RO | `{}` | the list, or "no todo list" |
-| `plan_enter` | RO-equivalent | `{reason?: string}` | puts the session in plan mode for the rest of the turn: every call that is not read-only, and is not one of `todo_*`, `plan_*`, `load_skill`, `memory_search`, `memory_get`, `session_search`, is refused with "plan mode: research only until the plan is approved". Already planning -> error. Emits `planUpdated` |
-| `plan_exit` | RO-equivalent | `{plan: string (markdown, <= 12 KB)}` | raises an approval request with `kind: "plan"` (never rememberable). Approved -> plan mode off, the plan is saved under `<data>/plans/` and the result is "Plan approved. Carry it out step by step with the normal permissions." Denied with a reason -> "Plan rejected: <reason>. Revise the plan and call plan_exit again." Not planning, or an empty plan -> error. Emits `planUpdated` |
+| `plan_enter` | RO-equivalent | `{reason?: string}` | puts the session in plan mode until a plan is approved or the owner cancels it (the flag is the session's): every call that is not read-only, and is not one of `todo_*`, `plan_*`, `load_skill`, `memory_search`, `memory_get`, `session_search`, is refused with "plan mode: research only until the plan is approved". Already planning -> error. Emits `planUpdated` |
+| `plan_exit` | RO-equivalent | `{plan: string (markdown, <= 12 KB); it may also come as an array of lines, joined with line breaks (the schema says `anyOf`)}` | raises an approval request with `kind: "plan"` (never rememberable). Approved -> plan mode off, the plan is saved under `<data>/plans/` and the result is "Plan approved. Carry it out step by step with the normal permissions." Denied with a reason -> "Plan rejected: <reason>. Revise the plan and call plan_exit again." Not planning, an empty plan, a plan over 12 KB or one that is neither text nor lines -> error, and no card. A rejection is a result, not an error. Emits `planUpdated` |
 
 ## 20. Web (group `web`; S30)
 
@@ -448,6 +451,10 @@ Guards, extraction and engines: `web.md`. Both are read-only with side effect
 |---|---|---|---|
 | `web_fetch` | RO | `{url: http(s) URL, max_chars?: 1000..20000 (default 6000)}` | GET with the egress guard on every redirect (max 5), 15 s timeout, 2 MiB body cap, User-Agent `KAgent/<version>`. HTML -> title, main text, up to 30 links; `text/*`, JSON and XML -> raw text. Other types -> error naming the type and size. Cached 15 min (50 entries) |
 | `web_search` | RO | `{query: string (<= 400), limit?: 1..10 (default 5)}` | results of the engine in `settings.search.engine` as `[n] title - url` + snippet. Engine `none` -> error "web search is off (Settings -> Web)". Engine failure -> error with the cause (rate limit, bad key, unreachable) |
+
+Outside their range, `max_chars` and `limit` are read as the nearest end; a query over
+400 characters is an error. An answer is at most 23 500 bytes: the links go first, then
+the text (`web.md`).
 
 ## 21. Subagents and background tasks (group `agent`; S31)
 
@@ -472,9 +479,9 @@ Profiles, completion notifications and limits: `agents.md`.
 
 | Tool | Stage | Change |
 |---|---|---|
-| `tasks` | S28 | `schedule` also accepts 5-field cron and "every N hours/days/weeks/months"; new per-task fields `deliver`, `on_approval` (`deny`\|`wait`), `session` (`new`\|`reuse`), `timeout_min`; new actions `cancel` and `history`. `automations.md` |
+| `tasks` | S28 | the schedule argument is `schedule` (was `when`) and also accepts 5-field cron and "every N hours/days/weeks/months"; `what` is `anyOf` string or array of lines; new per-task fields `deliver`, `on_approval` (`deny`\|`wait`), `session` (`new`\|`reuse`), `timeout_min` (1..1440); `delay_minutes` (1..525600); new actions `cancel` and `history`; a key that is not a field is refused. `automations.md` |
 | `shell` | S31 | `background: boolean`: returns `{taskId, outputFile}` at once; output file `<data>/task-out/<taskId>.log` (cap 1 MiB), at most 20 running, killed by stop-all and at daemon exit |
-| `browser` | S27 | acts on the backend from `settings.browser.backend`; attach-mode tab rules in `browser.md` |
+| `browser` | S27 | acts on the backend from `settings.browser.backend`; attach-mode tab rules in `browser.md`; a call judged for one of the owner's tabs has the rule key `browser@owner <action>` and a summary ending in `(the owner's tab)` |
 | `ui` | S19 | `show` gains `section?: string` (settings section id). Views `providers` and `tools` now open the settings sections `models` and `tools` |
 | `load_skill` | S18 | section 17 |
 
@@ -490,4 +497,5 @@ description: Hand the user's words to the brain (the main agent with memory, ski
 parameters: {text: string (required): the user's exact words, in their language}
 ```
 Result: `{"reply": string, "status": "ok" | "failed" | "cancelled" | "handled"}`.
-`handled` = the utterance answered an approval card; `reply` is empty then.
+`handled` = the utterance answered an approval card; `reply` is empty then. On `/live`
+the call shows as the tool `think` (voice.md section 2).

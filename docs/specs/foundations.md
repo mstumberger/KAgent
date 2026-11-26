@@ -54,7 +54,8 @@ pub enum SendOutcome { Started { turn_id: String, handle: TurnHandle }, Queued }
   - Any other unknown key is kept and written back unchanged.
   - Load and `PUT /api/settings` both validate every typed section: 400 on a typo.
 - `PUT /api/settings` also rejects, with 400: a `toolGroups` entry that is not a known
-  group, and a `toolOverrides` value outside `allow`, `ask`, `deny`.
+  group, and a `toolOverrides` value outside `allow`, `ask`, `deny`. `null` removes that
+  tool's override (S19: the Tools section needs it; a merge cannot drop a key).
 - `toolGroups: []` means all groups everywhere, including `GET /api/tools`, which then
   reports `enabled: true`.
 
@@ -114,7 +115,7 @@ impl Notifier { pub fn new() -> Arc<Self>; pub async fn send(&self, n: Notificat
   call in session B; it still allows it in A.
 - `settings.rs`: a nested patch keeps its siblings; a typo is rejected with the
   suggestion; a far unknown key is preserved through save and load; invalid
-  `toolGroups` and `toolOverrides` are rejected.
+  `toolGroups` and `toolOverrides` are rejected; `null` removes one override.
 - `context.rs`: a group missing from `GROUP_PRIORITY` is kept when the budget allows.
 - `startup.rs`: the guard table (home set, target binary, release unit, same target).
 - `notify.rs`: the desktop sink builds the expected argv; `KAGENT_NO_NOTIFY` skips.

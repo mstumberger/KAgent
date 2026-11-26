@@ -6,106 +6,56 @@
 //! - steering input sent while a turn runs is drained only at a model-request boundary,
 //!   never between an assistant tool call and its result;
 //! - no hard tool-call cap: the loop ends on a plain answer, cancellation or a
-//!   configurable iteration safety valve (small local models sometimes loop).
+//! configurable iteration safety valve (small local models sometimes loop).
 
-use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
-use crate::model::{ModelClient, ModelDelta, ModelOptions, ModelRequest};
-use crate::permission::{
-    AllowRule, PermissionBroker, PermissionEngine,
-};
-use crate::protocol::{AgentEvent, Message, Role, ToolCall, TurnStatus, Usage, Via};
-use crate::session::{SessionMeta, SessionStore};
-use crate::tool::{PrivilegeMethod, ToolRegistry};
+use crate::model::{ModelClient, ModelDelta, ModelRequest};
+use crate::permission::{PermissionBroker, PermissionEngine};
+use crate::protocol::{AgentEvent, Message, ToolCall, TurnStatus, Usage, Via};
+use crate::session::SessionStore;
+use crate::tool::ToolRegistry;
 mod calls;
+pub mod children;
+mod config;
 pub mod title;
+pub(crate) mod state;
+mod turn;
 
 pub use crate::context::sanitize_history;
-use crate::context::{fit_to_budget, history_budget_tokens};
-
+use crate::compact::Step;
+use crate::context::history_budget_tokens;
+use state::{SessionState, Taken, TurnInput};
+use turn::TurnCell;
+pub use config::{AgentConfig, AgentDeps, CompactionSource, ConfigSource, RuleSink, SendOutcome, TurnContext, TurnOpts};
+pub use turn::{TurnHandle, TurnResult};
+pub use crate::compact::is_capacity_error;
 pub const DEFAULT_TITLE: &str = "New session";
 
-#[derive(Debug, Clone)]
-pub struct AgentConfig {
-    pub model_ref: String,
-    pub system_prompt: String,
-    pub max_iterations: usize,
-    pub options: ModelOptions,
-    pub privilege: PrivilegeMethod,
-    /// Model context window in tokens (0 = unknown, no trimming).
-    pub context_tokens: usize,
-    /// Used for the rest of the turn when the chat model is overloaded or out of quota
-    /// (HTTP 429/503); empty = none.
-    pub fallback_model_ref: String,
-    pub fallback_context_tokens: usize,
-    pub fallback_max_output: Option<u64>,
-}
-
-/// Provider errors worth retrying on another model: capacity or quota, and a broken
-/// key or account (the user still gets an answer, plus a notice naming the cause).
-/// Not bad input: the fallback would fail the same way.
-pub fn is_capacity_error(e: &str) -> bool {
-    let e = e.to_lowercase();
-    [
-        "503", "429", "overloaded", "high demand", "unavailable", "quota", "rate limit", "resource_exhausted",
-        "api key not valid", "valid api key", "invalid api key", "invalid_api_key", "unauthenticated", "permission_denied", "401 unauthorized", "403 forbidden",
-    ]
-    .iter()
-    .any(|m| e.contains(m))
-}
-
-pub type ConfigSource = Arc<dyn Fn() -> AgentConfig + Send + Sync>;
-pub type RuleSink = Arc<dyn Fn(Vec<AllowRule>) + Send + Sync>;
-
-struct SessionState {
-    meta: tokio::sync::Mutex<SessionMeta>,
-    messages: tokio::sync::Mutex<Vec<Message>>,
-    running: Mutex<Option<CancellationToken>>,
-    pending: Mutex<VecDeque<(String, Via)>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-#[serde(tag = "status", rename_all = "camelCase")]
-pub enum SendOutcome {
-    #[serde(rename_all = "camelCase")]
-    Started { turn_id: String },
-    /// A turn is running; the input will be injected at the next model request.
-    Queued,
-}
+/// Error of a turn whose loop panicked; the panic itself goes to the log.
+const INTERNAL_ERROR: &str = "internal error (see log)";
 
 pub struct Agent {
-    audit: Option<Arc<crate::audit::AuditLog>>,
-    model: Arc<dyn ModelClient>,
+    pub(crate) audit: Option<Arc<crate::audit::AuditLog>>,
+    pub(crate) model: Arc<dyn ModelClient>,
     tools: Arc<ToolRegistry>,
     permissions: Arc<PermissionEngine>,
     broker: Arc<PermissionBroker>,
     store: SessionStore,
-    events: broadcast::Sender<AgentEvent>,
+    pub(crate) events: broadcast::Sender<AgentEvent>,
     config: ConfigSource,
     on_rules_changed: Option<RuleSink>,
-    sessions: Mutex<HashMap<String, Arc<SessionState>>>,
+    sessions: Mutex<std::collections::HashMap<String, Arc<SessionState>>>,
     /// Session titles refined in the background (see `title.rs`).
     refined: title::Refined,
     tool_groups: Mutex<Option<Vec<String>>>,
     services: Option<Arc<crate::tool::ToolServices>>,
-}
-
-pub struct AgentDeps {
-    /// Change journal + root helper for mutating tools (`None` in tests).
-    pub services: Option<Arc<crate::tool::ToolServices>>,
-    pub audit: Option<Arc<crate::audit::AuditLog>>,
-    pub model: Arc<dyn ModelClient>,
-    pub tools: Arc<ToolRegistry>,
-    pub permissions: Arc<PermissionEngine>,
-    pub broker: Arc<PermissionBroker>,
-    pub store: SessionStore,
-    pub events: broadcast::Sender<AgentEvent>,
-    pub config: ConfigSource,
-    pub on_rules_changed: Option<RuleSink>,
+    compaction: Mutex<Option<CompactionSource>>,
+    /// The subagents of this run and what a restricted session may do (`children.rs`).
+    pub(crate) children: children::Children,
 }
 
 impl Agent {
@@ -120,11 +70,23 @@ impl Agent {
             events: deps.events,
             config: deps.config,
             on_rules_changed: deps.on_rules_changed,
-            sessions: Mutex::new(HashMap::new()),
+            sessions: Mutex::new(std::collections::HashMap::new()),
             refined: Default::default(),
             tool_groups: Mutex::new(None),
             services: deps.services,
+            compaction: Mutex::new(None),
+            children: Default::default(),
         })
+    }
+
+    /// Where `settings.compaction` and the fast model are read before each request. Unset: the defaults, no fast model.
+    pub fn set_compaction_source(&self, source: CompactionSource) {
+        *self.compaction.lock().unwrap() = Some(source);
+    }
+
+    pub(crate) fn compaction_config(&self) -> crate::compact::CompactionConfig {
+        let source = self.compaction.lock().unwrap().clone();
+        source.map_or_else(Default::default, |read| read())
     }
 
     pub fn tools(&self) -> &Arc<ToolRegistry> {
@@ -143,221 +105,134 @@ impl Agent {
         self.services.as_ref()
     }
 
+    /// The configuration for no turn in particular (live voice, compaction): the source
+    /// is asked with an empty context, so it sees no user message.
     pub fn config(&self) -> AgentConfig {
-        (self.config)()
+        (self.config)(TurnContext::default())
     }
 
-    async fn state(&self, session_id: &str) -> anyhow::Result<Arc<SessionState>> {
-        if let Some(s) = self.sessions.lock().unwrap().get(session_id) {
-            return Ok(s.clone());
-        }
-        let meta = self.store.meta(session_id).await?;
-        let messages = self.store.load_messages(session_id).await?;
-        let state = Arc::new(SessionState {
-            meta: tokio::sync::Mutex::new(meta),
-            messages: tokio::sync::Mutex::new(messages),
-            running: Mutex::new(None),
-            pending: Mutex::new(VecDeque::new()),
-        });
-        Ok(self
-            .sessions
-            .lock()
-            .unwrap()
-            .entry(session_id.to_string())
-            .or_insert(state)
-            .clone())
-    }
-
-    pub async fn messages(&self, session_id: &str) -> anyhow::Result<Vec<Message>> {
-        Ok(self.state(session_id).await?.messages.lock().await.clone())
-    }
-
-    pub async fn is_running(&self, session_id: &str) -> bool {
-        match self.state(session_id).await {
-            Ok(s) => s.running.lock().unwrap().is_some(),
-            Err(_) => false,
-        }
-    }
-
-    pub fn forget(&self, session_id: &str) {
-        if let Some(s) = self.sessions.lock().unwrap().remove(session_id) {
-            if let Some(c) = s.running.lock().unwrap().take() {
-                c.cancel();
-            }
-        }
-    }
-
-    pub async fn cancel(&self, session_id: &str) -> bool {
-        let Ok(s) = self.state(session_id).await else { return false };
-        let token = s.running.lock().unwrap().clone();
-        match token {
-            Some(t) => {
-                t.cancel();
-                true
-            }
-            None => false,
-        }
-    }
-
-    /// Kill switch: cancel every running turn; returns how many.
-    pub async fn stop_all(&self) -> usize {
-        let sessions: Vec<Arc<SessionState>> = self.sessions.lock().unwrap().values().cloned().collect();
-        let mut n = 0;
-        for s in sessions {
-            // Cancel but leave the token in place: the turn task clears it once it has
-            // actually unwound, so no new turn can start on top of a dying one.
-            if let Some(t) = s.running.lock().unwrap().as_ref() {
-                if !t.is_cancelled() {
-                    t.cancel();
-                    n += 1;
-                }
-            }
-        }
-        n
-    }
-
-    /// Restrict which tool groups are advertised to the model (tool budget).
-    pub fn set_tool_groups(&self, groups: Option<Vec<String>>) {
-        *self.tool_groups.lock().unwrap() = groups;
-    }
-
-    /// Whether a tool may run: it must belong to an enabled group (an empty or unset
-    /// list means all groups). Hidden tools are also refused, so a model cannot call a
-    /// disabled tool it learned about earlier in the conversation.
-    pub fn tool_enabled(&self, name: &str) -> bool {
-        match self.tool_groups.lock().unwrap().as_ref() {
-            Some(groups) if !groups.is_empty() => groups.iter().any(|g| g == crate::tools::group_of(name)),
-            _ => true,
-        }
-    }
-
-    /// Tool specs the model may see (enabled groups only). Used by voice and MCP.
-    pub fn advertised_specs(&self) -> Vec<crate::tool::ToolSpec> {
-        self.advertised_tools()
-    }
-
-    fn advertised_tools(&self) -> Vec<crate::tool::ToolSpec> {
-        let specs = self.tools.specs();
-        match self.tool_groups.lock().unwrap().as_ref() {
-            Some(groups) if !groups.is_empty() => specs
-                .into_iter()
-                .filter(|t| groups.iter().any(|g| g == crate::tools::group_of(&t.name)))
-                .collect(),
-            _ => specs,
-        }
-    }
-
-    /// Start a turn, or queue the input as steering when one is running. Boxed so the
-    /// spawned tail of a turn can start the next one without a recursive async fn.
+    /// Start a turn, or queue the input as steering when one is running.
     pub fn send(
         self: &Arc<Self>,
         session_id: &str,
         input: String,
         via: Via,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<SendOutcome>> + Send + '_>> {
-        let this = self.clone();
-        let sid = session_id.to_string();
-        Box::pin(async move { this.send_inner(&sid, input, via).await })
+        self.send_with(session_id, input, via, TurnOpts::default())
     }
 
-    async fn send_inner(self: Arc<Self>, session_id: &str, input: String, via: Via) -> anyhow::Result<SendOutcome> {
-        let state = self.state(session_id).await?;
-        let cancel = {
-            let mut running = state.running.lock().unwrap();
-            if running.is_some() {
-                state.pending.lock().unwrap().push_back((input, via));
-                return Ok(SendOutcome::Queued);
-            }
-            let token = CancellationToken::new();
-            *running = Some(token.clone());
-            token
-        };
-        let turn_id = uuid::Uuid::new_v4().to_string();
+    /// `send` with options of this one turn (`TurnOpts`).
+    pub fn send_with(
+        self: &Arc<Self>,
+        session_id: &str,
+        input: String,
+        via: Via,
+        opts: TurnOpts,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<SendOutcome>> + Send + '_>> {
         let this = self.clone();
         let sid = session_id.to_string();
-        let tid = turn_id.clone();
+        let plan = opts.plan;
+        let input = TurnInput { text: input, via, system_suffix: opts.system_suffix };
+        Box::pin(async move {
+            // Before the turn starts (plan-todo.md section 2), so its first call is restricted too.
+            if plan {
+                this.set_planning(&sid, true).await?;
+            }
+            this.start(&sid, input).await
+        })
+    }
+
+    async fn start(self: Arc<Self>, session_id: &str, input: TurnInput) -> anyhow::Result<SendOutcome> {
+        let state = self.state(session_id).await?;
+        match state.take(&input) {
+            Taken::Turn(cancel) => {
+                let turn_id = uuid::Uuid::new_v4().to_string();
+                let handle = self.spawn_turn(session_id, turn_id.clone(), input, state, cancel);
+                Ok(SendOutcome::Started { turn_id, handle })
+            }
+            Taken::Queued => Ok(SendOutcome::Queued),
+        }
+    }
+
+    /// Run a turn that `SessionState::take` started, in its own task. The task ends the
+    /// turn (the handle resolves, the session may go idle) and starts the turn that
+    /// takes over input queued in the meantime.
+    fn spawn_turn(
+        self: &Arc<Self>,
+        session_id: &str,
+        turn_id: String,
+        input: TurnInput,
+        state: Arc<SessionState>,
+        cancel: CancellationToken,
+    ) -> TurnHandle {
+        let (handle, done, cell) = TurnHandle::new();
+        let (this, sid) = (self.clone(), session_id.to_string());
         tokio::spawn(async move {
-            this.run_turn(&sid, &tid, input, via, state.clone(), cancel).await;
-            *state.running.lock().unwrap() = None;
-            // Input that arrived after the last model request starts the next turn.
-            let next = state.pending.lock().unwrap().pop_front();
-            if let Some((text, via)) = next {
-                let _ = this.send(&sid, text, via).await;
+            let result = this.run_turn(&sid, &turn_id, input, &state, &cancel, &cell).await;
+            // Settle the session before the handle resolves: a caller that awaited the
+            // turn finds it no longer running.
+            if let Some((input, cancel)) = state.settle(result.clone()) {
+                let turn_id = uuid::Uuid::new_v4().to_string();
+                this.spawn_turn(&sid, turn_id, input, state, cancel);
             }
+            *cell.result.lock().unwrap() = Some(result);
+            let _ = done.send(());
         });
-        Ok(SendOutcome::Started { turn_id })
+        handle
     }
 
-    /// Append messages from outside the loop (voice transcripts) to the history.
-    pub async fn append_external(&self, session_id: &str, messages: Vec<Message>) -> anyhow::Result<()> {
-        let state = self.state(session_id).await?;
-        self.push_messages(session_id, &state, messages).await
-    }
-
-    async fn push_messages(&self, session_id: &str, state: &SessionState, messages: Vec<Message>) -> anyhow::Result<()> {
-        if messages.is_empty() {
-            return Ok(());
-        }
-        self.store.append(session_id, &messages).await?;
-        state.messages.lock().await.extend(messages.iter().cloned());
-        let mut meta = state.meta.lock().await;
-        meta.message_count += messages.len();
-        meta.updated_at = chrono::Utc::now();
-        if let Some(t) = self.refined.lock().unwrap().remove(session_id) {
-            meta.title = t;
-        }
-        if title::is_placeholder(&meta.title) {
-            if let Some(first) = messages.iter().find(|m| m.role == Role::User && title::meaningful(&m.content)) {
-                if let Some(q) = title::quick_title(&first.content) {
-                    meta.title = q;
-                    let _ = self.events.send(AgentEvent::SessionUpdated { session_id: session_id.into(), title: meta.title.clone() });
-                    self.refine_title(session_id, first.content.clone());
-                }
-            }
-        }
-        self.store.save_meta(&meta).await?;
-        drop(meta);
-        for m in messages {
-            let _ = self.events.send(AgentEvent::MessageAppended { session_id: session_id.into(), message: m });
-        }
-        Ok(())
-    }
-
+    /// Run one turn and return how it ended. The loop runs under a panic guard: a panic
+    /// (a tool, a provider) ends the turn as failed instead of leaving the session
+    /// stuck with a turn that never clears.
     async fn run_turn(
         &self,
         session_id: &str,
         turn_id: &str,
-        input: String,
-        via: Via,
-        state: Arc<SessionState>,
-        cancel: CancellationToken,
-    ) {
+        input: TurnInput,
+        state: &SessionState,
+        cancel: &CancellationToken,
+        cell: &TurnCell,
+    ) -> TurnResult {
         let _ = self.events.send(AgentEvent::TurnStarted {
             session_id: session_id.into(),
             turn_id: turn_id.into(),
-            input: input.clone(),
-            via,
+            input: input.text.clone(),
+            via: input.via,
         });
         let mut usage = Usage::default();
-        let result = self
-            .turn_loop(session_id, turn_id, input, via, &state, &cancel, &mut usage)
-            .await;
-        let (status, error) = match result {
-            Ok(()) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
-            Ok(()) => (TurnStatus::Completed, None),
-            Err(_) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
-            Err(e) => (TurnStatus::Failed, Some(format!("{e:#}"))),
+        let run = futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(
+            self.turn_loop(session_id, turn_id, input, state, cancel, &mut usage, cell.text.clone()),
+        ));
+        let (status, error) = match run.await {
+            Ok(Ok(())) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
+            Ok(Ok(())) => (TurnStatus::Completed, None),
+            Ok(Err(_)) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
+            Ok(Err(e)) => {
+                let error = format!("{e:#}");
+                tracing::warn!(session_id, turn_id, "turn failed: {error}");
+                (TurnStatus::Failed, Some(error))
+            }
+            Err(payload) => {
+                let panic = if let Some(s) = payload.downcast_ref::<&str>() {
+                    (*s).to_string()
+                } else if let Some(s) = payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic payload".to_string()
+                };
+                tracing::error!(session_id, turn_id, "turn panicked: {panic}");
+                (TurnStatus::Failed, Some(INTERNAL_ERROR.into()))
+            }
         };
-        if let Some(err) = &error {
-            tracing::warn!(session_id, turn_id, "turn failed: {err}");
-        }
+        let text = std::mem::take(&mut *cell.text.lock().unwrap());
         let _ = self.events.send(AgentEvent::TurnFinished {
             session_id: session_id.into(),
             turn_id: turn_id.into(),
             status,
-            error,
-            usage,
+            error: error.clone(),
+            usage: usage.clone(),
         });
+        TurnResult { status, error, text, usage }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -365,39 +240,53 @@ impl Agent {
         &self,
         session_id: &str,
         turn_id: &str,
-        input: String,
-        via: Via,
+        input: TurnInput,
         state: &SessionState,
         cancel: &CancellationToken,
         usage: &mut Usage,
+        text: Arc<Mutex<String>>,
     ) -> anyhow::Result<()> {
-        let mut config = (self.config)();
-        let mut fell_back = false;
+        // Before the message is stored: for the prompt, this turn's message is the latest user message.
+        let turn = TurnContext { session_id: session_id.to_string(), user_text: input.text.clone() };
+        let mut config = (self.config)(turn);
+        // A subagent's turn: the model, the iteration limit and the block of its job.
+        self.apply_job(session_id, &mut config);
+        if let Some(block) = &input.system_suffix {
+            config.system_prompt.push_str(block);
+        }
+        let (mut fell_back, mut recompacted) = (false, false);
         if config.model_ref.trim().is_empty() {
             anyhow::bail!("no chat model selected - pick one in Settings -> Providers");
         }
-        self.push_messages(session_id, state, vec![Message::user(input).with_via(via)]).await?;
+        self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via)]).await?;
         let mut iteration = 0usize;
         loop {
             if cancel.is_cancelled() {
                 return Ok(());
             }
             // Model-request boundary: drain steering input queued while we worked.
+            let mut late = String::new();
             let steering: Vec<Message> = state
                 .pending
                 .lock()
                 .unwrap()
                 .drain(..)
-                .map(|(t, v)| Message::user(t).with_via(v))
+                .map(|queued| {
+                    // A queued message that names a skill adds its block from this request on.
+                    late.push_str(queued.system_suffix.as_deref().unwrap_or_default());
+                    Message::user(queued.text).with_via(queued.via)
+                })
                 .collect();
             self.push_messages(session_id, state, steering).await?;
+            config.system_prompt.push_str(&late);
 
             iteration += 1;
             if iteration > config.max_iterations.max(1) {
                 anyhow::bail!("stopped after {} model requests (max iterations)", config.max_iterations);
             }
 
-            let all_tools = self.advertised_tools();
+            // The tools of this session: a subagent is offered only those of its profile.
+            let all_tools = self.tools_for(session_id);
             let n_all = all_tools.len();
             // The latest user message decides which groups win when not all fit.
             let hint = state.messages.lock().await.iter().rev().find(|m| m.role == crate::protocol::Role::User).map(|m| m.content.clone()).unwrap_or_default();
@@ -406,19 +295,31 @@ impl Agent {
                 tracing::info!(session_id, kept = tools.len(), of = n_all, "small context window: advertising a reduced tool set");
             }
             let tools_chars: usize = tools.iter().map(|t| t.description.len() + t.input_schema.to_string().len()).sum();
+            // Plan mode (plan-todo.md section 2), read before every request: the session
+            // enters and leaves it while a turn runs. Both blocks are built here and never
+            // kept in `config`, so a compaction or a fallback cannot lose them.
+            let (planning, approved_plan) = {
+                let meta = state.meta.lock().await;
+                (meta.planning, meta.approved_plan.clone())
+            };
+            let mut system = config.system_prompt.clone();
+            if planning {
+                system.push_str(crate::plan::PLAN_PROMPT);
+            }
+            if let Some(plan) = approved_plan.as_ref() {
+                system.push_str(&crate::plan::approved_prompt(&plan.text));
+            }
             let budget = history_budget_tokens(
                 config.context_tokens,
                 config.options.max_output_tokens.unwrap_or(4_096) as usize,
-                config.system_prompt.len(),
+                system.len(),
                 tools_chars,
             );
-            let (messages, dropped) = fit_to_budget(sanitize_history(&state.messages.lock().await), budget);
-            if dropped > 0 {
-                tracing::info!(session_id, dropped, "trimmed history to fit the context window");
-            }
+            // Summarized or trimmed first (compaction.md sections 1 and 4).
+            let (messages, _dropped) = self.request_history(session_id, state, &config, budget, cancel).await?;
             let request = ModelRequest {
                 model_ref: config.model_ref.clone(),
-                system: config.system_prompt.clone(),
+                system,
                 messages,
                 tools,
                 options: config.options.clone(),
@@ -426,12 +327,17 @@ impl Agent {
             let (tx, mut rx) = mpsc::unbounded_channel::<ModelDelta>();
             let events = self.events.clone();
             let (sid, tid) = (session_id.to_string(), turn_id.to_string());
+            // Deltas go to the UI and, the text ones, to the turn's result.
+            let streamed = text.clone();
             let forward = tokio::spawn(async move {
                 while let Some(d) = rx.recv().await {
                     let ev = match d {
-                        ModelDelta::Text(text) => AgentEvent::TextDelta { session_id: sid.clone(), turn_id: tid.clone(), text },
-                        ModelDelta::Reasoning(text) => {
-                            AgentEvent::ReasoningDelta { session_id: sid.clone(), turn_id: tid.clone(), text }
+                        ModelDelta::Text(chunk) => {
+                            streamed.lock().unwrap().push_str(&chunk);
+                            AgentEvent::TextDelta { session_id: sid.clone(), turn_id: tid.clone(), text: chunk }
+                        }
+                        ModelDelta::Reasoning(chunk) => {
+                            AgentEvent::ReasoningDelta { session_id: sid.clone(), turn_id: tid.clone(), text: chunk }
                         }
                     };
                     let _ = events.send(ev);
@@ -439,28 +345,27 @@ impl Agent {
             });
             let response = self.model.complete(request, tx, cancel.clone()).await;
             let _ = forward.await;
-            let response = match response {
-                Err(e) if !fell_back && !config.fallback_model_ref.is_empty() && config.fallback_model_ref != config.model_ref && is_capacity_error(&format!("{e:#}")) => {
-                    tracing::warn!(session_id, "chat model {} unavailable ({e:#}); falling back to {}", config.model_ref, config.fallback_model_ref);
-                    let _ = self.events.send(AgentEvent::Notice {
-                        level: "warn".into(),
-                        text: if format!("{e:#}").to_lowercase().contains("key") {
-                            format!("{} rejected the API key (Providers) - answering with {}", config.model_ref, config.fallback_model_ref)
-                        } else {
-                            format!("{} is busy - answering with {}", config.model_ref, config.fallback_model_ref)
-                        },
-                    });
-                    config.model_ref = config.fallback_model_ref.clone();
-                    config.context_tokens = config.fallback_context_tokens;
-                    config.options.max_output_tokens = config.fallback_max_output;
-                    fell_back = true;
-                    iteration -= 1;
-                    continue;
+            // A full or overloaded model (compaction.md section 1): compacted once and retried, then the fallback.
+            if let Err(e) = &response {
+                match self.on_capacity_error(session_id, state, &mut config, e, recompacted, fell_back, cancel).await {
+                    Step::Retry => {
+                        recompacted = true;
+                        iteration -= 1;
+                        continue;
+                    }
+                    Step::Fallback => {
+                        fell_back = true;
+                        iteration -= 1;
+                        continue;
+                    }
+                    Step::Fail => {}
                 }
-                r => r?,
-            };
+            }
+            let response = response?;
             usage.input_tokens += response.usage.input_tokens;
             usage.output_tokens += response.usage.output_tokens;
+            // The provider's count of the prompt calibrates the estimate (compaction.md section 6).
+            state.last_input_tokens.store(response.usage.input_tokens, std::sync::atomic::Ordering::Relaxed);
 
             let calls: Vec<ToolCall> = response
                 .tool_calls
@@ -473,7 +378,7 @@ impl Agent {
                     c
                 })
                 .collect();
-            let mut assistant = Message::assistant(response.text, calls.clone()).with_via(via);
+            let mut assistant = Message::assistant(response.text, calls.clone()).with_via(input.via);
             assistant.provider_state = response.provider_state;
             self.push_messages(session_id, state, vec![assistant]).await?;
 
@@ -487,9 +392,4 @@ impl Agent {
             self.push_messages(session_id, state, results).await?;
         }
     }
-
-    fn tool_names(&self) -> String {
-        self.advertised_tools().iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ")
-    }
 }
-

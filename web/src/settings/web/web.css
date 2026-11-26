@@ -1,0 +1,53 @@
+/* The Web section: the choice of the engine and the card of the Brave key. Shared
+   controls keep their rules in controls.css. */
+.web-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 2px;
+}
+
+.web-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.web-radio > input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.web-radio > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.web-radio-label {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.web-radio .hint,
+.web-key p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.web-key {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.web-key-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}

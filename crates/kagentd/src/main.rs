@@ -2,8 +2,11 @@
 //! subcommands arrive with their stages (S6 audit, S8 sudoers, S12 mcp).
 
 mod api;
+mod bots;
+mod compact_api;
 mod rounded;
 mod tasks;
+mod todo_api;
 mod screen;
 mod appwin;
 mod tray;
@@ -12,23 +15,33 @@ mod browser;
 mod krunner;
 mod live;
 mod mcp;
+mod memory;
 mod net;
+mod notify;
 mod paths;
+mod plan_api;
 mod prompt;
 mod secrets;
+mod sections;
 mod sentinel;
 mod server;
 mod settings;
+mod skills;
+mod skills_api;
+mod skills_import;
+mod skills_sources;
+mod skills_sources_api;
 mod startup;
 mod voice_levels;
 mod watch;
+mod web;
 mod ws;
 
 use std::sync::Arc;
 
 use tokio::sync::broadcast;
 
-use kagent_core::agent::{Agent, AgentConfig, AgentDeps};
+use kagent_core::agent::{Agent, AgentConfig, AgentDeps, TurnContext};
 use kagent_core::permission::{PermissionBroker, PermissionEngine};
 use kagent_core::protocol::AgentEvent;
 use kagent_core::session::SessionStore;
@@ -54,6 +67,19 @@ pub struct AppState {
     /// KAgent's own app windows (main UI, orb widget).
     pub windows: Arc<appwin::AppWindows>,
     pub tasks: Arc<tasks::TaskStore>,
+    /// Desktop (and later Telegram) notifications, one path for every caller.
+    pub notifier: Arc<notify::Notifier>,
+    /// The Telegram bot (bots.md): its routes, its polling task and the Telegram channel.
+    pub bots: Arc<bots::Bots>,
+    pub skills: Arc<skills::SkillHub>,
+    /// The memory store, behind the routes and the memory tools (memory.md).
+    pub memory: Arc<memory::MemoryHub>,
+    /// Git sources of skills; its lock serializes every change to imported skills.
+    pub skill_sources: Arc<skills_sources::SourceStore>,
+    /// The `browser` tool: also the routes of the attached browser (browser.md).
+    pub browser: Arc<browser::Browser>,
+    /// The `web_fetch` and `web_search` tools: also the Brave key behind its route (web.md).
+    pub web: Arc<web::Web>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -178,20 +204,21 @@ async fn run() -> anyhow::Result<()> {
 
     let settings = settings::Settings::load(&paths.settings())?;
     // Keep the systemd user unit in sync with settings.startup.autostart (user
-    // level only; enabling never starts a second copy of this daemon).
-    startup::apply_autostart(settings.startup.autostart);
+    // level only; enabling never starts a second copy of this daemon). A daemon
+    // started under KAGENT_HOME or from target/ leaves the owner's unit alone.
+    startup::sync_at_start(settings.startup.autostart);
     let catalog = kagent_providers::ProviderStore::builtin_catalog()?;
     let providers = Arc::new(kagent_providers::ProviderStore::load(paths.providers(), catalog)?);
     let keyring = secrets::attach(providers.clone()).await;
     tracing::info!("provider keys: {}", if keyring { "Secret Service (desktop keyring)" } else { "providers.json (0600)" });
 
     let machine = kagent_core::tools::sys::system_snapshot().await;
-    let skills_dir = paths.skills_dir();
-    let skills = kagent_core::skills::load_skills(&skills_dir);
-    tracing::info!("loaded {} skills from {}", skills.len(), skills_dir.display());
     let (events, _) = broadcast::channel(1024);
     let audit = std::sync::Arc::new(kagent_core::audit::AuditLog::open(&paths.data.join("audit.jsonl"))?);
     audit.append_start(VERSION).ok();
+    // One skills library for the prompt, `load_skill` and the skills API, rescanned between turns.
+    let skill_sources = Arc::new(skills_sources::SourceStore::load(paths.config.join("skill-sources.json"), paths.data.join("skill-sources")).map_err(anyhow::Error::msg)?);
+    let skills = Arc::new(skills::SkillHub::new(&paths.skills_roots(), &settings.skills_config().disabled, events.clone(), paths.skill_usage()).with_sources(skill_sources.clone()));
     let alerts = watch::AlertManager::new(paths.data.join("alerts.json"), events.clone(), Some(audit.clone()), std::env::var_os("KAGENT_NO_NOTIFY").is_none());
     if let Some(q) = settings.extra.get("watchers").and_then(|w| w.get("quietHours")).and_then(serde_json::Value::as_str) {
         alerts.set_quiet_hours(q);
@@ -208,24 +235,41 @@ async fn run() -> anyhow::Result<()> {
     for t in net::tools::all(net.clone()) {
         registry.register(t);
     }
-    registry.register(Arc::new(kagent_core::skills::LoadSkill::new(skills_dir)));
-    let task_store = tasks::TaskStore::load(&paths.data, events.clone());
+    registry.register(Arc::new(skills.tool()));
+    for tool in skills.author_tools() {
+        registry.register(tool);
+    }
+    let task_store = tasks::TaskStore::load(&paths.data, events.clone(), settings.tasks_config());
     registry.register(Arc::new(tasks::TasksTool::new(task_store.clone())));
     let ui_hub = ui::UiHub::new(events.clone());
     registry.register(Arc::new(ui::UiTool::new(ui_hub.clone())));
     registry.register(Arc::new(kagent_core::tools::sessions::Sessions::new(paths.sessions())?));
-    let (browser_port, browser_bin) = settings.browser_config();
-    registry.register(Arc::new(browser::Browser::new(&paths.data, browser_port, &browser_bin)));
+    // The todo lists of the sessions (plan-todo.md section 1): the tools reach the agent's sessions through this handle.
+    let todo_access = kagent_core::todo::TodoAccess::default();
+    registry.register(Arc::new(kagent_core::todo::TodoWrite::new(todo_access.clone())));
+    registry.register(Arc::new(kagent_core::todo::TodoRead::new(todo_access.clone())));
+    // Plan mode (plan-todo.md section 2): the same kind of handle, and the folder of the approved plans.
+    let plan_access = kagent_core::plan::PlanAccess::default();
+    registry.register(Arc::new(kagent_core::plan::PlanEnter::new(plan_access.clone())));
+    registry.register(Arc::new(kagent_core::plan::PlanExit::new(plan_access.clone(), paths.data.join("plans"))));
+    let browser = Arc::new(browser::Browser::from_settings(&paths.data, &settings));
+    registry.register(browser.clone());
     let settings_cell = Arc::new(std::sync::OnceLock::new());
     registry.register(Arc::new(screen::Screen::new(providers.clone(), settings_cell.clone(), &paths.data)));
+    // The web tools (web.md): they read settings.search from the same cell.
+    let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config));
+    registry.register(web.fetch_tool());
+    registry.register(web.search_tool());
+    // Memory (memory.md): one store for the prompt, the tools and the API. The tools read the
+    // settings from the cell the screen tool uses, set once the settings are loaded.
+    let memory = Arc::new(memory::MemoryHub::new(memory::MemoryStore::new(paths.config.join("memory")), paths.sessions(), settings_cell.clone(), events.clone()));
+    memory.register(&mut registry);
     // (name, group) of every registered tool, for the per-turn prompt.
     let tool_index: Vec<(String, &'static str)> = registry
         .contracts()
         .iter()
         .map(|c| (c.name.clone(), kagent_core::tools::group_of(&c.name)))
         .collect();
-    let skills_index = kagent_core::skills::skills_index(&skills);
-
 
     // Change journal + root helper, shared by every mutating tool.
     let journal = Arc::new(kagent_core::journal::ChangeJournal::new(paths.data.join("changes"))?);
@@ -254,29 +298,36 @@ async fn run() -> anyhow::Result<()> {
     let _ = settings_cell.set(settings_arc.clone());
     let settings_for_config = settings_arc.clone();
     let providers_for_config = providers.clone();
-    let machine_for_config = machine.clone();
-    // Built for every turn: persona, language, enabled tools, clock and the chat
+    let (machine_for_config, skills_for_config) = (machine.clone(), skills.clone());
+    let memory_for_config = memory.clone();
+    // Built for every turn: persona, language, enabled tools, clock, memory and the chat
     // model's context window are always current.
-    let cfg = move || {
+    let cfg = move |turn: TurnContext| {
         let s = settings_for_config.read().unwrap();
+        skills_for_config.refresh(&s.skills_config()); // first: new or edited skills are in this prompt
         let enabled: Vec<String> = tool_index
             .iter()
             .filter(|(_, g)| s.tool_groups.is_empty() || s.tool_groups.iter().any(|x| x == g))
             .map(|(n, _)| n.clone())
             .collect();
+        let memory_tools = enabled.iter().any(|n| kagent_core::tools::group_of(n) == "memory");
         let mode = serde_json::to_value(s.permission_mode).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+        let resolved = providers_for_config.resolve(&s.chat_model).ok();
+        let context_tokens = resolved.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0);
+        // The memory block (memory.md section 2), recalled by the words of this turn's message.
+        let (memory_block, memory_rule) = memory_for_config.prompt_parts(&s.memory_config(), &turn.user_text, context_tokens, memory_tools);
         let system_prompt = prompt::build(&prompt::PromptInput {
             persona_name: &s.persona.name,
             address: &s.persona.address,
             language: &s.persona.language,
             machine: &machine_for_config,
             tool_names: &enabled,
-            skills_index: &skills_index,
+            skills_index: &skills_for_config.index(s.skills_config().index_budget_chars),
+            memory_block: &memory_block,
+            memory_rule,
             permission_mode: &mode,
             now: chrono::Local::now(),
         });
-        let resolved = providers_for_config.resolve(&s.chat_model).ok();
-        let context_tokens = resolved.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0);
         let max_output = s.options.max_output_tokens.or(resolved.as_ref().map(|r| r.config.max_output_tokens));
         AgentConfig {
             model_ref: s.chat_model.clone(),
@@ -316,6 +367,20 @@ async fn run() -> anyhow::Result<()> {
         },
     });
     agent.set_tool_groups(Some(settings_arc.read().unwrap().tool_groups.clone()));
+    todo_access.attach(&agent);
+    plan_access.attach(&agent);
+    // Compaction (compaction.md section 1) reads its settings before every model request.
+    let (settings_for_compaction, providers_for_compaction) = (settings_arc.clone(), providers.clone());
+    agent.set_compaction_source(Arc::new(move || {
+        let s = settings_for_compaction.read().unwrap();
+        let section = s.compaction_config();
+        kagent_core::compact::CompactionConfig {
+            enabled: section.enabled,
+            threshold_pct: section.threshold_pct,
+            // A fast model that is not set, or does not resolve, is none.
+            fast_model_ref: if providers_for_compaction.resolve(&s.fast_model).is_ok() { s.fast_model.clone() } else { String::new() },
+        }
+    }));
 
     // Voice levels: activity follows the agent's event stream.
     let levels = Arc::new(voice_levels::LevelHub::new());
@@ -344,6 +409,8 @@ async fn run() -> anyhow::Result<()> {
 
     net.start();
 
+    let notifier = notify::Notifier::new();
+    let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,
@@ -351,6 +418,13 @@ async fn run() -> anyhow::Result<()> {
         windows: Arc::new(appwin::AppWindows::new(&paths.data, &token, 7878)),
         sentinel,
         alerts,
+        notifier,
+        bots,
+        skills: skills.clone(),
+        memory,
+        skill_sources,
+        browser,
+        web,
         live_sessions: Default::default(),
         services,
         levels,
@@ -368,6 +442,7 @@ async fn run() -> anyhow::Result<()> {
     let _krunner = if kagent_core::platform::desktop() == kagent_core::platform::Desktop::Kde { krunner::serve(state.clone()).await } else { None };
     tracing::info!("platform: {}", kagent_core::platform::summary());
     tasks::start(state.clone());
+    state.bots.start(state.notifier.clone(), state.alerts.clone());
     rounded::watch(state.windows.clone(), 14);
     {
         // Name old sessions that still have a placeholder title.
