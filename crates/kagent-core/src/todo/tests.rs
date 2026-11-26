@@ -48,6 +48,7 @@ fn agent_over(dir: &Path, mode: PermissionMode) -> (Arc<Agent>, broadcast::Sende
     };
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(NoModel),
         tools: Arc::new(registry),

@@ -74,6 +74,8 @@ pub enum SendOutcome {
 pub struct AgentDeps {
     /// Change journal + root helper for mutating tools (`None` in tests).
     pub services: Option<Arc<crate::tool::ToolServices>>,
+    /// The daemon's hooks of the loop (hooks.md section 4); `None`: no hook runs.
+    pub hooks: Option<Arc<dyn super::hooks::AgentHooks>>,
     pub audit: Option<Arc<crate::audit::AuditLog>>,
     pub model: Arc<dyn ModelClient>,
     pub tools: Arc<ToolRegistry>,

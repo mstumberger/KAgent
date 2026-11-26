@@ -52,6 +52,7 @@ async fn rig(mode: PermissionMode, rules: Vec<AllowRule>, responses: Vec<ModelRe
     let permissions = Arc::new(PermissionEngine::new(mode, rules));
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(model.clone()),
         tools: Arc::new(tools),

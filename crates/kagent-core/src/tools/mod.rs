@@ -69,7 +69,8 @@ pub fn group_of(name: &str) -> &'static str {
         "web_fetch" | "web_search" => "web",
         "package" | "measure" | "undo_change" | "list_changes" => "change",
         "audio_control" | "bluetooth_control" | "wifi" | "display" | "windows" | "notify" | "open" => "desktop",
-        "media" | "open_in_editor" | "projects" | "focus_context" | "clipboard" | "input" | "browser" | "ui" | "terminal" | "system_power" | "sessions" | "screen" | "message" => "desktop",
+        // `widget_show` (tools.md section 22) is registered by the daemon like `ui` and `sessions`.
+        "media" | "open_in_editor" | "projects" | "focus_context" | "clipboard" | "input" | "browser" | "ui" | "terminal" | "system_power" | "sessions" | "screen" | "message" | "widget_show" => "desktop",
         "security_report" | "list_alerts" => "security",
         "router_status" | "lan_devices" | "router_log" | "router_lists" | "traffic_top"
         | "router_block_ip" | "router_unblock_ip" => "router",
@@ -170,5 +171,12 @@ mod group_tests {
             assert_eq!(super::group_of(name), "web", "{name} is a tool of the web group");
         }
         assert!(crate::context::GROUP_PRIORITY.contains(&"web"), "and the group is among those kept when the window is small");
+    }
+
+    /// `widget_show` (tools.md section 22) is registered the same way.
+    #[test]
+    fn the_widget_tool_belongs_to_the_desktop_group() {
+        assert_eq!(super::group_of("widget_show"), "desktop", "the group tools.md section 22 names");
+        assert!(crate::context::GROUP_PRIORITY.contains(&"desktop"), "and the group is among those kept when the window is small");
     }
 }

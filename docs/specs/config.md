@@ -272,9 +272,11 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
  "command": "/home/me/bin/notify-hook", "args": ["--quiet"], "shell": "",
  "timeoutMs": 5000, "async": false, "enabled": true}
 ```
-`id` is assigned by the daemon; `matcher` absent = every tool; `command` is an
-executable path or name resolved through `PATH` when `shell` is empty, otherwise one
-line run by that shell; `timeoutMs` 100..60000. Unknown keys are rejected.
+`id` is assigned by the daemon (`POST /api/hooks`) and required in the file; `event`
+is required and is the key the record sits under; `enabled` absent = on; `args` cannot
+be used with `shell`; `shell` is one program, run as `<shell> -c <command>`; `matcher`
+absent = every tool; `command` is an executable path or name resolved through `PATH`
+when `shell` is empty; `timeoutMs` 100..60000. Unknown keys are rejected.
 
 ### Session meta fields added (all optional, default empty)
 

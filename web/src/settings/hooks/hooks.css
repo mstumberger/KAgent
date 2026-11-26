@@ -1,0 +1,47 @@
+/* The Hooks page (hooks.md section 7). It keeps the rules of controls.css. */
+.hk-warning {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent);
+  background: color-mix(in srgb, var(--bad) 9%, transparent);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hk-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; }
+.hk-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
+.hk-cmd { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.hk-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
+.hk-meta code { font-size: 11.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--rim, var(--border, #444)); }
+.hk-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.hk-actions button { padding: 4px 10px; font-size: 12.5px; }
+
+.hk-editor { max-width: 620px; }
+.hk-editor textarea { font-size: 12.5px; }
+.hk-mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace !important; font-size: 12.5px !important; }
+.hk-find { max-width: 240px; }
+.hk-chips { max-height: 150px; overflow-y: auto; margin: 6px 0; }
+.hk-timeout input { max-width: 140px; }
+.hk-error { color: var(--bad); font-size: 13px; margin: 0 0 8px; overflow-wrap: anywhere; }
+
+.hk-test { display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
+.hk-sample { font-size: 12px !important; }
+.hk-result { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rim, var(--border, #444)); }
+.hk-result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.hk-output {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow-y: auto;
+  opacity: 0.92;
+}
+
+@media (max-width: 720px) {
+  .hk-actions { margin-left: 0; }
+}

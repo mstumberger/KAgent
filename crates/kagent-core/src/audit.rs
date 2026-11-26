@@ -20,11 +20,14 @@ pub enum AuditKind {
     Containment,
     Start,
     Stop,
+    /// A hook command ran (hooks.md section 2).
+    Hook,
 }
 
 impl AuditKind {
     fn as_str(&self) -> &'static str {
         match self {
+            Self::Hook => "hook",
             Self::ToolCall => "toolCall",
             Self::Approval => "approval",
             Self::Change => "change",

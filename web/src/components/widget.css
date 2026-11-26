@@ -1,0 +1,35 @@
+/* An inline widget (widgets.md): a titled panel inside an answer. Widget.tsx sizes the frame
+   by the height the fragment reports; the tokens are those of index.css. */
+.inline-widget {
+  margin: 10px 0;
+  max-width: 100%;
+}
+.inline-widget-title {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--glass);
+  border: 1px solid var(--rim);
+  border-bottom: 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+}
+.inline-widget iframe {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  background: var(--glass);
+}
+.inline-widget:has(.inline-widget-title) iframe {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.inline-widget-wait,
+.inline-widget-missing {
+  margin: 10px 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--dim);
+  border: 1px dashed var(--rim);
+  border-radius: var(--radius-m);
+}

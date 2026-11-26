@@ -104,6 +104,7 @@ async fn rig(script: Vec<Reply>, config: AgentConfig, compaction: CompactionConf
     let cfg = config;
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(model.clone()),
         tools: Arc::new(tools),

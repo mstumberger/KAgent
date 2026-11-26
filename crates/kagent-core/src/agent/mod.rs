@@ -21,6 +21,7 @@ use crate::tool::ToolRegistry;
 mod calls;
 pub mod children;
 mod config;
+pub mod hooks;
 pub mod title;
 pub(crate) mod state;
 mod turn;
@@ -31,6 +32,7 @@ use crate::context::history_budget_tokens;
 use state::{SessionState, Taken, TurnInput};
 use turn::TurnCell;
 pub use config::{AgentConfig, AgentDeps, CompactionSource, ConfigSource, RuleSink, SendOutcome, TurnContext, TurnOpts};
+pub use hooks::{AgentHooks, HookEvent, HookInput, HookVerdict, ToolHooks};
 pub use turn::{TurnHandle, TurnResult};
 pub use crate::compact::is_capacity_error;
 pub const DEFAULT_TITLE: &str = "New session";
@@ -56,6 +58,8 @@ pub struct Agent {
     compaction: Mutex<Option<CompactionSource>>,
     /// The subagents of this run and what a restricted session may do (`children.rs`).
     pub(crate) children: children::Children,
+    /// The daemon's hooks of the loop, and the context they added (`hooks.rs`).
+    pub(crate) hooks: hooks::HookState,
 }
 
 impl Agent {
@@ -76,6 +80,7 @@ impl Agent {
             services: deps.services,
             compaction: Mutex::new(None),
             children: Default::default(),
+            hooks: hooks::HookState::new(deps.hooks),
         })
     }
 
@@ -200,6 +205,7 @@ impl Agent {
             via: input.via,
         });
         let mut usage = Usage::default();
+        let via = input.via;
         let run = futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(
             self.turn_loop(session_id, turn_id, input, state, cancel, &mut usage, cell.text.clone()),
         ));
@@ -232,6 +238,8 @@ impl Agent {
             error: error.clone(),
             usage: usage.clone(),
         });
+        // Hooks (hooks.md section 4): `Stop` after `TurnFinished`; what it adds waits for the next turn.
+        self.stop_hooks(session_id, turn_id, via, status, error.as_deref()).await;
         TurnResult { status, error, text, usage }
     }
 
@@ -258,6 +266,11 @@ impl Agent {
         if config.model_ref.trim().is_empty() {
             anyhow::bail!("no chat model selected - pick one in Settings -> Providers");
         }
+        // Hooks (hooks.md section 4): `SessionStart` before the first turn of a session, then
+        // `UserPromptSubmit`. What they add, and what a `PostToolUse` hook adds, is a stored
+        // user message in the next model request: at most `hook_budget` characters a turn.
+        self.turn_hooks(session_id, state, &input.text, input.via).await;
+        let mut hook_budget = hooks::CONTEXT_CHARS_PER_TURN;
         self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via)]).await?;
         let mut iteration = 0usize;
         loop {
@@ -279,6 +292,7 @@ impl Agent {
                 .collect();
             self.push_messages(session_id, state, steering).await?;
             config.system_prompt.push_str(&late);
+            self.push_messages(session_id, state, self.hook_messages(session_id, &mut hook_budget)).await?;
 
             iteration += 1;
             if iteration > config.max_iterations.max(1) {

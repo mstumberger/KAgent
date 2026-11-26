@@ -192,6 +192,7 @@ pub async fn rig(scripts: &[(&str, Vec<Step>)], mode: PermissionMode) -> Rig {
     cfg.system_prompt = "BASE PROMPT.".into();
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(model.clone()),
         tools: Arc::new(tools),

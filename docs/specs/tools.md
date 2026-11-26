@@ -473,7 +473,7 @@ Profiles, completion notifications and limits: `agents.md`.
 
 | Tool | Assess | Input | What |
 |---|---|---|---|
-| `widget_show` | MUT, risk low, no approval | `{title: string (<= 80), html: string (<= 24 KB)}` | saves `<data>/widgets/<sessionId>/<n>.html` and returns the marker `::widget{id="<sessionId>/<n>"}` to place on its own line in the answer. Session `mcp` -> error "widgets need a chat session". Rendering and sandbox: `widgets.md` |
+| `widget_show` | MUT, risk low, no approval | `{title: string (<= 80), html: string (<= 24 KB; it may also come as an array of lines, joined with line breaks: the schema says `anyOf` string or array of strings, S20)}` | saves `<data>/widgets/<sessionId>/<n>.html` with its title in `<n>.title` (the title is shown above the panel), refuses `html` over 24 KB, empty or of another form, and returns the marker `::widget{id="<sessionId>/<n>"}` to place on its own line in the answer. Session `mcp` -> error "widgets need a chat session". Rendering and sandbox: `widgets.md` |
 
 ## 23. Changes to existing tools
 

@@ -200,6 +200,7 @@ mod tests {
         };
         let agent = Agent::new(AgentDeps {
             services: None,
+            hooks: None,
             audit: None,
             model: Arc::new(FakeModel(std::sync::Mutex::new(steps))),
             tools: Arc::new(registry),

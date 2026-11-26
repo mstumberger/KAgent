@@ -317,7 +317,8 @@ impl Settings {
         self.section::<crate::memory::MemorySection>("memory")?.validate()?;
         self.section::<crate::web::settings::SearchSection>("search")?.validate()?;
         self.section::<crate::bots::settings::TelegramSection>("telegram")?.validate()?;
-        self.section::<crate::subagents::SubagentsSection>("subagents")?.validate()
+        self.section::<crate::subagents::SubagentsSection>("subagents")?.validate()?;
+        self.section::<crate::hooks::config::HooksSection>("hooks")?.validate()
     }
 
     /// settings.startWidget (default true): open the small widget when the daemon starts.

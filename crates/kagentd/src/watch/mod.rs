@@ -59,6 +59,8 @@ pub struct AlertManager {
     quiet: Mutex<Option<(u32, u32)>>,
     /// The Telegram push (bots.md section 5); `None` until the bots module registers it.
     telegram: Mutex<Option<Arc<dyn AlertPush>>>,
+    /// The hooks of the `AlertRaised` event (hooks.md); `None` until the hooks hub registers.
+    hooks: Mutex<Option<Arc<dyn AlertPush>>>,
 }
 
 const MAX_ALERTS: usize = 500;
@@ -98,12 +100,18 @@ impl AlertManager {
             notify,
             quiet: Mutex::new(parse_quiet("23:00-07:00")),
             telegram: Mutex::new(None),
+            hooks: Mutex::new(None),
         })
     }
 
     /// Register the Telegram push (S29).
     pub fn set_alert_push(&self, push: Arc<dyn AlertPush>) {
         *self.telegram.lock().unwrap() = Some(push);
+    }
+
+    /// Register the hooks of the alerts (hooks.md section 4).
+    pub fn set_alert_hooks(&self, hooks: Arc<dyn AlertPush>) {
+        *self.hooks.lock().unwrap() = Some(hooks);
     }
 
     pub fn set_quiet_hours(&self, s: &str) {
@@ -222,6 +230,9 @@ impl AlertManager {
             self.desktop_notify(&alert);
             if let Some(push) = self.telegram.lock().unwrap().clone() {
                 push.raised(&alert);
+            }
+            if let Some(hooks) = self.hooks.lock().unwrap().clone() {
+                hooks.raised(&alert);
             }
         } else {
             let _ = self.events.send(AgentEvent::AlertUpdated { alert: v });

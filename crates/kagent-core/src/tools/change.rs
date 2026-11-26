@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use super::exec::exec;
 use super::privop::{apply_root, query_root, record_user};
 use super::parse;
+use crate::agent::hooks::protect;
 use crate::tool::{CallAssessment, Risk, SideEffect, Tool, ToolContext, ToolContract, ToolOutput};
 
 fn home() -> PathBuf {
@@ -271,7 +272,12 @@ impl Tool for WriteFile {
     fn assess(&self, input: &Value) -> CallAssessment {
         let path = input.get("path").and_then(Value::as_str).unwrap_or("?");
         let canon = home_path(path).map(|p| p.display().to_string()).unwrap_or_else(|| path.to_string());
-        CallAssessment::from_contract(&self.contract, format!("write {canon}"), format!("write {canon}"))
+        let mut a = CallAssessment::from_contract(&self.contract, format!("write {canon}"), format!("write {canon}"));
+        // KAgent's own configuration (hooks.md section 5): a card in every mode, never rememberable.
+        if protect::is_protected(path) {
+            a = a.destructive();
+        }
+        a
     }
     async fn preview(&self, input: &Value, _ctx: &ToolContext) -> Option<String> {
         let path = home_path(input.get("path")?.as_str()?)?;
@@ -356,6 +362,10 @@ impl Tool for EditFile {
             a.privileged = true;
             a.always_ask = true;
             a.risk = Risk::High;
+        }
+        // KAgent's own configuration (hooks.md section 5): a card in every mode, never rememberable.
+        if protect::is_protected(path) {
+            a = a.destructive();
         }
         a
     }

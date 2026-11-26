@@ -161,6 +161,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/agents", get(crate::subagents::http::list))
         .route("/agents/{name}", put(crate::subagents::http::put_profile).delete(crate::subagents::http::delete))
         .route("/sessions/{id}/subagents/{child}/stop", post(crate::subagents::http::stop))
+        .route("/hooks", get(crate::hooks::http::list).post(crate::hooks::http::create))
+        .route("/hooks/{id}", put(crate::hooks::http::update).delete(crate::hooks::http::delete))
+        .route("/hooks/{id}/test", post(crate::hooks::http::test))
+        .route("/widgets/{session}/{id}", get(crate::widgets::get_widget))
         .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
 
     let app = Router::new()

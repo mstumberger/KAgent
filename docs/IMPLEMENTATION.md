@@ -739,7 +739,7 @@ Check: the standard checks with `web/` and the gated Ollama test and smoke scrip
 
 ### S33 - Inline widgets (~500 lines, plus the renderer)
 Spec: `specs/widgets.md` (all); `specs/tools.md` section 22; `specs/api.md` section 6 (widgets row).
-Read: `web/src/components/Markdown.tsx` (whole), `web/src/api.ts:1-64` (the token and the helpers), `crates/kagentd/src/server.rs:86-135`, `crates/kagentd/src/tools/sessions.rs` (export), `crates/kagent-core/src/util.rs` (`speakable`), `crates/kagentd/src/ui.rs:188-215` (a daemon tool's contract).
+Read: `web/src/components/Markdown.tsx` (whole), `web/src/api.ts` (the token and the helpers), `crates/kagentd/src/server.rs`, `crates/kagent-core/src/tools/sessions.rs` (export), `crates/kagent-core/src/util.rs` (`speakable`), `crates/kagentd/src/ui.rs` (a daemon tool's contract); a session is deleted in `crates/kagent-core/src/agent/children/run.rs` (`delete_session`), called from `crates/kagentd/src/api.rs`.
 Do:
 - `kagentd/src/widgets.rs`: the store (`<data>/widgets/...`), the `widget_show` tool (group `desktop`), the route with `Content-Type: text/html`.
 - Bundled `skills/widget-design/SKILL.md`.
@@ -2267,6 +2267,151 @@ No release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was n
   (`agent_run` MUT, or in `PLAN_ALLOWED`); a line about subagents in the system
   prompt.
 
+### Session 2026-11-26 (S32 hooks)
+
+One background agent, alone (175 tool calls, about 119 minutes). 601 workspace tests
+(560 before), 2 ignored. No release build, no restart, no `kagentd` running;
+`scripts/smoke-api.sh` was not run.
+- Files: core `agent/hooks.rs` (the traits, `HookEvent`, `HookInput`, the loop's call
+  sites) and `agent/hooks/protect.rs` (the protection table), with their tests;
+  `tests/hooks/{main,rig}.rs` (8 scripted-model tests; one file would have been 467
+  lines); daemon `hooks/{mod,config,runner,http}.rs` with 27 tests; web
+  `settings/sections/Hooks.tsx` and
+  `settings/hooks/{api.ts,draft.ts,HookEditor.tsx,TestPanel.tsx,hooks.css}`. Forced:
+  `hooks: None` in eleven `AgentDeps` literals (the test rigs of earlier stages and
+  `agent/turn.rs`). `lib.rs` needed no line: `mod hooks;` is in `agent/mod.rs`.
+- **The protection (hooks.md section 5) is the engine's `destructive` gate**:
+  `always_ask` is let through by `full` (S27), so `write_file`, `edit_file` and
+  `shell` mark such a call destructive. The card asks in every mode, is never
+  rememberable, and says "potentially destructive: needs your explicit confirmation".
+  The shell rule follows `cd` and `cwd`, reads `~`, `$HOME`, `${HOME}`, quotes and
+  wildcards, and covers redirects, `tee`, `sed -i`, `rm`, `ln`, `mv` and `cp` (into
+  the path). `looks_destructive` already asked for `> /absolute`. The protected paths
+  are read from the environment at each assessment (`KAGENT_HOME`, else XDG).
+- `pre` runs after the schema check; a replaced input is normalized, validated and
+  assessed again before `authorize`. The first denial ends the hooks. `ask` forces a
+  card with `can_remember: false`.
+- All hook context is stored as `[hook <event>] ...` at the next model-request
+  boundary (at most 4000 characters a turn); `UserPromptSubmit`'s is in the first
+  request of its turn. `SessionStart` means the session's history is empty (a
+  subagent's first turn too). `Stop` is awaited after `TurnFinished`, up to its
+  deadline: a hung Stop hook keeps `wait_idle` waiting that long.
+- Hook output: exit 0 and an empty stdout is no decision; stdout that is not one JSON
+  object, an unknown decision, a wrong type or over 64 KB fails the hook (non-blocking,
+  a `notice` (warn): "Hook '<id>' (<Event>) failed: <why>. The agent goes on without
+  it."); exit 2 is a deny with the first 500 characters of stderr. Audit record `hook`:
+  event, hookId, command, exitCode, durationMs, decision, timedOut. The input is
+  redacted in `PostToolUse` too.
+- The runner clears the environment (PATH, HOME, LANG and USER from the daemon's),
+  runs in its own process group, kills the group with KILL at the deadline, and lets
+  the pipes go 500 ms after the hook exits. `async` context is handed to the next
+  `UserPromptSubmit` of the session, labelled "(from the <Event> hook '<id>', run in
+  the background)".
+- Config: `event` is required and must equal the key it sits under; `id` is required
+  in the file; `args` with `shell` is refused; `shell` is one program; a typo gets
+  "(did you mean ...?)". A record without `enabled` is on (the first version read it
+  as off: caught by a test, as were a `cd` target with a trailing space and a
+  character count done in bytes).
+- API (the spec is corrected): `GET /api/hooks` answers `samples` too; a test result
+  answers `error` and leaves `decision` out when the hook decided nothing.
+- UI: the page draws its own rows (rows with a switch); the form and the test panel
+  open above the list. While writing the harness stub a bug was found and fixed: the
+  page read the tool names from the wrong place of `/api/tools`.
+- Real model (in process, `/tmp/kagent-s32-evidence`: the daemon's `runner.rs` by
+  path): smoke 3 of 3 plain and 3 of 3 with five `/bin/sh` hooks, one per event (every
+  event asked in order, the context stored and in the requests, one `hook` audit
+  record per run).
+- Verification: build clean; 601 tests; the gated Ollama test; `pnpm -C web lint`
+  (4 warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s32-dist`; `web/dist` unchanged). Headless 88 of 88, twice, on the
+  Hooks section (empty state, a hook from each field, the daemon's refusal above the
+  form, grouping, the switch, Edit, Delete, Test with a denial, a timeout and a sample
+  that is not JSON), on an own dev server (5213) and an own Chrome (CDP 9363); nothing
+  sent to 127.0.0.1:7878. Seven earlier passes failed on mistakes of the harness; one
+  did not stop its own dev server and Chrome, which were stopped by their pid. Harness
+  `/tmp/kagent-s32-harness`, screenshots `/tmp/kagent-s32-shots` (not in the repo).
+- Seen, not changed: **`<config>/token` has no guard in the file tools.** With it,
+  `curl` could write the settings in `trusted` or `full`, which is a hook past the
+  protection of section 5. Read, not tried. The coordinator adds: with the same token
+  the agent could also answer its own approval cards through `POST /api/approvals/:id`
+  (for instance from a background shell task of S31 while a card waits), which would
+  bypass the rule that destructive actions ask in every mode; read, not tried either.
+  An interpreter (`python3`, `perl -i`), `install`, `truncate` or `dd` on a protected
+  file is not in the shell rule. A tool card in the chat shows the model's input, not
+  what a hook replaced it with. A tool call of the live voice bridge is told as
+  `via: text`. A desktop notification hook gets no `DISPLAY` or D-Bus address.
+  `main.rs` is 505 lines, `settings.rs` 436, `change.rs` 433, `watch/mod.rs` 401. The
+  status lines of `AGENTS.md` and the phase 4 header above still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenario S32 items 4 and 5 through the live UI. Open:
+  should `Stop` run without being awaited? Should the token file be kept from the file
+  tools (the coordinator recommends yes)?
+
+### Session 2026-11-26 (S33 inline widgets)
+
+Two agent runs. The first stopped after 22 seconds without one tool call and asked, in
+Chinese, where its brief conflicts with AGENTS.md; the second brief lists those
+differences at its top and says that nobody answers questions. The second run (232
+tool calls, about 82 minutes) did the stage. 615 workspace tests (601 before), 2
+ignored. No release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was
+not run. With this stage phase 4 is implemented from S17 to S33.
+- Files: `kagentd/src/widgets.rs` (the store, `widget_show`, the route; 12 tests in
+  `widgets/tests.rs`), the bundled `widget-design` skill (53 lines), web
+  `components/Widget.tsx` and `widget.css`, the directive step of `Markdown.tsx`.
+  Forced: none. `util.rs` and `agent/mod.rs` needed no line (`speakable` already
+  dropped `::widget{...}`; `Agent::delete_session` is in `agent/children/run.rs`, so
+  the removal hangs off `api.rs::delete_session`, +3). `main.rs` (512) and `api.rs`
+  (504) were over 400 before (+7, +3).
+- **The marker is not JSON**: the spec gives `::widget{id="<s>/<n>"}` and asked for "a
+  JSON object". The UI renders the marker's form, or the same braces as a JSON object,
+  nothing else. `title` is wired end to end: `<n>.title`, `X-KAgent-Title`
+  (percent-encoded), the line above the panel.
+- `.count` notes the last number of a session and is written first (a failed write
+  leaves a gap, never a number used twice). The route: 400 for a session id that is
+  not plain or an id not 1 to 200; 404 unless a regular file is there (a link is not
+  followed); `Cache-Control: no-store`. `html` takes one text or lines (the S20 trap),
+  checked in the tool. Session `mcp`: "widgets need a chat session".
+- The canvas of a frame is `--k-glass` (Chrome paints white under a root that says
+  nothing); the `--k-*` variables are the page's tokens of the same names. The resize
+  script measures the body (the root's `scrollHeight` fed the frame's own height
+  back), skips the call before the frame is laid out, and posts on a change of the
+  content and three times after loading: Chrome gives a frame off the screen no
+  `ResizeObserver` callback. The class is `inline-widget` (`.widget` is the voice
+  overlay). The headless pass found these three and a `root is not defined`.
+- Verification: build clean; 615 tests; the gated Ollama test; `pnpm -C web lint` (4
+  warnings, 0 errors, the baseline), `tsc -b` and the scratch build
+  (`/tmp/kagent-s33-dist`; `web/dist` unchanged). Headless 306 of 306, twice on the
+  final tree, on an own dev server (5233) and an own Chrome (CDP 9383): the samples at
+  1200x820 and 700x500, dark and light, with the page's tokens; the hostile fragment's
+  `fetch`, `top.location`, both storages, cookie, the parent's document and storage,
+  XHR, socket, image, form and popup refused (10 attempts, 10 blocked, none left the
+  browser); the height follows the content; nothing to 7878. The frames run in
+  processes of their own: the pass attaches to each and a frame reports on request.
+  One run hung on a `Page.navigate` that Chrome never answered: its dev server and
+  Chrome were stopped by the process groups the pass had started, and the pass got a
+  watchdog. Harness `/tmp/kagent-s33-harness`, screenshots `/tmp/kagent-s33-shots`,
+  the real-model project `/tmp/kagent-s33-evidence` (not in the repo).
+- Real model (qwen2.5:7b-instruct, in process, the daemon's registry of 67 tools):
+  smoke 3 of 3, twice. The gauge question at the 16 384 window keeps 36 of 67 tools and
+  drops `desktop`, so `widget_show` is never offered (`doctor` 6 of 6, `widget_show`
+  0 of 6; a replay of the exact request dropped nothing). At 32 768: `widget_show` 6
+  of 6, once, one text of 72 to 585 bytes, but before `doctor` in 6 of 6, with an
+  invented score; the marker as is on its own line in 3 of 6 (a second wording: the
+  same). One turn did not end within 240 s (not reproduced). The wording of the spec
+  stays.
+- Seen, not changed: **a fragment can send its own frame to another address** (a GET
+  without referrer or cookies; the top window stays): 5 to 6 requests a pass. In the
+  same harness, `frame-src 'none'` on the embedding page stops it and the srcdoc frame
+  still loads: a CSP on the app's document (`web/index.html`), not tried on the app.
+  `budget_tools` drops `desktop` at a small window. `Agent::delete_session` deletes
+  direct children only (read, not tried). `Markdown` serves PlanCard, Tasks, AgentsCard
+  and SkillDetail too. The status lines of `AGENTS.md` and the phase 4 header above
+  still say "not started".
+- Left for the owner: a release rebuild and a restart of the daemon and
+  `pnpm -C web build`, then scenario S33 items 2 and 4 with the Gemini model. Open: the
+  decision on a document CSP (the coordinator recommends one: `frame-src 'none'` with
+  `child-src`, or `frame-ancestors` as the app needs, on `web/index.html`).
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2287,7 +2432,7 @@ No release build, no restart, no `kagentd` running; `scripts/smoke-api.sh` was n
 - [x] S15 MikroTik + traffic
 - [x] S16 eBPF trace  -> Phase 3
 
-Phase 4 (planned 2026-11-24, not started; the order is the dependency order)
+Phase 4 (planned 2026-11-24, implemented 2026-11-25 to 2026-11-26; live-UI scenarios wait for the owner's release rebuild and restart)
 - [x] S17 agent foundations
 - [x] S18 skills library core (scenario item 6 fails with qwen2.5:7b-instruct, before and after S18: section E)
 - [x] S19 settings screen with a side menu (scenario item 5, a real chat turn, left for the owner)
@@ -2303,8 +2448,8 @@ Phase 4 (planned 2026-11-24, not started; the order is the dependency order)
 - [x] S29 Telegram bot (item 1 automatic; items 2 to 5 need the owner's bot: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; the `telegram` pill of item 3 was added with S30; section E)
 - [x] S30 web tools: fetch and search (items 1 to 5 automatic; items 3 to 5 by hand through the tool's code path with two requests to the web; the Settings -> Web page in the headless pass with stubbed routes; the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
 - [x] S31 subagents and background tasks (relaunched after an interrupted run; items 1 and 2 automatic; item 3 with the local model in process: two `agent_run` calls in 6 of 6 runs; items 3 to 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
-- [ ] S32 hooks
-- [ ] S33 inline widgets
+- [x] S32 hooks (items 1 to 3 automatic; item 4's rule on the scripted model and with `/bin/sh` hooks; the real local model with five hooks in process; the headless pass with stubbed routes; items 4 and 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
+- [x] S33 inline widgets (item 1 and item 3 automatic; item 2 with the real loop against the local model only: the tool is called when the window holds the daemon's 67 tools, before the data; items 2 and 4 by the owner with the Gemini model; open: a fragment can send its own frame away, a document CSP would stop it; section E)
 
 ## G. Owner actions (things KAgent prints, you run)
 

@@ -6,14 +6,17 @@ hook protocol (JSON in on stdin, JSON decision out). Configuration belongs to th
 (`settings.json`, 0600, edited in the UI). KAgent has no project-level hooks, so it
 needs no trust flow. The agent must not be able to create or change hooks.
 
+Hooks are off until the owner configures one: when no hook matches an event, nothing is
+spawned and the call path is unchanged.
+
 ## 1. Events
 
 | Event | When | Payload extra | May decide |
 |---|---|---|---|
-| `SessionStart` | before the first turn of a session | | no |
+| `SessionStart` | before the first turn of a session (its history is still empty; a subagent's first turn too) | | no |
 | `UserPromptSubmit` | before the first model request of a turn | `prompt` | may add context |
 | `PreToolUse` | in `execute_call`, after schema validation, before `authorize` | `tool`, `input` (redacted as in the audit), `assessment`, `summary` | allow, ask, deny; may replace the input |
-| `PostToolUse` | after the tool returned | `tool`, `input`, `output` (at most 4000 chars), `isError`, `durationMs` | may add context |
+| `PostToolUse` | after the tool returned | `tool`, `input` (redacted), `output` (at most 4000 chars), `isError`, `durationMs` | may add context |
 | `Stop` | after `TurnFinished` | `status`, `error` | no |
 | `AlertRaised` | when an alert is raised | `alert` | no |
 
@@ -22,55 +25,69 @@ needs no trust flow. The agent must not be able to create or change hooks.
 ## 2. Running a hook (`kagentd/src/hooks/runner.rs`)
 
 - Command: `command` with `args` (`tokio::process::Command`, no shell), or one line
-  through `shell` when it is set. Environment: `PATH`, `HOME`, `LANG`, `USER` only.
-- stdin: one JSON object `{event, ts, sessionId, via, ...extra}`.
-- Deadline `timeoutMs`: on timeout the process group is killed and the hook counts as
-  failed.
-- `async: true` (any event): started and not awaited; nothing waits for it, and only its
-  context output is used, for the next turn.
+  through `shell` when it is set (one program, run as `<shell> -c <command>`).
+  Environment: `PATH`, `HOME`, `LANG`, `USER` only (the daemon's values).
+- stdin: one JSON object `{event, ts, sessionId, via, ...extra}` (`via` of a tool
+  event is the via of the session's running turn).
+- Deadline `timeoutMs`: the hook runs in a process group of its own; on timeout the
+  group is killed with KILL and the hook counts as failed. After the hook exits its
+  pipes are given 500 ms.
+- `async: true` (any event): started and not awaited; nothing waits for it. Its context
+  is handed to the next `UserPromptSubmit` of the session, labelled "(from the <Event>
+  hook '<id>', run in the background)".
 - Every run writes an audit record (`AuditKind::Hook`: event, hook id, command, exit
-  code, duration, decision).
+  code, duration, decision, timed out).
 
 ## 3. Output
 
 - stdout: at most 64 KB, one JSON object (whitespace tolerated):
   `{"decision": "allow"|"ask"|"deny", "reason": "...", "additionalContext": "...",
-  "updatedInput": {...}}`.
-- Exit code 2 = deny; stderr (first 500 chars) is the reason. Any other non-zero code =
-  the hook failed: a non-blocking error. The agent continues as if the hook were not
-  there and a `notice` (warn) is shown.
+  "updatedInput": {...}}`. Other keys are ignored. Exit 0 with an empty stdout is no
+  decision. Anything else that is not one JSON object, an unknown `decision` or a
+  field of the wrong type fails the hook.
+- Exit code 2 = deny; stderr (first 500 chars) is the reason. Any other non-zero code
+  = the hook failed: a non-blocking error. The agent continues as if the hook were not
+  there (allow, the input unchanged) and a `notice` (warn) is shown: "Hook '<id>'
+  (<Event>) failed: <why>. The agent goes on without it."
 - `decision: allow` never relaxes anything: privileged, always-ask, destructive,
   read-only mode and plan mode keep their rules (the limit `toolOverrides` has).
-- `decision: ask` forces a card. `deny` ends the call with "not executed: <reason>".
-- `updatedInput` (`PreToolUse` only) replaces the input and goes through schema
-  validation again; when invalid, the call fails.
-- `additionalContext` goes into the next model request of that session as a stored user
-  message `[hook <event>] ...`, at most 4000 chars per turn.
+- `decision: ask` forces a card (it cannot be remembered). `deny` ends the call with
+  "not executed: <reason>". The first denial ends the hooks.
+- `updatedInput` (`PreToolUse` only) replaces the input: it is normalized, validated
+  and assessed again before `authorize`; when invalid, the call fails.
+- `additionalContext` is stored as a user message `[hook <event>] ...` at the next
+  model-request boundary of that session, at most 4000 chars per turn. The context of
+  `UserPromptSubmit` is in the first request of its turn, after the prompt.
 
 ## 4. Where the core calls hooks
 
 - `kagent-core` does not know the daemon's hooks. `ToolServices` gains
   `hooks: Option<Arc<dyn ToolHooks>>`:
-  `async fn pre(&self, call, assessment, session_id, input) -> HookInput` and
-  `async fn post(...)`, with `HookInput { verdict: Allow|Ask|Deny, reason, input }`.
+  `async fn pre(&self, session_id, call, assessment) -> HookInput` and
+  `async fn post(&self, session_id, call, output, is_error, duration_ms) -> Option<String>`
+  (the context), with `HookInput { verdict: Allow|Ask|Deny, reason, input, context }`.
 - The other events come through `AgentDeps.hooks: Option<Arc<dyn AgentHooks>>` with
-  `async fn event(&self, event: HookEvent<'_>) -> Option<String>` (the additional
-  context). The loop calls it before the first turn of a session (`SessionStart`),
-  before the first model request of a turn (`UserPromptSubmit`; its context is added
-  to that turn's prompt) and after `TurnFinished` (`Stop`). The daemon calls the runner
-  itself where an alert is raised (`AlertRaised`, `watch/mod.rs`).
+  `async fn event(&self, HookEvent) -> Option<String>` (the context). The loop calls
+  it before the first turn of a session (`SessionStart`: its history is still empty),
+  before the first model request of a turn (`UserPromptSubmit`) and after
+  `TurnFinished` (`Stop`, awaited, up to its deadline: a hung Stop hook keeps
+  `wait_idle` waiting that long). The daemon calls the runner itself where an alert is
+  raised (`AlertRaised`, `watch/mod.rs`).
 - `execute_call` calls `pre` between validation and `authorize`.
 - A hook that fails or is missing acts as Allow with the unchanged input.
-- When no hook matches an event, nothing is spawned and the call path is unchanged.
 
 ## 5. Protecting the configuration (same stage)
 
 - `write_file` and `edit_file` on `<config>/settings.json`, `<config>/agents/*`,
   `<config>/telegram.json`, `<data>/audit.jsonl` and `<data>/tasks.json` are
-  `always_ask` in every mode and never rememberable (the rule `browser eval` has).
+  `destructive` in every mode (the gate that asks in `full` too, the finding of S27:
+  `always_ask` is let through by `full`) and never rememberable; the card says
+  "potentially destructive". The paths are read from the environment at each
+  assessment (`KAGENT_HOME`, else XDG).
 - `shell`: a command whose text contains one of those paths together with a redirect or
-  an in-place edit (`>`, `>>`, `tee`, `sed -i`, `rm`, `mv`, or `cp` into the path) is
-  `always_ask` as well.
+  an in-place edit (`>`, `>>`, `tee`, `sed -i`, `rm`, `ln`, `mv`, or `cp` into the
+  path; a `cd` in the line and the call's `cwd` are followed; `~`, `$HOME` and
+  `${HOME}` are read, so are quotes and wildcards) is `destructive` as well.
 - Reason: in `trusted` and `full` the agent could otherwise write a hook or a rule that
   runs with the owner's privileges at the next event.
 
@@ -81,10 +98,10 @@ payload and returns its output; nothing from a test reaches the agent.
 
 ## 7. UI: Settings -> Hooks
 
-- List grouped by event. Rows: command, matcher, async, an enabled toggle, Test, Edit,
-  Delete.
-- Form: event, matcher (tool chips from `/api/tools`), command, arguments (one per
-  line), shell, timeout, run in background. Save, Cancel.
+- List grouped by event. Rows (the page draws its own rows): command, matcher, async,
+  an enabled toggle, Test, Edit, Delete.
+- Form (it opens above the list): event, matcher (tool chips from `/api/tools`),
+  command, arguments (one per line), shell, timeout, run in background. Save, Cancel.
 - Test panel: event, a sample JSON (the documented example by default), Run, and the
   result (exit code, stdout, stderr, decision, duration).
 - A line at the top: "Hooks run with your user's privileges while the agent works.
@@ -93,11 +110,15 @@ payload and returns its output; nothing from a test reaches the agent.
 ## 8. Tests (no root)
 
 - Config: parsing; an unknown key is rejected; an invalid event is rejected; a matcher
-  on another event than the two tool events is rejected.
-- Runner: the stdin payload; exit 0 with each decision; exit 2 denies with stderr;
-  another exit code is a failure with a notice; a timeout kills (`sleep 30` with a
-  200 ms limit); `async` returns at once.
-- Core (`tests/agent_loop.rs`): allow cannot relax a destructive call; ask forces the
-  broker; deny ends the call; `updatedInput` is validated; a failing hook is
-  non-blocking; no hook means no change.
-- Protection table: the file tools and the shell patterns are `always_ask`.
+  on another event than the two tool events is rejected; a record without `enabled`
+  is on.
+- Runner: the stdin payload; the environment holds only the four variables; exit 0
+  with each decision; exit 0 with an empty stdout; exit 2 denies with stderr; another
+  exit code is a failure with a notice; a timeout kills `sleep 30` under a 200 ms
+  limit; `async` returns at once; output over 64 KB.
+- Core (`tests/hooks`, scripted model): allow cannot relax a destructive call; ask
+  forces the broker; deny ends the call; `updatedInput` is validated; a failing hook
+  is non-blocking; no hook means no change and no spawn; scenario item 4's rule (a
+  `PreToolUse` hook that denies `shell` commands containing `curl`).
+- Protection table: the file tools and the shell patterns ask in every mode,
+  including `full`.

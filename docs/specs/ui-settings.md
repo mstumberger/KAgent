@@ -116,7 +116,8 @@ until now UI work needed a production build and a reload for every change.
 ## 8. Rules for later stages
 
 - A new settings section never adds a main tab.
-- It uses `SectionPage`, `ListDetail`, `Toggle`, `Badge` and `useSettingPatch`.
+- It uses `SectionPage`, `Toggle`, `Badge` and `useSettingPatch`; a page whose rows
+  carry a switch (Skills, Hooks) draws its own rows instead of `ListDetail`.
 - It adds its id to `registry.ts` and to `ui.rs` `SECTIONS`.
 - It is verified in headless Chrome, dark and light, at 1200x820 and 700x500.
 

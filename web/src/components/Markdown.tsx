@@ -1,7 +1,42 @@
 // Minimal, safe markdown: builds React elements (never innerHTML), so model output
 // cannot inject markup. Supports fenced code, headings, lists, quotes, tables (as
-// preformatted), inline code, bold, italic and http(s) links.
+// preformatted), inline code, bold, italic and http(s) links, and one directive,
+// `::widget{...}` (widgets.md section 2): it becomes a panel in a sandboxed frame.
 import type { ReactNode } from "react";
+import Widget from "./Widget";
+
+/** A directive line (widgets.md section 2): `::name{...}` alone on the line. */
+const DIRECTIVE = /^::([a-z]+)\{(.*)\}$/;
+/** A widget id as the tool writes it: a plain session id, a slash, a number. */
+const WIDGET_ID = /^[A-Za-z0-9_-]{1,64}\/[1-9][0-9]{0,2}$/;
+/** The marker's own form: `name="value"` pairs, separated by spaces or commas. */
+const PAIRS = /^([a-z][a-z0-9_]*\s*=\s*"[^"]*"\s*,?\s*)+$/;
+
+/** What the braces of a directive hold: a JSON object, or the marker's own pairs; `null` for anything else. */
+function directiveAttrs(body: string): Record<string, string> | null {
+  try {
+    const parsed: unknown = body.trim().startsWith("{") ? JSON.parse(body) : JSON.parse(`{${body}}`);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const attrs: Record<string, string> = {};
+      for (const [name, value] of Object.entries(parsed)) {
+        if (typeof value !== "string") return null;
+        attrs[name] = value;
+      }
+      return attrs;
+    }
+  } catch {
+    // Not JSON: the marker's own form below.
+  }
+  if (!PAIRS.test(body)) return null;
+  return Object.fromEntries([...body.matchAll(/([a-z][a-z0-9_]*)\s*=\s*"([^"]*)"/g)].map((m) => [m[1], m[2]]));
+}
+
+/** `widget` is the only directive. An unknown name, or a body that is not understood, is text. */
+function Directive({ name, body, line }: { name: string; body: string; line: string }) {
+  const id = name === "widget" ? directiveAttrs(body)?.id : undefined;
+  if (id && WIDGET_ID.test(id) && Number(id.slice(id.indexOf("/") + 1)) <= 200) return <Widget id={id} />;
+  return <p>{inline(line, "directive")}</p>;
+}
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -47,6 +82,12 @@ export default function Markdown({ text }: { text: string }) {
       );
       continue;
     }
+    const directive = DIRECTIVE.exec(line);
+    if (directive) {
+      blocks.push(<Directive key={key()} name={directive[1]} body={directive[2]} line={line} />);
+      i++;
+      continue;
+    }
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
     if (h) {
       const level = Math.min(h[1].length + 2, 6);
@@ -89,7 +130,7 @@ export default function Markdown({ text }: { text: string }) {
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(```|#{1,4}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\|)/.test(lines[i])) para.push(lines[i++]);
+    while (i < lines.length && lines[i].trim() && !/^(```|#{1,4}\s|>|\s*([-*+]|\d+[.)])\s+|\s*\||::[a-z]+\{)/.test(lines[i])) para.push(lines[i++]);
     blocks.push(<p key={key()}>{inline(para.join(" "), `p${n}`)}</p>);
   }
   return <div className="md">{blocks}</div>;

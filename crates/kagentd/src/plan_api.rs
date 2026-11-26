@@ -90,6 +90,7 @@ mod tests {
         let cfg = AgentConfig { model_ref: "p::m".into(), system_prompt: String::new(), max_iterations: 4, options: Default::default(), privilege: Default::default(), context_tokens: 0, fallback_model_ref: String::new(), fallback_context_tokens: 0, fallback_max_output: None };
         let agent = Agent::new(AgentDeps {
             services: None,
+            hooks: None,
             audit: None,
             model: Arc::new(NoModel),
             tools: Arc::new(registry),

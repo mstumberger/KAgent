@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+use super::hooks::HookRefusal;
 use super::Agent;
 use crate::permission::{AllowRule, ApprovalDecision, ApprovalKind, ApprovalRequest, Decision};
 use crate::protocol::{AgentEvent, Message, ToolCall, ToolCallStatus};
@@ -115,6 +116,21 @@ impl Agent {
             return self.finish(session_id, turn_id, &call, ToolCallStatus::Error, msg, started, assessment.summary);
         }
 
+        // Hooks (hooks.md sections 1 and 4): `PreToolUse` after the schema check and before
+        // `authorize`. It may end the call, ask for a card (`hook_ask`) or replace the input.
+        let (mut call, mut assessment) = (call, assessment);
+        let mut hook_ask = None;
+        if let Err(refusal) = self.pre_tool_hook(session_id, &mut call, &mut assessment, &mut hook_ask).await {
+            let (status, msg) = match refusal {
+                HookRefusal::Denied(reason) => {
+                    let status = if cancel.is_cancelled() { ToolCallStatus::Cancelled } else { ToolCallStatus::Denied };
+                    (status, format!("not executed: {reason}"))
+                }
+                HookRefusal::Invalid(msg) => (ToolCallStatus::Error, msg),
+            };
+            return self.finish(session_id, turn_id, &call, status, msg, started, assessment.summary);
+        }
+
         let requested_timeout = call.input.get("timeout_ms").and_then(Value::as_u64);
         let timeout_ms = requested_timeout.unwrap_or(contract.default_timeout_ms).min(contract.max_timeout_ms);
         let ctx = ToolContext {
@@ -126,14 +142,14 @@ impl Agent {
             call_id: call.id.clone(),
             services: self.services.clone(),
         };
-        // Dry run for the approval card, only when we are going to ask.
-        let preview = if matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }) {
+        // Dry run for the approval card, only when we are going to ask (the engine, or a hook).
+        let preview = if hook_ask.is_some() || matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }) {
             tokio::time::timeout(Duration::from_secs(20), tool.preview(&call.input, &ctx)).await.ok().flatten()
         } else {
             None
         };
 
-        match self.authorize(session_id, &call, &assessment, preview, cancel).await {
+        match self.authorize(session_id, &call, &assessment, preview, cancel, hook_ask).await {
             Ok(()) => {}
             Err(reason) => {
                 let status = if cancel.is_cancelled() { ToolCallStatus::Cancelled } else { ToolCallStatus::Denied };
@@ -155,9 +171,15 @@ impl Agent {
             None => (ToolCallStatus::Error, format!("timed out after {timeout_ms} ms")),
         };
         let content = budget_output(&content, contract.max_output_bytes);
-        self.finish(session_id, turn_id, &call, status, content, started, assessment.summary)
+        let (is_error, duration_ms) = (status != ToolCallStatus::Ok, started.elapsed().as_millis() as u64);
+        let done = self.finish(session_id, turn_id, &call, status, content.clone(), started, assessment.summary);
+        // Hooks (hooks.md section 1): `PostToolUse` after the tool returned.
+        self.post_tool_hook(session_id, &call, &content, is_error, duration_ms).await;
+        done
     }
 
+    /// Ask the broker for `call` (hooks.md section 3 for `hook_ask`: what the engine
+    /// would allow gets its card too, and a hook is never satisfied by a remembered rule).
     async fn authorize(
         &self,
         session_id: &str,
@@ -165,68 +187,77 @@ impl Agent {
         assessment: &CallAssessment,
         preview: Option<String>,
         cancel: &CancellationToken,
+        hook_ask: Option<String>,
     ) -> Result<(), String> {
-        match self.permissions.evaluate(session_id, &call.name, assessment) {
-            Decision::Allow { .. } => Ok(()),
-            Decision::Deny { reason } => Err(reason),
-            Decision::Ask { reason } => {
-                let request = ApprovalRequest {
-                    request_id: uuid::Uuid::new_v4().to_string(),
-                    session_id: session_id.into(),
-                    call_id: call.id.clone(),
-                    tool: call.name.clone(),
-                    kind: ApprovalKind::Tool,
-                    input: call.input.clone(),
-                    summary: assessment.summary.clone(),
-                    reason,
-                    risk: assessment.risk,
-                    privileged: assessment.privileged,
-                    destructive: assessment.destructive,
-                    can_remember: !assessment.always_ask && !assessment.privileged && !assessment.destructive,
-                    rule_key: assessment.rule_key.clone(),
-                    preview,
-                };
-                let can_remember = request.can_remember;
-                let (request_id, request_summary) = (request.request_id.clone(), request.summary.clone());
-                let decision = self.broker.request(request, cancel).await;
-                if let Some(audit) = &self.audit {
-                    let data = serde_json::json!({
-                        "requestId": request_id,
-                        "tool": call.name,
-                        "summary": request_summary,
-                        "decision": decision.label(),
+        // A hook's `ask` gets its card where the engine would allow the call (hooks.md
+        // section 3). The other way round a hook relaxes nothing: a denial stays one.
+        let reason = match self.permissions.evaluate(session_id, &call.name, assessment) {
+            Decision::Allow { .. } => match hook_ask.as_deref() {
+                Some(reason) => format!("a PreToolUse hook asks for your confirmation: {reason}"),
+                None => return Ok(()),
+            },
+            Decision::Deny { reason } => return Err(reason),
+            Decision::Ask { reason } => match hook_ask.as_deref() {
+                Some(hook) => format!("{reason}; a PreToolUse hook asks too: {hook}"),
+                None => reason,
+            },
+        };
+        let request = ApprovalRequest {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            session_id: session_id.into(),
+            call_id: call.id.clone(),
+            tool: call.name.clone(),
+            kind: ApprovalKind::Tool,
+            input: call.input.clone(),
+            summary: assessment.summary.clone(),
+            reason,
+            risk: assessment.risk,
+            privileged: assessment.privileged,
+            destructive: assessment.destructive,
+            // A hook that asks is asked every time: there is nothing to remember.
+            can_remember: !assessment.always_ask && !assessment.privileged && !assessment.destructive && hook_ask.is_none(),
+            rule_key: assessment.rule_key.clone(),
+            preview,
+        };
+        let can_remember = request.can_remember;
+        let (request_id, request_summary) = (request.request_id.clone(), request.summary.clone());
+        let decision = self.broker.request(request, cancel).await;
+        if let Some(audit) = &self.audit {
+            let data = serde_json::json!({
+                "requestId": request_id,
+                "tool": call.name,
+                "summary": request_summary,
+                "decision": decision.label(),
+            });
+            if let Err(e) = audit.append(crate::audit::AuditKind::Approval, session_id, data) {
+                tracing::warn!("audit append failed: {e:#}");
+            }
+        }
+        match decision {
+            ApprovalDecision::AllowOnce => Ok(()),
+            ApprovalDecision::AllowSession => {
+                if can_remember {
+                    self.permissions.add_session_rule(session_id, AllowRule {
+                        tool: call.name.clone(),
+                        prefix: assessment.rule_key.clone(),
                     });
-                    if let Err(e) = audit.append(crate::audit::AuditKind::Approval, session_id, data) {
-                        tracing::warn!("audit append failed: {e:#}");
+                }
+                Ok(())
+            }
+            ApprovalDecision::AllowAlways => {
+                if can_remember {
+                    self.permissions.add_rule(AllowRule {
+                        tool: call.name.clone(),
+                        prefix: assessment.rule_key.clone(),
+                    });
+                    if let Some(sink) = &self.on_rules_changed {
+                        sink(self.permissions.rules());
                     }
                 }
-                match decision {
-                    ApprovalDecision::AllowOnce => Ok(()),
-                    ApprovalDecision::AllowSession => {
-                        if can_remember {
-                            self.permissions.add_session_rule(session_id, AllowRule {
-                                tool: call.name.clone(),
-                                prefix: assessment.rule_key.clone(),
-                            });
-                        }
-                        Ok(())
-                    }
-                    ApprovalDecision::AllowAlways => {
-                        if can_remember {
-                            self.permissions.add_rule(AllowRule {
-                                tool: call.name.clone(),
-                                prefix: assessment.rule_key.clone(),
-                            });
-                            if let Some(sink) = &self.on_rules_changed {
-                                sink(self.permissions.rules());
-                            }
-                        }
-                        Ok(())
-                    }
-                    ApprovalDecision::Deny { reason } => {
-                        Err(reason.unwrap_or_else(|| "the user denied this action".into()))
-                    }
-                }
+                Ok(())
+            }
+            ApprovalDecision::Deny { reason } => {
+                Err(reason.unwrap_or_else(|| "the user denied this action".into()))
             }
         }
     }

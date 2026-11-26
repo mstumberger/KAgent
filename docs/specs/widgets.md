@@ -12,26 +12,35 @@ panel belongs.
 
 ## 2. Rendering (`web/src/components/Widget.tsx`, `components/Markdown.tsx`)
 
-- `Markdown` gets a directive step: a line that matches `^::([a-z]+)\{(.*)\}$` with a
-  JSON object renders a directive component; an unknown name renders as text. `widget`
-  is the only directive.
+- `Markdown` gets a directive step: a line that matches `^::([a-z]+)\{(.*)\}$` renders
+  a directive component when the name is `widget` and the braces hold the marker as the
+  tool answers it (`id="<session>/<n>"`) or the same as a JSON object; an unknown name,
+  or anything else in the braces, renders as text. The marker itself is not JSON.
+  `widget` is the only directive.
 - `Widget` fetches `GET /api/widgets/:session/:id` (bearer token) and shows
   `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer">` with a `srcDoc`
   built by the UI: `<!doctype html><html data-theme="..."><head>` with the CSP meta
   tag and a `<style>` that defines the theme variables, then `<body>`, the fragment,
-  the resize script, `</body></html>`.
+  the resize script, `</body></html>`. The canvas of the frame is `--k-glass` and its
+  `color-scheme` is the theme's. The tool's `title` is shown above the panel.
 - CSP meta tag in every fragment:
   `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src
   data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'`.
 - The sandbox has no `allow-same-origin`: the fragment has an opaque origin. It cannot
   read the app's storage or cookies, cannot navigate the top window, cannot submit a
-  form and cannot open a network connection.
-- Theme variables, from the current theme: `--k-night`, `--k-glass`, `--k-ink`,
-  `--k-dim`, `--k-ice`, `--k-ok`, `--k-bad`, `--k-signal`.
+  form, open a window, or fetch, connect a socket or load an image, a font, a style or
+  a script from the network (measured: 10 attempts, 10 blocked). It can still send its
+  own frame to another address (one GET, without referrer or cookies): only a
+  `frame-src 'none'` policy on the app's document stops that, and the app has none
+  (S33, measured; the owner's decision).
+- Theme variables, from the current theme (the page's tokens of the same names):
+  `--k-night`, `--k-glass`, `--k-ink`, `--k-dim`, `--k-ice`, `--k-ok`, `--k-bad`,
+  `--k-signal`.
 - Height: the UI's resize script posts `{source: "kagent-widget", height}` to
-  `parent.postMessage` on load and on resize (`ResizeObserver`). The UI accepts the
-  message only from that iframe's `contentWindow`. Height 300 to 600 px, 360 by
-  default. Nothing else crosses the boundary.
+  `parent.postMessage` on load, on resize, on a change of the content and three times
+  after loading (a frame off the screen gets no resize callback in Chrome). The UI
+  accepts the message only from that iframe's `contentWindow`. Height 300 to 600 px,
+  360 by default. Nothing else crosses the boundary.
 - A fragment is fetched once per id. A missing one (404) shows "widget no longer
   available".
 - Session export (`sessions export`) replaces the marker with `[widget <n>]`.
@@ -54,21 +63,34 @@ panel belongs.
 
 ## 5. Storage
 
-`<data>/widgets/<sessionId>/<n>.html`, mode 0600, at most 24 KB each, at most 200 per
-session (the oldest are overwritten). Deleted with the session.
+`<data>/widgets/<sessionId>/<n>.html`, mode 0600, at most 24 KB each, with its title in
+`<n>.title` and the last number in `.count`; at most 200 per session (the oldest are
+overwritten). Folders 0700. Deleted with the session and with the subagents deleted
+with it.
+
+The route answers `text/html; charset=utf-8`, the title percent-encoded in
+`X-KAgent-Title`, `Cache-Control: no-store`: 400 for a session id that is not plain or
+an id that is not a number from 1 to 200, 404 when there is no such fragment (a link is
+not followed).
 
 ## 6. Security
 
 - A fragment is model output and is rendered without privileges, under the sandbox and
   CSP above. The route needs the bearer token like every `/api` route.
+- The renderer never uses `innerHTML` for model output.
 - There is no bridge to the agent and no live data in this stage. (Later, if wanted: a
   `window.kagent` channel through `postMessage` with a fixed set of messages.)
 
 ## 7. Tests
 
-- `widgets.rs`: the size cap; an unknown id is 404; files go with the session; export
-  replaces the markers.
+- `widgets.rs`: the size cap; an id that is not a plain id; an unknown id is 404; the
+  files go with the session; the title and `.count` files; export replaces the markers.
 - `speakable` drops `::widget{...}` (voice.md).
 - UI, in headless Chrome, dark and light: a gauge, a table and a sparkline render; the
-  iframe has `sandbox="allow-scripts"`; a fragment that tries `fetch`,
-  `top.location` and `localStorage` stays blocked; the height follows the content.
+  iframe has `sandbox="allow-scripts"`; a fragment that tries `fetch`, `top.location`,
+  the storages, a form, an image or a socket stays blocked; the height follows the
+  content.
+
+## 8. Not in scope
+
+- Live data, buttons that call tools, a shared template gallery, the whiteboard.

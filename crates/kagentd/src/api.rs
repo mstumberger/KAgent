@@ -341,7 +341,10 @@ pub async fn get_session(State(st): State<Arc<AppState>>, Path(id): Path<String>
 
 pub async fn delete_session(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
     // Cancels and deletes the subagents of the session too (agents.md section 2).
+    let gone = st.widgets.family(st.agent.store(), &id).await;
     st.agent.delete_session(&id).await.map_err(internal)?;
+    // Their inline widgets go with them (widgets.md section 5).
+    st.widgets.remove_all(&gone).await;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 

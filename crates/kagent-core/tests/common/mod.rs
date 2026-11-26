@@ -140,6 +140,7 @@ pub async fn rig(responses: Vec<ModelResponse>, spans: Arc<Mutex<Spans>>) -> Rig
     let cfg = config();
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(model.clone()),
         tools: Arc::new(tools),

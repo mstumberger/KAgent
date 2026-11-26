@@ -144,7 +144,8 @@ impl Tool for Shell {
         } else {
             CallAssessment::from_contract(&self.contract, truncate(command, 100), rule_key)
         };
-        if crate::safety::looks_destructive(command) {
+        if crate::safety::looks_destructive(command) || crate::agent::hooks::protect::protected_command(command, input.get("cwd").and_then(Value::as_str)) {
+            // Destructive, or it changes KAgent's own configuration (hooks.md section 5): both ask in every mode.
             a = a.destructive();
         }
         if sudo {

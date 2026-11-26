@@ -22,7 +22,7 @@ const VIEWS: [&str; 8] = ["chat", "voice", "tasks", "alerts", "changes", "securi
 /// Settings sections `show` may open (ui-settings.md section 3). The former tabs
 /// `providers` and `tools` are two of them. A stage that adds a section adds its id here
 /// and in `web/src/settings/registry.ts`.
-const SECTIONS: [&str; 13] = ["general", "appearance", "models", "voice", "browser", "desktop", "watchers", "web", "skills", "memory", "tools", "agents", "telegram"];
+const SECTIONS: [&str; 14] = ["general", "appearance", "models", "voice", "browser", "desktop", "watchers", "web", "skills", "memory", "tools", "agents", "hooks", "telegram"];
 
 #[derive(Default)]
 pub struct UiHub {
@@ -228,7 +228,7 @@ impl UiTool {
     pub fn new(hub: Arc<UiHub>) -> Self {
         let mut contract = ToolContract::read_only(
             "ui",
-            "KAgent's own web UI as the user sees it in their browser. logs: browser console errors/warnings and crashes (errors_only default true); state: open view, voice status, live transcript tail, pending approvals, theme, window size; snapshot: the visible page text right now; show: switch the UI to a view (chat, voice, tasks, alerts, changes, security, system, settings; providers and tools are the settings pages models and tools) or open a session; with view settings, section opens one of its pages (general, appearance, models, voice, browser, desktop, watchers, web, skills, memory, tools, agents, telegram); voice_start / voice_stop; theme: dark|light; orb: orb|spectrum|wave|kitt|hal; reload: reload the page (fixes a stuck UI). Use it when the user says the UI looks broken or asks what is on screen.",
+            "KAgent's own web UI as the user sees it in their browser. logs: browser console errors/warnings and crashes (errors_only default true); state: open view, voice status, live transcript tail, pending approvals, theme, window size; snapshot: the visible page text right now; show: switch the UI to a view (chat, voice, tasks, alerts, changes, security, system, settings; providers and tools are the settings pages models and tools) or open a session; with view settings, section opens one of its pages (general, appearance, models, voice, browser, desktop, watchers, web, skills, memory, tools, agents, hooks, telegram); voice_start / voice_stop; theme: dark|light; orb: orb|spectrum|wave|kitt|hal; reload: reload the page (fixes a stuck UI). Use it when the user says the UI looks broken or asks what is on screen.",
             json!({"type":"object","required":["action"],"properties":{
                 "action":{"type":"string","enum":["logs","state","snapshot","show","voice_start","voice_stop","theme","orb","reload"]},
                 "errors_only":{"type":"boolean"},

@@ -40,7 +40,7 @@ pub fn transcript(title: &str, msgs: &[Message]) -> String {
             Role::User => out.push_str(&format!("**You{via}:** {}\n\n", m.content.trim())),
             Role::Assistant => {
                 if !m.content.trim().is_empty() {
-                    out.push_str(&format!("**KAgent{via}:** {}\n\n", m.content.trim()));
+                    out.push_str(&format!("**KAgent{via}:** {}\n\n", plain_widgets(&m.content)));
                 }
                 for c in &m.tool_calls {
                     out.push_str(&format!("- tool `{}` {}\n", c.name, crate::util::truncate_str(&c.input.to_string(), 200)));
@@ -53,6 +53,34 @@ pub fn transcript(title: &str, msgs: &[Message]) -> String {
         }
     }
     out
+}
+
+/// The transcript without the panels: a line that is only a widget marker
+/// (`::widget{id="<session>/<n>"}`, widgets.md section 2) becomes `[widget <n>]`. Any
+/// other line stays as it is.
+pub fn plain_widgets(text: &str) -> String {
+    text.split('\n')
+        .map(|line| match widget_number(line.trim()) {
+            Some(n) => format!("[widget {n}]"),
+            None => line.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The number in the marker line `line`, when the line is one: the marker as the tool
+/// answers it (`::widget{id="<session>/<n>"}`), or the same braces as a JSON object.
+fn widget_number(line: &str) -> Option<String> {
+    let inner = line.strip_prefix("::widget{")?.strip_suffix('}')?.trim();
+    let id = match serde_json::from_str::<Value>(&format!("{{{inner}}}")) {
+        Ok(object) => object.get("id")?.as_str()?.to_string(),
+        Err(_) => {
+            let id = inner.strip_prefix("id")?.trim_start().strip_prefix('=')?.trim_start();
+            id.strip_prefix('"')?.strip_suffix('"')?.to_string()
+        }
+    };
+    let (_, n) = id.rsplit_once('/')?;
+    (!n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())).then(|| n.to_string())
 }
 
 fn safe_title(t: &str) -> String {
@@ -124,5 +152,21 @@ mod tests {
         assert!(t.contains("- tool `doctor` {}") && t.contains("-> health score: 85/100"));
         assert!(t.contains("**KAgent (voice):** IntelliJ and PyCharm."));
         assert_eq!(safe_title("Voice session: swap?"), "Voice-session--swap");
+    }
+
+    /// Scenario S33 item 1: an export replaces the markers, and so does `sessions read`.
+    #[test]
+    fn the_transcript_replaces_the_widget_markers() {
+        let marker = "::widget{id=\"0f1e2d3c-aaaa-4bbb-8ccc-1234567890ab/7\"}";
+        let answer = format!("Your doctor score:\n\n{marker}\n\n::widget{{ \"id\": \"s/12\" }}\n  ::widget{{id=\"s/3\"}}  \nstill text: {marker}\n::widget{{id=\"no-number\"}}\n::todo{{id=\"s/1\"}}");
+        let back = plain_widgets(&answer);
+        assert_eq!(back.lines().filter(|l| l.starts_with("[widget")).collect::<Vec<_>>(), ["[widget 7]", "[widget 12]", "[widget 3]"]);
+        assert!(back.contains(&format!("still text: {marker}")), "only a line that is the marker: {back}");
+        assert!(back.contains("::widget{id=\"no-number\"}") && back.contains("::todo{id=\"s/1\"}"), "{back}");
+        let msgs = vec![Message::user("how is my machine?"), Message::assistant(answer, vec![])];
+        let t = transcript("gauge", &msgs);
+        assert!(t.contains("[widget 7]\n\n"), "{t}");
+        assert_eq!(t.matches("[widget ").count(), 3, "the three lines that are the marker: {t}");
+        assert!(t.contains(&format!("still text: {marker}")), "a marker inside a line of text is text: {t}");
     }
 }

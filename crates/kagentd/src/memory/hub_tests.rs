@@ -127,6 +127,7 @@ async fn the_config_source_is_asked_with_the_message_of_the_turn() {
     });
     let agent = Agent::new(AgentDeps {
         services: None,
+        hooks: None,
         audit: None,
         model: Arc::new(Capturing { systems }),
         tools: Arc::new(ToolRegistry::new()),

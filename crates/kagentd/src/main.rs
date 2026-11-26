@@ -12,6 +12,7 @@ mod appwin;
 mod tray;
 mod ui;
 mod browser;
+mod hooks;
 mod krunner;
 mod live;
 mod mcp;
@@ -36,6 +37,7 @@ mod subagents;
 mod voice_levels;
 mod watch;
 mod web;
+mod widgets;
 mod ws;
 
 use std::sync::Arc;
@@ -83,6 +85,10 @@ pub struct AppState {
     pub web: Arc<web::Web>,
     /// The subagent profiles behind `/api/agents` (agents.md).
     pub subagents: Arc<subagents::Subagents>,
+    /// The owner's hooks (hooks.md): behind `/api/hooks`, and plugged into the agent and the alerts.
+    pub hooks: Arc<hooks::HookHub>,
+    /// The inline widgets of the chat (widgets.md): the `widget_show` tool and the route that serves a fragment.
+    pub widgets: Arc<widgets::Widgets>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -270,6 +276,9 @@ async fn run() -> anyhow::Result<()> {
     let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config));
     registry.register(web.fetch_tool());
     registry.register(web.search_tool());
+    // Inline widgets (widgets.md): the fragments live under <data>/widgets.
+    let widgets = Arc::new(widgets::Widgets::new(paths.data.clone()));
+    registry.register(Arc::new(widgets::WidgetShow::new(widgets.clone())));
     // Memory (memory.md): one store for the prompt, the tools and the API. The tools read the
     // settings from the cell the screen tool uses, set once the settings are loaded.
     let memory = Arc::new(memory::MemoryHub::new(memory::MemoryStore::new(paths.config.join("memory")), paths.sessions(), settings_cell.clone(), events.clone()));
@@ -306,6 +315,11 @@ async fn run() -> anyhow::Result<()> {
     engine.set_overrides(settings::parse_overrides(&settings.tool_overrides));
     let settings_arc = Arc::new(std::sync::RwLock::new(settings));
     let _ = settings_cell.set(settings_arc.clone());
+    // Hooks (hooks.md): the owner's own commands at the points of the agent's life. The agent
+    // cannot write them (hooks.md section 5); a change applies from the next event.
+    let hooks = Arc::new(hooks::HookHub::new(settings_arc.clone(), paths.settings(), audit.clone(), events.clone()));
+    *services.hooks.write().unwrap() = Some(hooks.clone());
+    alerts.set_alert_hooks(hooks.clone());
     let settings_for_config = settings_arc.clone();
     let providers_for_config = providers.clone();
     let (machine_for_config, skills_for_config) = (machine.clone(), skills.clone());
@@ -358,6 +372,7 @@ async fn run() -> anyhow::Result<()> {
 
     let agent = Agent::new(AgentDeps {
         services: Some(services.clone()),
+        hooks: Some(hooks.clone()),
         audit: Some(audit.clone()),
         model: Arc::new(kagent_providers::ProvidersClient::new(providers.clone())),
         tools: Arc::new(registry),
@@ -446,6 +461,8 @@ async fn run() -> anyhow::Result<()> {
         browser,
         web,
         subagents,
+        hooks,
+        widgets,
         live_sessions: Default::default(),
         services,
         levels,

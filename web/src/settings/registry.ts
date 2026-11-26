@@ -14,6 +14,7 @@ import Skills from "./sections/Skills";
 import Memory from "./sections/Memory";
 import Tools from "./sections/Tools";
 import Subagents from "./sections/Subagents";
+import Hooks from "./sections/Hooks";
 import Telegram from "./sections/Telegram";
 
 export type SectionGroup = "Basics" | "Agent capabilities" | "Channels";
@@ -145,6 +146,15 @@ export const SECTIONS: Section[] = [
     keywords: ["subagent", "agent", "profile", "background", "parallel", "explore", "task", "max concurrent"],
     icon: "talk",
     component: Subagents,
+  },
+  {
+    id: "hooks",
+    title: "Hooks",
+    group: "Agent capabilities",
+    description: "Commands of your own that run when the agent starts a session, is asked something, calls a tool, answers or raises an alert.",
+    keywords: ["hooks", "command", "script", "PreToolUse", "PostToolUse", "guard", "notify", "event", "decision"],
+    icon: "shield",
+    component: Hooks,
   },
   {
     id: "telegram",

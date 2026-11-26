@@ -193,12 +193,12 @@ for a plan, `preview` holds the plan text.
 | | DELETE `/api/agents/:name` | | 204 |
 | | POST `/api/sessions/:id/subagents/:child/stop` | | `{status}`; 404 for a subagent of another session, 409 when it ended already |
 | | GET `/api/sessions?parent=<id>` | | `SessionMeta[]` |
-| hooks | GET `/api/hooks` | | `{hooks: HookView[], events: string[]}` |
-| | POST `/api/hooks` | `Hook` without `id` | `HookView` (201) |
-| | PUT `/api/hooks/:id` | `Hook` | `HookView` |
+| hooks | GET `/api/hooks` | | `{hooks: HookView[], events: string[], samples: {<Event>: object}}` |
+| | POST `/api/hooks` | Hook without `id` | `HookView` (201) |
+| | PUT `/api/hooks/:id` | Hook | `HookView` |
 | | DELETE `/api/hooks/:id` | | 204 |
-| | POST `/api/hooks/:id/test` | `{event, sample?: object}` | `{exitCode, stdout, stderr, decision, durationMs, timedOut}` |
-| widgets | GET `/api/widgets/:session/:id` | | `text/html` (bearer auth) |
+| | POST `/api/hooks/:id/test` | `{event, sample?: object}` | `{exitCode, stdout, stderr, decision?, durationMs, timedOut, error?}` (`decision` is left out when the hook decided nothing) |
+| widgets | GET `/api/widgets/:session/:id` | | `text/html; charset=utf-8`, the title percent-encoded in `X-KAgent-Title`, `Cache-Control: no-store` (bearer auth); 400 for a session id that is not plain or an id that is not a number from 1 to 200, 404 when there is no such fragment |
 
 ```ts
 type SkillView = { name: string; description: string; whenToUse?: string;
