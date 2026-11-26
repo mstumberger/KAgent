@@ -760,6 +760,149 @@ Do:
 Tests: `specs/token-guard.md` section 4; `crates/kagent-core/tests/token_guard.rs`.
 Check: the standard checks; `python3 scripts/test-live.py` (the daemon changed).
 
+> **Phase 5 (planned 2026-11-27, not started)**: coding agents. KAgent starts Claude Code
+> and Codex for a programming job in a project folder and brings the report back to the
+> agent that asked; what is worth taking from Omnius (a tmux terminal application for the
+> same tools) is taken in these five stages. S35 is the core and Claude Code; S36 to S39
+> build on it, in this order. The design is `specs/coders.md`; tools are in `tools.md`
+> sections 25 and 23, endpoints in `api.md` section 6, settings, paths and session fields
+> in `config.md` section 11.
+>
+> Standard checks of every phase 5 stage, besides its own:
+> `RUSTFLAGS="-D warnings" cargo build --workspace && cargo test --workspace`. A stage
+> that touches `web/` adds `pnpm -C web lint && pnpm -C web exec tsc -b && pnpm -C web
+> exec vite build --outDir <scratch>` (never `pnpm -C web build`: it replaces the live
+> `web/dist`) and the headless Chrome pass of `ui-settings.md` section 8. A stage that
+> touches the tools or the prompt adds `KAGENT_IT=1 cargo test -p kagent-providers
+> --test ollama` and an in-process run against the local Ollama with raw replays (the
+> evidence project of the last stage, copied under `/tmp`), never `scripts/smoke-api.sh`
+> next to the owner's daemon (S17). Line numbers in `Read:` are those of 2026-11-27;
+> read by function name when they have moved. No stage needs sudo, network in its tests,
+> or API keys in its tests, and no stage installs tmux: nothing here needs it. A run of
+> the real `claude` or `codex` is never a test: it is the owner's (Test on the settings
+> page, and the scenarios that say so), or the stage agent's when the owner allowed real
+> runs for that stage.
+
+### S35 - Coding agents: runs and Claude Code (~2000 lines)
+Spec: `specs/coders.md` (sections 0-6, 10 and 11); `specs/tools.md` section 25 (`coder_run`) and the S35 row of section 23; `specs/api.md` section 6 (the two `coders` rows of S35 and the `Coder*` types); `specs/config.md` section 11 (Coding agents: the settings, the run records, the `coder` field); `specs/scenarios.md` S35.
+Read: `crates/kagent-core/src/agent/children.rs` (whole), `agent/children/registry.rs` (whole), `agent/children/run.rs` (whole), `agent/state.rs` (`stop_all`, `append_external`, `push_messages`: lines 152-286), `crates/kagent-core/tests/subagents/rig.rs` and `tests/subagents/main.rs` (the scripted-model rig), `crates/kagent-core/src/tools/agents.rs` (`unasking`, `AgentAccess`, `wait_for`, `AgentRun`: lines 20-231), `crates/kagent-core/src/tools/background.rs` (`Background`, `spawn`: lines 182-383) and `tools/background/shutdown.rs` (whole), `crates/kagent-core/src/tools/exec.rs` (`kill_group`, `which`: lines 175-198), `crates/kagent-core/src/tools/xdg.rs` (`projects`, `find_project`: lines 160-198), `crates/kagent-core/src/context.rs` (lines 146-210), `crates/kagent-core/src/tools/mod.rs` (`group_of` and `group_tests`: lines 49-81 and 139-160), `crates/kagent-core/src/session.rs` (`SessionMeta`: lines 31-63), `crates/kagent-core/src/agent/hooks/protect.rs` (`dirs`: lines 25-46), `crates/kagent-core/src/safety.rs` (`looks_destructive`: lines 8-26), `crates/kagentd/src/main.rs` (lines 264-285, 406-418 and 516-519), `crates/kagentd/src/subagents/{runner,settings,http}.rs`, `crates/kagentd/src/settings.rs` (lines 18-20, 131-140 and 311-322), `crates/kagentd/src/server.rs` (lines 152-168), `crates/kagentd/src/api.rs` (`get_session`, `delete_session`, `stop_all`: lines 336-360 and 411-416), `crates/kagentd/src/ui.rs` (line 25), `crates/kagentd/src/mcp.rs` (what `agent_run` answers on the MCP session), `crates/kagentd/src/prompt.rs` (only if `coders.md` section 4 asks for a sentence), `web/src/components/agents.ts` (whole), `web/src/components/AgentsCard.tsx` (whole), `web/src/views/Chat.tsx` (lines 54-100 and 186-202), `web/src/settings/registry.ts`, `web/src/settings/sections/Subagents.tsx`, `web/src/settings/subagents/api.ts`, `web/src/store.ts` (`stopSubagent`, `subagentUpdated`: lines 212-216 and 308-318).
+Do:
+- Core: `agent/children/external.rs` (`CoderProfile`, `CoderTool`, `CoderMode`, `CoderJob`, the `CoderLauncher` trait, `start_coder`, `coder_ended`, `cancel_running_coders`, `set_coder_launcher`); `children/registry.rs` (`Child.job` optional for a coder child, `coder_run` in `ORCHESTRATION`, the cancel of a running coder child); `children/run.rs` (the tail of `child_ended`, shared with `coder_ended`); `agent/state.rs` (`stop_all` ends the running coder runs); `session.rs` (`SessionMeta.coder`); `tools/coders.rs` (`CoderRun` through `AgentAccess`: the source of the profiles, the default profile); `tools/mod.rs` (`group_of`); `context.rs` (`GROUP_PRIORITY` with `coders` after `agent`, and its hints).
+- Daemon: `coders/mod.rs` (the `Coders` service: the launcher, the built-in profiles, the rate cap), `coders/claude.rs` (the argv of each profile and the lines of a run), `coders/runner.rs` (the process: the run record, the spawn, the lines, the timeout, stop, `shutdown`, the recovery at start), `coders/settings.rs` (`CodersSection`), `coders/http.rs` (`GET /api/coders`, `POST /api/coders/test`); `tools/exec.rs` and `tools/background.rs` give the daemon `kill_group` and `group_alive` (today `pub(super)` and private); wired in `main.rs` (the launcher into the agent, `Coders::shutdown` before the exit, the recovery once the agent exists), `settings.rs` (`DEFAULT_TOOL_GROUPS`, `validate_sections`), `server.rs`, `ui.rs` (`SECTIONS`).
+- Web: `agents.ts` (`coder_run` beside `agent_run`, in `agentsIn` and `anchorOf`), `Chat.tsx` (the header of a coder session), `settings/sections/Coders.tsx`, `settings/coders/api.ts`, `registry.ts`, `api.ts` (`SessionInfo.coder`).
+- Specs, in the same session: `ui-settings.md` section 3 (the `coders` row); `agents.md` sections 2 and 3 (one sentence each: a coder run is a child too); `coders.md` section 1 and section 3 where a check with the real program differs from the table.
+Tests: `specs/coders.md` section 11 (the S35 blocks); `crates/kagent-core/tests/subagents/coder.rs`.
+Check: the standard checks with `web/`, the gated Ollama test and the in-process run (raw replays of "use Claude Code to ..." first: does the local model call `coder_run`?); headless Chrome (scenario S35 item 8); items 5 and 6 are the owner's, or the agent's when the owner allowed real runs.
+
+### S36 - Codex and the profiles of the owner (~1300 lines)
+Spec: `specs/coders.md` (section 1, the `codex` column; section 3, the profile files; sections 5, 6 and 11); `specs/tools.md` section 25 (the `codex-*` names); `specs/api.md` section 6 (`PUT` and `DELETE /api/coders/:name`); `specs/config.md` section 11 (`codexBinary`, the profiles folder); `specs/scenarios.md` S36.
+Read: the files of S35 (`coders/`, `children/external.rs`, `tools/coders.rs`), `crates/kagentd/src/subagents/profiles.rs` (the files of the agent profiles: `parse`, `check`, `render`), `crates/kagent-core/src/agent/hooks/protect.rs` (the `agents` entry of `Protected`), `web/src/settings/sections/Subagents.tsx` (the editor).
+Do:
+- Daemon: `coders/codex.rs` (the argv of each profile and the lines of a run: `thread.started`, `turn.*`, `item.*`, `error`), `coders/profiles.rs` (the files of `<config>/coders`, on the pattern of `subagents/profiles.rs`), `coders/http.rs` (`PUT`, `DELETE`), `coders/settings.rs` (`codexBinary`); `protect.rs` protects `<config>/coders`.
+- Core: `CoderProfile` gets the fields of the owner (`model`, `effort`, `allowedTools`, `args`, `env`, `prompt`) and the refusals of `coders.md` section 3; `tools/coders.rs` describes the `codex-*` profiles.
+- Web: the profiles and their editor on the Coding agents page.
+- Before the adapter: the lines of one real run of each kind, recorded under `crates/kagentd/src/coders/fixtures/` (the owner's, or the agent's with the owner's leave). Without them the fixtures are written from the documentation and say so.
+Tests: `specs/coders.md` section 11 (the S36 block).
+Check: the standard checks with `web/`; headless Chrome (scenario S36 item 6); items 4 and 5 are the owner's.
+
+### S37 - History, resume and the terminal (~1500 lines)
+Spec: `specs/coders.md` section 7; `specs/tools.md` section 25 (`coder_sessions`, `resume`); `specs/api.md` section 6 (`POST /api/coders/terminal`); `specs/config.md` section 11 (`coder.resume`); `specs/scenarios.md` S37.
+Read: `crates/kagentd/src/coders/` (whole), `crates/kagentd/src/skills_import.rs` (lines 30-40: the homes of the tools), `crates/kagent-core/src/tools/apps.rs` (how `open` launches an app), `crates/kagent-core/src/tools/editor.rs` (`Projects`: lines 212-258), `web/src/components/AgentsCard.tsx`, `web/src/views/Chat.tsx` (lines 186-202).
+Do:
+- Daemon: `coders/index.rs` (the session index of Claude Code and Codex, read-only, cached by modification time), `coders/terminal.rs` (the route: Konsole in the folder with the interactive line), `coders/claude.rs` and `coders/codex.rs` (`resume`).
+- Core: `tools/coders.rs` (`coder_sessions`; `resume` on `coder_run`), `session.rs` (`coder.resume`).
+- Web: "Open in a terminal" on an ended card and in the header of its session.
+- Skill: bundled `skills/handover/SKILL.md`.
+Tests: `specs/coders.md` section 11 (the S37 block).
+Check: the standard checks with `web/`, the gated Ollama test and the in-process run (a new tool); headless Chrome (the buttons); items 4 and 5 are the owner's.
+
+### S38 - Worktree, review and notifications (~1200 lines)
+Spec: `specs/coders.md` section 8; `specs/tools.md` section 25 (`worktree`, the `worktrees` action); `specs/api.md` section 6 (`GET /api/coders/:id/review`); `specs/config.md` section 11 (`coder.branch`, `coder.worktree`, `coder.files`, the three notification keys); `specs/scenarios.md` S38.
+Read: `crates/kagentd/src/coders/` (whole), `crates/kagentd/src/notify.rs` (whole), `crates/kagent-core/src/agent/hooks/protect.rs` (`protected_command`: how git is named in a command), `web/src/views/Chat.tsx` (lines 186-202).
+Do:
+- Daemon: `coders/worktree.rs` (`git worktree add` by argv, the line in `info/exclude`, the list), `coders/review.rs` (the files, the branch, the status and the stat of a run; the route), the notifications at the end of a run (`notify.rs`).
+- Core: `tools/coders.rs` (`worktree`), `session.rs` (the three fields).
+- Web: the review block in the header of an ended run.
+Tests: `specs/coders.md` section 11 (the S38 block).
+Check: the standard checks with `web/`, the gated Ollama test and the in-process run; headless Chrome (the block); item 4 is the owner's.
+
+### S39 - Automation: scheduled coder runs (~800 lines)
+Spec: `specs/coders.md` section 9; `specs/automations.md` (sections 1, 3 and 4, extended with `kind: "coder"` in the same session); `specs/tools.md` section 23 (the `tasks` row); `specs/api.md` section 6 (the `tasks` rows: `coder` in a task); `specs/config.md` section 11; `specs/scenarios.md` S39.
+Read: `crates/kagentd/src/tasks/{store,runner,schedule,tools,http}.rs`, `crates/kagentd/src/tasks/store/record.rs`, `crates/kagentd/src/coders/` (whole), `crates/kagent-core/src/tools/agents.rs` (`wait_for`: lines 122-139), `crates/kagent-core/src/permission.rs` (`evaluate`: lines 142-203), `web/src/views/Tasks.tsx` and `web/src/views/tasks/`.
+Do:
+- Daemon: the `coder` kind in the task record and its validation; the runner starts the run as a child of the task's session and asks the engine first, with the assessment of the tool: allowed means the run starts; a card means, under `deny`, that it is not started (the run is recorded `failed`: it needs approval on the desktop) and, under `wait`, that the card is shown and awaited as any card of the session. Then it waits `timeoutMin`, records and delivers.
+- Web: the Tasks form (kind, project, profile) and the report of the last run.
+Tests: `specs/coders.md` section 11 (the S39 block); `tasks/runner/tests.rs`.
+Check: the standard checks with `web/`; headless Chrome (the form); item 2 is the owner's, through a test daemon under a temporary home, only while the owner's daemon is stopped.
+
+> **Phase 6 (planned 2026-11-27, not started)**: the interface after ZCode. The owner
+> asked for ZCode's model picker, its per-model settings (the pencil on each model
+> row), a left sidebar instead of the top tabs, sessions grouped by project folder, and
+> windows for subagents, plans and progress: "copy the same pattern, not just 30%".
+> S40 comes first: the picker of S41 lists what S40 cleans up, and S42 and S43 are
+> layout work on top. The design of S40 is `specs/models.md`; each other stage starts
+> by writing the spec it names, from its entry here and from section E ("Planning
+> 2026-11-27 (phase 6)"). Endpoints of a stage go into `api.md` section 8, settings,
+> paths and session fields into `config.md` section 12. S42 and S43 read the files as
+> S35 left them (a coder run is a child too).
+>
+> Standard checks of every phase 6 stage, besides its own: those of phase 5. No stage
+> starts, stops or rebuilds the daemon of the owner (`--release` included): its UI pass
+> works through stubbed routes and the live checks are the owner's. Line numbers in
+> `Read:` are those of 2026-11-27; read by function name when they have moved. The
+> daemon of the owner was stopped on 2026-11-26 22:22 and its release binary holds the
+> spin loop named at the end of the phase 6 block of section E: it is fixed and rebuilt
+> on the owner's word before the first live check.
+
+### S40 - Models and providers (~1400 lines: 350 Rust, 1050 TS and CSS)
+Spec: `specs/models.md` (all); `specs/config.md` sections 3 and 4; `specs/api.md` section 3 (the provider rows); `specs/scenarios.md` S40.
+Read: `crates/kagent-providers/src/config.rs` (whole), `rules.rs` (`precedence`, `resolve`: lines 126-162), `store.rs` (`add_from_template`: lines 130-187; `resolve` and `enabled_models`: lines 218-262), `discovery.rs` (`merge_models`: lines 81-101), `crates/kagentd/src/api.rs` (`state`: lines 30-47; `put_settings`: lines 49-93; the provider routes and `list_models`: lines 104-278), `crates/kagentd/src/settings.rs` (`ModelOptionsSerde`: lines 123-127), `crates/kagentd/src/main.rs` (the config closure and the compaction source: lines 341-430), `crates/kagent-core/src/compact/loop_side.rs` (`on_capacity_error`, `switch_to_fallback`: lines 111-149), `crates/kagent-core/tests/agent_loop.rs` (the scripted model), `scripts/import-zcode-providers.py` (`EXTRA_TEMPLATES`), `web/src/settings/sections/models/` (the seven files), `web/src/settings/ui.tsx` (`ListDetail`: lines 179-225), `web/src/settings/dialog.tsx`, `web/src/settings/sections/Tools.tsx`, `web/src/api.ts` (the provider types: lines 132-153), `web/src/components/Icon.tsx`; the ZCode files of `specs/models.md` section 8, by line range.
+Do, in this order:
+- `kagent-providers`: `ModelEntry.smart`; `resolve` with `smart`; `ProviderStore::usable`; the model keys of the store (add, change, remove, reorder) with the validation of `specs/models.md` section 4; `merge_models` with the twin rule, the table and disabled rows; the correction at load; the `custom` template.
+- `kagentd`: `api.rs` (the provider routes, `list_models`, `chatModelValid`, the role check of `put_settings`), `main.rs` (the chat, fast and fallback model through `usable`; `options.maxOutputTokens` is no longer read).
+- `kagent-core`: `loop_side.rs` (the three notices).
+- Web: the files of `specs/models.md` section 7.7; the card "Limits of a turn" in `Tools.tsx`; `Icon.tsx` gets `pencil`, `image` and `grip`.
+- Documents, in the same session: `specs/models.md` section 10.
+Tests: `specs/models.md` section 9.
+Produces: `ModelEntry.smart`, `ProviderStore::usable`, the model keys of `PUT /api/providers/:id`, `ModelDialog.tsx`.
+Check: the standard checks with `web/`; `python3 scripts/test-live.py` (the provider routes changed; it starts a test daemon and refuses while a `kagentd` runs); the headless pass of scenario S40 items 6 to 9; item 10 by the owner.
+
+### S41 - Model picker in the composer (~900 lines)
+Spec: `specs/picker.md`, written first in this stage from this entry and from section E; `specs/models.md` section 4 (`GET /api/models`); `specs/scenarios.md` S41.
+Read: `web/src/views/Chat.tsx` (the composer), `web/src/components/CommandInput.tsx`, `web/src/views/Overlay.tsx`, `web/src/App.tsx` (the header), `web/src/store.ts` (`newSession`, `sendMessage`), `web/src/events.ts`, `crates/kagent-core/src/agent/mod.rs` (`turn_loop` up to `apply_job`), `agent/children/run.rs` (`apply_job`), `crates/kagent-core/src/session.rs` (`SessionMeta`), `crates/kagent-core/src/protocol.rs` (`AgentEvent`), `crates/kagentd/src/api.rs` (the session routes), `crates/kagentd/src/main.rs` (the config closure); ZCode: `ui/src/v4/composer/V4ComposerToolbar.tsx`, `ui/src/ModelConfigSelect.tsx`, `ui/src/chat-input-toolbar/ComposerModelMenu.tsx` and `ComposerProviderMenu.tsx`.
+Do:
+- A conversation chooses its model and its effort: `SessionMeta.model` and `SessionMeta.reasoningLevel` (`None`: the default). `PUT /api/sessions/:id/model {model, reasoningLevel}` (400 for a model that is not usable, or a level it does not offer); `POST /api/sessions` takes both.
+- `turn_loop`: after `apply_job`, the choice of the session overrides `model_ref`, `context_tokens` and `options.max_output_tokens` (as `apply_job` does); when the model is not usable the default answers and a `Notice` says why. The level overrides `options.reasoning_level`. Subagents are not affected.
+- `options.reasoningLevel` leaves the settings and the Defaults card.
+- Web: `components/ModelMenu.tsx` in the composer of Chat and of the widget: the model and the effort on the button; the menu lists the providers with their enabled chat models (a check on the current one, the image icon where `supportsImage`), the effort slider (hidden when the model has no levels) and "Manage models". Ctrl+M opens it. A new conversation starts with the last choice. The dot of the header goes.
+Tests: `specs/picker.md` (its own list).
+Produces: `SessionMeta {model, reasoningLevel}`, `PUT /api/sessions/:id/model`, `ModelMenu.tsx`.
+Check: the standard checks with `web/`, the gated Ollama test and the in-process run (the loop is touched); the headless pass at 1200x820 and in the widget; the live check by the owner.
+
+### S42 - Left sidebar and projects (~1500 lines)
+Spec: `specs/sidebar.md`, written first in this stage from this entry and from section E; `specs/ui-settings.md` section 1 (the views); `specs/coders.md` section 3 (the `projects` list); `specs/scenarios.md` S42.
+Read: `web/src/App.tsx` (whole), `nav.ts`, `commands.ts` (the built-in commands), `store.ts`, `views/Chat.tsx` (the session list), `views/Overlay.tsx`, `settings/SettingsPage.tsx` (how the menu collapses), `diag.ts` (the view it reports), `crates/kagent-core/src/session.rs` (`SessionMeta`), `crates/kagent-core/src/tools/xdg.rs` (`projects`, `find_project`), `crates/kagent-core/src/agent/children/run.rs` (how a child session is created), `crates/kagentd/src/api.rs` (the session routes), `crates/kagentd/src/prompt.rs`; ZCode: `ui/src/project-sidebar/` (the tree, its views, the pinned sessions).
+Do:
+- `SessionMeta.project` (an absolute folder path, or `None`) and `SessionMeta.pinned`. `PUT /api/sessions/:id/project {path}` (400 for a path that is not a directory) and `PUT /api/sessions/:id/pin {pinned}`. `GET /api/sessions` takes `?project=`.
+- A session gets its folder by "Attach folder" in the sidebar (the projects of `settings.desktop.projectRoots`, as `coders.md` section 3 lists them, or a typed path), by `/project <path>` in the composer (`/project` alone detaches) and by "New session in this project" on a group. A subagent inherits the folder of its parent; `coder_run` takes it as its default `project` when it is a known project.
+- A turn of a session with a folder gets the prompt block "Project": the path, and the text of its `AGENTS.md` when it exists (at most 4000 characters). Tools are unchanged: the agent passes the folder itself.
+- Web: `components/Sidebar.tsx`, 240 px in the full window (a 48 px rail when collapsed; below 900 px a button opens it as a drawer): "New session", the session search, "Projects | Recent", the list (Projects: pinned sessions, a group per folder, then "This machine"; Recent: newest first) and, at the bottom, the views Voice, Tasks, Alerts (with its badge), Changes, Security, System, Settings. The tab row of the header goes; the session list of the Chat view moves into the sidebar; the settings screen keeps its own menu; the widget gets the list as a sheet.
+Tests: `specs/sidebar.md` (its own list).
+Produces: `SessionMeta {project, pinned}`, `PUT /api/sessions/:id/project`, `PUT /api/sessions/:id/pin`, `components/Sidebar.tsx`.
+Check: the standard checks with `web/`, the gated Ollama test and the in-process run (the prompt is touched); the headless pass at 1200x820, at 700x500 and in the widget; the live check by the owner.
+
+### S43 - Work windows: agents, plan, progress (~1300 lines)
+Spec: `specs/work-windows.md`, written first in this stage from this entry and from section E; `specs/agents.md` sections 4 and 6; `specs/plan-todo.md` sections 1 and 2; `specs/scenarios.md` S43.
+Read: `web/src/components/AgentsCard.tsx`, `PlanCard.tsx`, `TodoPanel.tsx`, `agents.ts`, `web/src/views/Chat.tsx` (the area above the composer, the read-only header of a subagent), `web/src/events.ts`, `web/src/store.ts` (`subagentUpdated`), `crates/kagent-core/src/tools/background.rs` (`Background`: `start`, `info`, `output`, `stop`), `crates/kagent-core/src/agent/children/` (the views, `subagentUpdated`), `crates/kagentd/src/plan_api.rs`, `todo_api.rs`, `api.rs` (the session routes); ZCode: `ui/src/v4/ConversationStatusPanel.tsx`, `ui/src/v4/composer/ConversationBackgroundWorkTrigger.tsx`, `ui/src/lib/workspaceSidePane.ts`, `ui/src/app-shell/SubagentSessionSidePane.tsx`.
+Do:
+- S31 left the background shell tasks without routes and events (only the `task_output` tool): `Background::list(session)`, `GET /api/sessions/:id/background`, `GET /api/background/:taskId/output?tail=`, `POST /api/background/:taskId/stop`, and the event `backgroundTask {taskId, sessionId, status}` over `/ws`.
+- Web: `components/WorkPanel.tsx` above the composer, a capsule with the counts (running children, background tasks, the plan, open todo items) that expands into four sections. Agents: one line per child, a subagent or a coder run (profile, state, time, Stop). Background: the command, the state, the time. Plan: planning on or off, the approved plan. Progress: the todo list (`TodoPanel` moves here).
+- Web: `components/SidePane.tsx`, 380 px on the right of the full window (closable; a tab bar while several are open): "Subagent" (the child session, read-only), "Plan" and "Output" (the log, followed while the task runs).
+- The widget: the capsule above the input, and the sections as a sheet. The transcript keeps the tool cards, the plan approval card and the agents cards.
+Tests: `specs/work-windows.md` (its own list).
+Produces: `GET /api/sessions/:id/background`, the event `backgroundTask`, `WorkPanel.tsx`, `SidePane.tsx`.
+Check: the standard checks with `web/`; the headless pass at 1200x820 and in the widget; the live check by the owner.
+
 ---
 
 ## E. Decisions log (append during implementation)
@@ -2447,6 +2590,96 @@ finding of S32. 622 workspace tests (615 before), 2 ignored.
   before the output, a script that hides the path or the port, older journal entries).
   The status lines of `AGENTS.md` and the phase 4 header above are still stale.
 
+### Planning 2026-11-27 (phase 5: coding agents; from Omnius)
+
+The owner attached `Omnius-master.zip` on 2026-11-26 ("we should also pull stuff from
+here and be able to spawn codex, claude etc for programming tasks. make a plan and use
+brainstorming") and approved the design on 2026-11-27 ("go"). Spec `coders.md`, stages
+S35 to S39; none of the code exists yet. The zip was read with `unzip -p` and never
+extracted.
+Found (read-only):
+- Omnius is one tmux terminal application (a server `tmux -L omnius`, a paste bridge,
+  state from hooks and captured screens). tmux is not installed on the target machine
+  (dpkg: not installed; `screen` is). Its LICENSE is a placeholder.
+- `claude` 2.1.332 is installed (`~/.local/bin/claude`; `~/.local/bin` is on the systemd
+  user PATH) and has `-p`, `--output-format stream-json`, `--session-id`, `--resume`,
+  `--permission-mode`, `--allowedTools`, `--dangerously-skip-permissions`,
+  `-w/--worktree`, `--max-budget-usd` and `--bg`. `codex`, `opencode` and `grok` are not
+  on PATH (`~/.codex` holds state files only). `/usr/bin/zcode` is the desktop
+  application, not a command-line tool.
+- Not tried (it would use the owner's subscription): whether a `claude` started by the
+  daemon can log in. The Test of Settings -> Coding agents answers it (S35).
+Decisions (the owner may veto):
+- Headless child runs, not tmux: the non-interactive mode of the tool returns a
+  structured result, and no terminal multiplexer is needed. The owner steps in after a
+  run: "Open in a terminal" continues it (S37).
+- A coder run is a child of the S31 registry (queue, limit, states, `subagentUpdated`,
+  the Agents card, `agent_wait`/`agent_stop`/`agent_list`, the report to the parent);
+  the core gets a launcher the daemon fills in, and never starts a process itself.
+- `coder_run` in the group `coders`. Profiles `<tool>-<mode>`: `plan` needs no card,
+  `edit` a card in `ask`, `full` asks in every mode but full control and is never
+  rememberable. A profile that is not known assesses as `full`. `project` is a name
+  from the `projects` list, never a path, and KAgent's own folders are refused.
+- The job goes on stdin, never on the command line, and ends with a fixed paragraph: no
+  `git commit`, `git push` or merge; a report at the end.
+- Profiles of the owner are files in `<config>/coders/` with an editor in Settings, the
+  pattern of the subagent profiles. The sketch of the plan said `coders.profiles` in
+  the settings file.
+- Code is written fresh; nothing is copied from Omnius (no license).
+- Not ported: accounts and credential switching, the usage board, remote mode, sync,
+  restore points, and what belongs to a terminal interface (`coders.md` section 10).
+- Left open: the questions at the end of `coders.md` section 10 (prompts of a coder
+  relayed as cards, `project` by path, buttons that start a run, a limit of its own,
+  continuing after a usage limit).
+
+### Planning 2026-11-27 (phase 6: the interface after ZCode)
+
+The owner asked on 2026-11-26 for five things in one message and said "copy the same
+pattern, not just 30%": the model picker of ZCode's composer, its per-model settings
+(the pencil the owner calls a wrench), a left sidebar instead of the top tabs,
+sessions split by project, and windows for subagents, plans and progress. The design
+was talked through with the owner, who chose on 2026-11-27 what a project is ("1")
+and the way of four stages. Spec `models.md` for S40; each other stage writes its own
+first. None of the code exists yet.
+Found (read-only, in both code bases):
+- Nothing can be set per model: `api.md` promised `config?` on `PUT /api/providers/:id`,
+  the route takes `enabled` and `roles` only, and the Models section has one global
+  form for the reasoning level, the output size and the temperature.
+- "Fetch models" marks every model `chat`, adds Gemini models twice
+  (`gemini-3.8-flash` and `models/gemini-3.8-flash`) and switches new models on while
+  the list is small.
+- A fallback whose provider is off turns an out-of-quota error into "provider 'ollama'
+  is disabled" (seen live on 2026-11-26 from 22:05 to 22:10), and `chatModelValid` is
+  true for any model the providers know.
+- ZCode has no pinned models and no "auto" row in its picker, and its todos are cards
+  in the timeline; a `TodoPanel` and a drill-down exist in its source, wired to nothing.
+Decisions (the owner may veto):
+- **A project is a folder attached to a session.** The owner chose it among three (a
+  full workspace with per-project settings, skills and memory as in ZCode; or no
+  projects). The sidebar groups sessions by the folder and the prompt names the
+  folder with its `AGENTS.md`; no per-project settings in phase 6. It lines up with
+  the `project` of `coders.md` section 3, a name from the same list.
+- KAgent keeps the roles (chat, fast, fallback, vision, live) and a default model for
+  each, because voice, scheduled tasks, alerts and Telegram run without a composer. A
+  conversation's choice (S41) is an override of the default. ZCode has neither.
+- "Smart configuration" has the meaning it has in ZCode (`specs/models.md` section 2).
+  New models arrive disabled and without a job unless the name says `chat`.
+- The settings screen keeps the menu of S19; the sidebar of S42 is the navigation of
+  the whole window. The widget (340x460) gets the picker, the list and the work panel
+  as sheets; the side pane is for the full window only.
+- The numbers: the plan of phase 5 was written in another session while this one was
+  written, so the interface work is S40 to S43.
+- Open, the owner decides: the spin loop of the uncommitted `rounded.rs` guard. The
+  release binary of 2026-11-26 22:18 holds it. The guard compares the shape of the
+  window rectangle by rectangle with what it wants, the X server answers merged and
+  sorted (29 rectangles sent, 17 returned for 340x460) and tells the client that set
+  a shape, so the shape is re-applied in a tight loop (one core, and load on Xorg)
+  while the window is open and not maximized. Found and reported on 2026-11-26 (68.5
+  CPU-s in 52 s at the start after a reboot), not fixed: the edit is someone else's
+  and uncommitted. A fix compares canonical forms or area plus extents, with a test
+  at a real size; the ignored X11 test of the file passes only because its 1x1
+  window clamps the radius to 0.
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2490,6 +2723,19 @@ Follow-up after phase 4
 
 - [x] S34 token guard (items 1 to 3 automatic; item 4 is seen at the first start under systemd; section E)
 
+Phase 5 (planned 2026-11-27, not started; the order is the dependency order)
+- [ ] S35 coding agents: runs and Claude Code
+- [ ] S36 Codex and the profiles of the owner
+- [ ] S37 history, resume and the terminal
+- [ ] S38 worktree, review and notifications
+- [ ] S39 automation: scheduled coder runs
+
+Phase 6 (planned 2026-11-27, not started; S40 first)
+- [ ] S40 models and providers
+- [ ] S41 model picker in the composer
+- [ ] S42 left sidebar and projects
+- [ ] S43 work windows: agents, plan, progress
+
 ## G. Owner actions (things KAgent prints, you run)
 
 | Stage | Action |
@@ -2511,3 +2757,7 @@ Follow-up after phase 4
 | S26 | a Gemini provider with your key (as S10) and a live model; talk to the widget once in `routed` mode (`voice.md` section 11) |
 | S27 | in Brave: `chrome://inspect/#remote-debugging` -> tick "Allow remote debugging for this browser instance"; click Allow each time KAgent connects |
 | S29 | create the bot with @BotFather; paste the token in Settings -> Telegram; send `/start <code>` from the phone |
+| S35 | Claude Code installed and logged in as in a terminal (`claude --version` answers). Once: Settings -> Coding agents -> Test (it starts one short job and uses a little of the subscription). tmux is not needed |
+| S36 | install Codex (`codex` on PATH; KAgent never installs it) and log in; Settings -> Coding agents -> Test |
+| S37 | Konsole, for "Open in a terminal" |
+| S40 | once, before the first start of the new daemon: copy `~/.config/kagent/providers.json`. At load the daemon corrects the roles of the models that are not chat models (`specs/models.md` section 3) |

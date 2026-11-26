@@ -129,6 +129,55 @@ export interface Session {
   messages: Message[];
 }
 
+/** What the built-in rules give a model, and what is sent with a request: the config of config.md section 3, resolved (models.md section 4). */
+export interface ResolvedModelConfig {
+  enabled: boolean;
+  contextWindow: number;
+  maxOutputTokens: number;
+  supportsToolCall: boolean;
+  supportsImage: boolean;
+  reasoningLevels: string[];
+  /** A level and the body patch sent for it. */
+  reasoningPatches: Record<string, unknown>;
+  supportsLive: boolean;
+  liveProtocol: string | null;
+  requestPatch: unknown;
+  roles: string[];
+}
+
+/** The personal patch of a model: what the owner changed. The dialog edits these six fields (models.md section 1). */
+export interface ModelConfigPatch {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsToolCall?: boolean;
+  supportsImage?: boolean;
+  reasoningLevels?: string[];
+  reasoningPatches?: Record<string, unknown>;
+}
+
+/** One row of a provider in `GET /api/providers`. `inherited` is what the rules give it, `effective` what is sent. */
+export interface ModelRow {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** `chat`, `live`, or empty: no job. */
+  roles: string[];
+  /** On: `config` holds only the overrides. Off: its six fields are the model's settings. */
+  smart: boolean;
+  config: ModelConfigPatch;
+  inherited: ResolvedModelConfig;
+  effective: ResolvedModelConfig;
+}
+
+/** What `POST /api/providers` sends: a template with its key, or `custom` with a name, an address and a format. */
+export interface NewProvider {
+  templateId: string;
+  apiKey?: string;
+  name?: string;
+  baseUrl?: string;
+  apiType?: string;
+}
+
 export interface ProviderView {
   id: string;
   name: string;
@@ -137,9 +186,18 @@ export interface ProviderView {
   api: { type: string; baseUrl: string; headers: Record<string, string> };
   apiKeyMasked: string;
   hasKey: boolean;
-  models: { id: string; name: string; enabled: boolean; roles: string[] }[];
+  models: ModelRow[];
   modelsFetchedAt?: string | null;
   lastError: string;
+}
+
+/** One model of a list of `GET /api/models` (`chat`, `fast`, `live`, `vision`): enabled, with the role of its list. */
+export interface ModelView {
+  id: string;
+  name: string;
+  /** `<providerId>::<modelId>`. */
+  ref: string;
+  config: ResolvedModelConfig;
 }
 
 export interface Template {

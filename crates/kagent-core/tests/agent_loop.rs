@@ -1,6 +1,6 @@
 //! Scenarios S0-S1 items 5-7: the loop's parallel scheduling, denial handling,
 //! cancellation and history repair, driven by a scripted fake model (the rig is in
-//! `common/`).
+//! `common/`); and the fallback of a chat model that cannot answer (S40).
 
 mod common;
 use common::*;
@@ -8,10 +8,10 @@ use common::*;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use kagent_core::agent::{SendOutcome, TurnOpts};
+use kagent_core::agent::{AgentConfig, SendOutcome, TurnOpts, TurnResult};
 use kagent_core::model::ModelResponse;
 use kagent_core::permission::ApprovalDecision;
-use kagent_core::protocol::{AgentEvent, Message, Role, ToolCallStatus};
+use kagent_core::protocol::{AgentEvent, Message, Role, ToolCallStatus, TurnStatus};
 
 // ------------------------------------------------------------------ scenarios
 
@@ -206,4 +206,74 @@ async fn disabled_tool_group_is_refused_not_just_hidden() {
         .execute_call(&r.session, "t", &call("y", "probe_a"), &cancel, kagent_core::tool::PrivilegeMethod::None)
         .await;
     assert_eq!(status, kagent_core::protocol::ToolCallStatus::Ok);
+}
+
+// ------------------------------------------------------------------ fallback (S40, models.md section 5)
+
+/// One turn on a model that answers from `script`, with `fake::backup` as the fallback
+/// when `with_fallback` (the daemon hands none when the fallback cannot be used). The
+/// result, what the turn emitted, and the model that saw the requests.
+async fn fallback_turn(script: Vec<Result<ModelResponse, String>>, with_fallback: bool) -> (TurnResult, Vec<AgentEvent>, ScriptedModel) {
+    let cfg = AgentConfig {
+        fallback_model_ref: if with_fallback { "fake::backup".into() } else { String::new() },
+        fallback_context_tokens: 8_192,
+        fallback_max_output: Some(999),
+        ..common::config()
+    };
+    let r = common::rig_with(ScriptedModel::scripted(script), Arc::new(Mutex::new(Spans::default())), cfg).await;
+    let mut events = r.events.resubscribe();
+    let outcome = r.agent.send(&r.session, "hello".into(), Default::default()).await.unwrap();
+    let SendOutcome::Started { handle, .. } = outcome else { panic!("nothing runs, so the input starts a turn") };
+    let result = handle.wait().await;
+    let mut emitted = Vec::new();
+    while let Ok(ev) = events.try_recv() {
+        emitted.push(ev);
+    }
+    (result, emitted, r.model.clone())
+}
+
+fn notices(events: &[AgentEvent]) -> Vec<String> {
+    events.iter().filter_map(|e| if let AgentEvent::Notice { text, .. } = e { Some(text.clone()) } else { None }).collect()
+}
+
+#[tokio::test]
+async fn a_capacity_error_switches_to_the_fallback_as_before() {
+    let (result, events, model) = fallback_turn(vec![Err("503 Service Unavailable".into()), Ok(ModelResponse::default())], true).await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    let seen = model.model_refs.lock().unwrap().clone();
+    assert_eq!(seen, [("fake::test".to_string(), None), ("fake::backup".to_string(), Some(999))], "the rest of the turn goes to the fallback, with its output limit");
+    assert_eq!(model.requests.lock().unwrap().len(), 2, "nothing to compact in a new session: the fallback at once");
+    assert_eq!(notices(&events), ["fake::test is busy - answering with fake::backup"]);
+}
+
+#[tokio::test]
+async fn without_a_fallback_the_turn_fails_with_the_models_own_error() {
+    // Scenario S40 item 5: the fallback's provider is off, so the daemon hands no fallback.
+    let error = "provider error 429: You exceeded your current quota, please check your plan and billing details";
+    let (result, events, model) = fallback_turn(vec![Err(error.into())], false).await;
+    assert_eq!(result.status, TurnStatus::Failed);
+    let said = result.error.as_deref().unwrap_or_default();
+    assert!(said.contains("exceeded your current quota"), "the model's own error: {said}");
+    assert!(!said.contains("disabled"), "never the fallback's provider: {said}");
+    assert_eq!(model.model_refs.lock().unwrap().iter().map(|(m, _)| m.as_str()).collect::<Vec<_>>(), ["fake::test"], "one request");
+    assert!(notices(&events).is_empty(), "nothing was switched to");
+}
+
+#[tokio::test]
+async fn the_notice_of_a_switch_says_why_the_model_was_left() {
+    let backup = " - answering with fake::backup";
+    for (error, why) in [
+        ("provider error 429: resource exhausted", "is out of quota"),
+        ("You exceeded your current quota", "is out of quota"),
+        // Quota is named first, a rejected key as before, busy otherwise.
+        ("429: invalid api key", "is out of quota"),
+        ("401 Unauthorized: invalid API key provided", "rejected the API key (Providers)"),
+        ("503 Service Unavailable", "is busy"),
+        ("The model is overloaded", "is busy"),
+    ] {
+        let (result, events, model) = fallback_turn(vec![Err(error.into()), Ok(ModelResponse::default())], true).await;
+        assert_eq!(result.status, TurnStatus::Completed, "{error}: {:?}", result.error);
+        assert_eq!(model.model_refs.lock().unwrap().len(), 2, "{error}: the fallback answers");
+        assert_eq!(notices(&events), [format!("fake::test {why}{backup}")], "{error}");
+    }
 }

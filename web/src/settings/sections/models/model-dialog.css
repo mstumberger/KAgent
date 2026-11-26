@@ -1,0 +1,162 @@
+/* The model dialog (ModelDialog.tsx, models.md section 7.5). */
+/* ---- the model dialog (ModelDialog.tsx, models.md section 7.5) */
+.md-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.md-smart {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rim);
+}
+
+.md-field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.md-form > .md-field-wrap {
+  max-width: 420px;
+}
+
+.md-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.md-label {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.md-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.md-input > input,
+.md-input > textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A field the patch holds: the accent border and the tag */
+.md-field.md-override > .md-input > input,
+.md-field.md-override > .md-input > textarea {
+  border-color: rgba(124, 196, 255, 0.6);
+}
+
+.md-tag {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border: 1px solid rgba(124, 196, 255, 0.4);
+  border-radius: 999px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--ice);
+  white-space: nowrap;
+}
+
+.md-json {
+  min-height: 120px;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  resize: vertical;
+}
+
+.md-json::placeholder {
+  color: var(--dim);
+  opacity: 1;
+}
+
+.md-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+button.md-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 5px 8px;
+  background: transparent;
+}
+
+.md-chevron {
+  transition: transform 0.15s;
+}
+
+.md-chevron.open {
+  transform: rotate(90deg);
+}
+
+.md-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 4px 10px;
+  border-left: 1px solid var(--rim);
+}
+
+.md-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.md-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.md-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.md-block:focus-visible {
+  outline: 2px solid rgba(124, 196, 255, 0.6);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.md-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-level {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.md-level > input,
+.md-add > input {
+  width: 240px;
+  max-width: 100%;
+}
+
+.md-add {
+  display: flex;
+  gap: 6px;
+}
+

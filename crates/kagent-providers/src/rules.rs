@@ -43,6 +43,18 @@ impl Default for ModelConfig {
 }
 
 impl ModelConfig {
+    /// Back to the defaults for what the model dialog edits (models.md section 2). What
+    /// the rules decide for the owner (the request patch of a site, the live protocol) stays.
+    fn reset_editable(&mut self) {
+        let d = Self::default();
+        self.context_window = d.context_window;
+        self.max_output_tokens = d.max_output_tokens;
+        self.supports_tool_call = d.supports_tool_call;
+        self.supports_image = d.supports_image;
+        self.reasoning_levels = d.reasoning_levels;
+        self.reasoning_patches = d.reasoning_patches;
+    }
+
     fn apply(&mut self, patch: &ModelConfigPatch) {
         if let Some(v) = patch.enabled {
             self.enabled = v;
@@ -137,7 +149,9 @@ fn precedence(m: &RuleMatch) -> u8 {
 }
 
 /// Resolve a model's config: defaults, then builtin rules (class by class, file
-/// order inside a class), then the personal model patch.
+/// order inside a class), then the personal model patch. A manual model (`smart`
+/// false) takes the rules for what its owner cannot edit only: the six editable
+/// fields go back to their defaults before the patch (models.md section 2).
 pub fn resolve(
     catalog: &BuiltinCatalog,
     model_id: &str,
@@ -145,6 +159,7 @@ pub fn resolve(
     base_url: &str,
     template_id: &str,
     personal: &ModelConfigPatch,
+    smart: bool,
 ) -> ModelConfig {
     let mut out = ModelConfig::default();
     for class in 0..=3 {
@@ -156,6 +171,9 @@ pub fn resolve(
                 out.apply(&rule.config);
             }
         }
+    }
+    if !smart {
+        out.reset_editable();
     }
     out.apply(personal);
     out
@@ -201,11 +219,11 @@ mod tests {
     #[test]
     fn precedence_model_api_site() {
         let cat = catalog();
-        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://x.example", "t", &Default::default());
+        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://x.example", "t", &Default::default(), true);
         assert_eq!(c.context_window, 200_000, "site rule wins over api and model rules");
-        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://other", "t", &Default::default());
+        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://other", "t", &Default::default(), true);
         assert_eq!(c.context_window, 150_000, "api rule wins over model-only rule");
-        let c = resolve(&cat, "mymodel", "anthropic-messages", "https://other", "t", &Default::default());
+        let c = resolve(&cat, "mymodel", "anthropic-messages", "https://other", "t", &Default::default(), true);
         assert_eq!(c.context_window, 100_000, "model-only rule applies");
     }
 
@@ -213,23 +231,68 @@ mod tests {
     fn personal_patch_wins() {
         let cat = catalog();
         let personal = ModelConfigPatch { context_window: Some(50_000), ..Default::default() };
-        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://x.example", "t", &personal);
+        let c = resolve(&cat, "mymodel", "openai-chat-completions", "https://x.example", "t", &personal, true);
         assert_eq!(c.context_window, 50_000);
+    }
+
+    #[test]
+    fn a_manual_model_ignores_the_rules_for_the_editable_fields_and_keeps_their_request_patch() {
+        // Scenario S40 item 1.
+        let mut cat = catalog();
+        cat.model_rules.push(ModelRule {
+            match_: RuleMatch { model: Some("mymodel".into()), ..Default::default() },
+            config: ModelConfigPatch {
+                max_output_tokens: Some(9_000),
+                supports_image: Some(true),
+                reasoning_levels: Some(vec!["low".into(), "high".into()]),
+                reasoning_patches: Some([("low".to_string(), json!({"effort": "low"}))].into_iter().collect()),
+                request_patch: Some(json!({"extra_body": {"thinking": true}})),
+                ..Default::default()
+            },
+        });
+        let at = |personal: &ModelConfigPatch, smart| resolve(&cat, "mymodel", "openai-chat-completions", "https://x.example", "t", personal, smart);
+
+        // Smart: the rules under the patch.
+        let c = at(&ModelConfigPatch::default(), true);
+        assert_eq!((c.context_window, c.max_output_tokens, c.supports_image), (200_000, 9_000, true));
+        assert_eq!(c.reasoning_levels, vec!["low".to_string(), "high".to_string()]);
+        assert_eq!(c.reasoning_patches["low"], json!({"effort": "low"}));
+
+        // Manual with an empty patch: the six editable fields are the defaults.
+        let c = at(&ModelConfigPatch::default(), false);
+        assert_eq!((c.context_window, c.max_output_tokens, c.supports_tool_call, c.supports_image), (128_000, 8_192, true, false));
+        assert!(c.reasoning_levels.is_empty() && c.reasoning_patches.is_empty());
+        // What the owner cannot edit still comes from the rules.
+        assert_eq!(c.request_patch, json!({"extra_body": {"thinking": true}}));
+
+        // Manual with a patch: the patch alone.
+        let personal = ModelConfigPatch {
+            context_window: Some(77_000),
+            max_output_tokens: Some(111),
+            supports_tool_call: Some(false),
+            supports_image: Some(true),
+            reasoning_levels: Some(vec!["a".into()]),
+            ..Default::default()
+        };
+        let c = at(&personal, false);
+        assert_eq!((c.context_window, c.max_output_tokens, c.supports_tool_call, c.supports_image), (77_000, 111, false, true));
+        assert_eq!(c.reasoning_levels, vec!["a".to_string()]);
+        assert!(c.reasoning_patches.is_empty(), "no patch for the level: the per-API default applies");
     }
 
     #[test]
     fn generated_catalog_resolves_defaults() {
         let cat: BuiltinCatalog = serde_json::from_str(include_str!("../../../config/providers.builtin.json")).unwrap();
         // ZCode ships a global `.*` model rule: contextWindow 1M, tool calls on.
-        let c = resolve(&cat, "zzz-unknown-model", "openai-chat-completions", "https://api.example.com/v1", "x", &Default::default());
+        let c = resolve(&cat, "zzz-unknown-model", "openai-chat-completions", "https://api.example.com/v1", "x", &Default::default(), true);
         assert_eq!(c.context_window, 1_000_000);
         assert!(c.supports_tool_call);
         assert_eq!(c.roles, vec!["chat".to_string()]);
         // Ollama's OpenAI endpoint truncates at the server default (measured 4096).
-        let c = resolve(&cat, "zzz-unknown-model", "openai-chat-completions", "http://127.0.0.1:11434/v1", "ollama", &Default::default());
+        let c = resolve(&cat, "zzz-unknown-model", "openai-chat-completions", "http://127.0.0.1:11434/v1", "ollama", &Default::default(), true);
         assert_eq!(c.context_window, 4096);
         // Native Ollama: KAgent sends num_ctx, so the window is real.
-        let c = resolve(&cat, "qwen2.5:7b-instruct", "ollama-native", "http://127.0.0.1:11434", "ollama", &Default::default());
+        let c = resolve(&cat, "qwen2.5:7b-instruct", "ollama-native", "http://127.0.0.1:11434", "ollama", &Default::default(), true);
         assert_eq!((c.context_window, c.max_output_tokens), (16384, 4096));
     }
 

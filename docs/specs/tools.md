@@ -493,6 +493,7 @@ Profiles, completion notifications and limits: `agents.md`.
 | `browser` | S27 | acts on the backend from `settings.browser.backend`; attach-mode tab rules in `browser.md`; a call judged for one of the owner's tabs has the rule key `browser@owner <action>` and a summary ending in `(the owner's tab)` |
 | `ui` | S19 | `show` gains `section?: string` (settings section id). Views `providers` and `tools` now open the settings sections `models` and `tools` |
 | `load_skill` | S18 | section 17 |
+| `agent_wait`, `agent_stop`, `agent_list` | S35 | also wait for, stop and list the coder runs of the session: they are children of the same registry (`coders.md` section 2), and the answers have the shape of section 21 |
 
 ## 24. Voice-only function `think` (S26)
 
@@ -508,3 +509,23 @@ parameters: {text: string (required): the user's exact words, in their language}
 Result: `{"reply": string, "status": "ok" | "failed" | "cancelled" | "handled"}`.
 `handled` = the utterance answered an approval card; `reply` is empty then. On `/live`
 the call shows as the tool `think` (voice.md section 2).
+
+## 25. Coding agents (group `coders`; S35, S37)
+
+KAgent starts Claude Code or Codex as a child process for one job in one project
+folder. The run is a child of the session like a subagent (section 21): the same queue,
+states, events, card and report. Runs, profiles, the report and what a coder may do:
+`coders.md`.
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `coder_run` | by the profile's mode: `plan` MUT, risk low, no approval (as `agent_run`); `edit` MUT, risk medium, rule key `coder_run <profile> <project>`; `full` always asks (risk high), never rememberable. An unknown profile assesses as `full`. A prompt that `looks_destructive` is destructive | `{description: string (<= 80), prompt: string or an array of lines (the schema says `anyOf`; <= 16000 chars), project: string (a project name, as the `projects` tool lists it), profile?: string (default `settings.coders.defaultProfile`), background?: boolean (default true); S37 adds `resume?: string`; S38 adds `worktree?: boolean}` | starts a coder run (a child session with origin `subagent`, parent = this session) with the job on the tool's stdin. Returns `agentId` and `running` or `queued`; with `background: false` it waits up to 120 s for the report, then answers as `agent_run` does. The report arrives later as a message that starts with `[Agent ...]` (`coders.md` section 2). Read-only mode and plan mode refuse the call; a subagent does not have it |
+| `coder_sessions` (S37) | RO | `{action: list\|read\|worktrees, project?, tool?, session?, limit?: 1..50 (default 20)}` | the conversations Claude Code and Codex kept for a project on this machine, the last messages of one, and the linked worktrees of a project (`coders.md` sections 7 and 8). The text of a conversation is labelled untrusted |
+
+The description of `coder_run` tells the model: it is for code in a project folder
+(implementing, fixing, refactoring, tests, review), not for this machine's files,
+settings or apps, and not for research (the agent's own tools, `agent_run`); `prompt`
+holds the whole job; `profile` says what the coder may do (`claude-plan` reads and
+analyses, `claude-edit` edits and runs tests, `claude-full` anything with the user's
+approval; S36 adds the `codex-*` names); for N jobs it makes N calls in one answer. The
+wording is settled with raw replays of the local model (`coders.md` section 4).

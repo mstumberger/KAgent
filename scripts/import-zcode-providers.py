@@ -79,6 +79,43 @@ EXTRA_TEMPLATES = [
         "liveModels": [],
         "voices": [],
     },
+    {
+        # The owner names the address; name and baseUrl are required when it is added.
+        "id": "custom",
+        "name": "Custom (OpenAI-compatible)",
+        "api": {"type": "openai-chat-completions", "baseUrl": "",
+                "headers": {}},
+        "keyUrl": "",
+        "models": [],
+        "liveModels": [],
+        "voices": [],
+    },
+    {
+        "id": "nvidia",
+        "name": "NVIDIA",
+        "api": {"type": "openai-chat-completions",
+                "baseUrl": "https://integrate.api.nvidia.com/v1",
+                "headers": {}},
+        "keyUrl": "https://build.nvidia.com/settings/api-keys",
+        "models": ["poolside/laguna-xs-2.1", "nvidia/nemotron-3.5-lightning-30b-a3b",
+                   "nvidia/nemotron-3.5-super-vl-120b-a12b"],
+        "liveModels": [],
+        "voices": [],
+    },
+]
+
+NVIDIA_BASE = r"https://integrate\.api\.nvidia\.com/v1/?"
+
+# The `nvidia` extra: what ZCode holds for these two models (the catch-all rule gives
+# every other NVIDIA model the 1M window). Output caps are not taken over: ZCode's is
+# the top of a range the owner picks from, KAgent's is what the request sends.
+EXTRA_RULES = [
+    {"match": {"model": r"poolside/laguna-xs-2\.1", "apiType": "openai-chat-completions",
+               "baseUrl": NVIDIA_BASE},
+     "config": {"contextWindow": 262144}},
+    {"match": {"model": r"nvidia/nemotron-3\.5-super-vl-120b-a12b",
+               "apiType": "openai-chat-completions", "baseUrl": NVIDIA_BASE},
+     "config": {"supportsImage": True}},
 ]
 
 
@@ -186,6 +223,7 @@ def main():
         rules.append({"match": {"model": ".*", "apiType": "openai-chat-completions", "baseUrl": base}, "config": {"contextWindow": 4096, "maxOutputTokens": 1024}})
     # Native Ollama: KAgent sends num_ctx itself; 16k fits a 7-8B model in 12 GB VRAM.
     rules.append({"match": {"model": ".*", "apiType": "ollama-native"}, "config": {"contextWindow": 16384, "maxOutputTokens": 4096, "supportsToolCall": True}})
+    rules.extend(EXTRA_RULES)
 
     out = {
         "schemaVersion": 1,

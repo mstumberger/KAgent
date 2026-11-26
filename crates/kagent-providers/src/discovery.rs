@@ -78,26 +78,66 @@ pub async fn fetch_models(provider: &ProviderEntry) -> anyhow::Result<Vec<String
     Ok(models)
 }
 
-/// Merge discovered ids into a provider's model list: new ids appended disabled
-/// unless the list stays small; existing entries keep their flags and config.
+/// `true` when two ids name one model: they differ only by a leading `models/`.
+/// Gemini's OpenAI-compatible `/models` answers `models/gemini-2.5-flash` where its
+/// template lists `gemini-3.8-pro` (models.md section 3).
+pub fn same_model(a: &str, b: &str) -> bool {
+    fn bare(id: &str) -> &str {
+        id.strip_prefix("models/").unwrap_or(id)
+    }
+    bare(a) == bare(b)
+}
+
+/// The jobs a model id says it has (models.md section 3): first match wins.
+pub fn roles_from_id(id: &str) -> Vec<String> {
+    const LIVE: [&str; 3] = ["-live", "native-audio", "realtime"];
+    const NO_JOB: [&str; 15] = ["embed", "tts", "transcribe", "audio", "whisper", "lyria", "imagen", "image", "banana", "veo", "robotics", "computer-use", "deep-research", "antigravity", "aqa"];
+    let id = id.to_lowercase();
+    if LIVE.iter().any(|k| id.contains(k)) {
+        vec!["live".into()]
+    } else if NO_JOB.iter().any(|k| id.contains(k)) {
+        Vec::new()
+    } else {
+        vec!["chat".into()]
+    }
+}
+
+fn new_row(id: String) -> ModelEntry {
+    let roles = roles_from_id(&id);
+    ModelEntry { id, name: String::new(), enabled: false, roles, smart: true, config: ModelConfigPatch::default() }
+}
+
+/// Merge discovered ids into a provider's model list: a `models/` twin of a row is
+/// that row; a new row arrives disabled, with the roles of its id; existing entries
+/// keep their flags and config.
 pub fn merge_models(provider: &ProviderEntry, discovered: Vec<String>) -> ProviderEntry {
-    let total_after = provider.models.len() + discovered.len();
     let mut out = provider.clone();
-    let mut seen: Vec<String> = out.models.iter().map(|m| m.id.clone()).collect();
-    for id in discovered {
-        if seen.contains(&id) || id.is_empty() {
+    for id in discovered.into_iter().filter(|id| !id.is_empty()) {
+        if out.models.iter().any(|m| same_model(&m.id, &id)) {
             continue;
         }
-        seen.push(id.clone());
-        out.models.push(ModelEntry {
-            enabled: total_after < 5,
-            id,
-            name: String::new(),
-            roles: vec!["chat".into()],
-            config: ModelConfigPatch::default(),
-        });
+        out.models.push(new_row(id));
     }
     out
+}
+
+/// Rows the fetch before S40 marked `chat` get the roles of their id (models.md
+/// section 3, item 4): a row whose `config` is empty, whose roles are `["chat"]` and
+/// whose id matches the first or the second row of the table. A model `named` in
+/// settings is left alone. Answers how many rows changed.
+pub fn correct_roles(provider: &mut ProviderEntry, named: &[String]) -> usize {
+    let mut fixed = 0;
+    for m in &mut provider.models {
+        if !m.config.is_empty() || m.roles != ["chat"] || named.iter().any(|r| r == &format!("{}::{}", provider.id, m.id)) {
+            continue;
+        }
+        let roles = roles_from_id(&m.id);
+        if roles != ["chat"] {
+            m.roles = roles;
+            fixed += 1;
+        }
+    }
+    fixed
 }
 
 #[cfg(test)]
@@ -105,7 +145,11 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn provider(models: Vec<&str>) -> ProviderEntry {
+    fn entry(id: &str) -> ModelEntry {
+        ModelEntry { id: id.into(), name: String::new(), enabled: true, roles: vec!["chat".into()], smart: true, config: ModelConfigPatch::default() }
+    }
+
+    fn provider(models: Vec<ModelEntry>) -> ProviderEntry {
         ProviderEntry {
             id: "p".into(),
             name: "P".into(),
@@ -118,36 +162,92 @@ mod tests {
             },
             api_key: String::new(),
             api_key_ref: None,
-            models: models
-                .into_iter()
-                .map(|id| ModelEntry {
-                    id: id.into(),
-                    name: String::new(),
-                    enabled: true,
-                    roles: vec!["chat".into()],
-                    config: ModelConfigPatch::default(),
-                })
-                .collect(),
+            models,
             models_fetched_at: None,
             last_error: String::new(),
         }
     }
 
     #[test]
-    fn merge_keeps_flags_and_disables_new_when_large() {
-        let p = provider(vec!["a", "b"]);
+    fn merge_keeps_flags_and_new_rows_arrive_disabled_at_any_size() {
+        let p = provider(vec![entry("a"), entry("b")]);
         let merged = merge_models(&p, vec!["b".into(), "c".into(), "d".into(), "e".into()]);
         let ids: Vec<&str> = merged.models.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["a", "b", "c", "d", "e"]);
+        assert_eq!(ids, vec!["a", "b", "c", "d", "e"], "a known id is not added twice");
         assert!(merged.models.iter().find(|m| m.id == "b").unwrap().enabled, "existing stays enabled");
-        assert!(!merged.models.iter().find(|m| m.id == "c").unwrap().enabled, "new disabled when list is large");
+        assert!(merged.models.iter().filter(|m| m.id != "a" && m.id != "b").all(|m| !m.enabled), "new rows are disabled");
+        let merged = merge_models(&provider(vec![]), vec!["only-model".into()]);
+        assert!(!merged.models[0].enabled, "disabled in a small list too");
+        assert_eq!(p.models.len(), 2, "the provider itself is not changed");
     }
 
     #[test]
-    fn merge_enables_new_when_small() {
-        let p = provider(vec![]);
-        let merged = merge_models(&p, vec!["only-model".into()]);
-        assert!(merged.models[0].enabled);
+    fn a_models_twin_is_the_row() {
+        // Scenario S40 item 2.
+        let mut row = entry("gemini-3.8-flash");
+        row.enabled = false;
+        row.config.context_window = Some(123);
+        let p = provider(vec![row]);
+        let merged = merge_models(&p, vec!["models/gemini-3.8-flash".into(), "models/gemini-3.8-flash-tts".into(), "models/gemini-4-neon".into()]);
+        let ids: Vec<&str> = merged.models.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["gemini-3.8-flash", "models/gemini-3.8-flash-tts", "models/gemini-4-neon"]);
+        let kept = &merged.models[0];
+        assert!(!kept.enabled && kept.config.context_window == Some(123), "the row keeps its id, flags and config");
+        let (tts, neon) = (&merged.models[1], &merged.models[2]);
+        assert!(!tts.enabled && tts.roles.is_empty(), "the text-to-speech model arrives disabled with no role");
+        assert!(!neon.enabled && neon.roles == ["chat"], "the chat model arrives disabled with role chat");
+        // Either way round, and two twins in one answer are one row.
+        assert!(same_model("models/x", "x") && !same_model("x", "y"));
+        let merged = merge_models(&provider(vec![]), vec!["models/gemini-3.8-flash".into(), "gemini-3.8-flash".into()]);
+        assert_eq!(merged.models.len(), 1);
+    }
+
+    #[test]
+    fn roles_from_the_id() {
+        for (id, roles) in [
+            ("models/gemini-3.8-flash-tts", vec![]),
+            ("models/lyria-3.5", vec![]),
+            ("text-embedding-3-large", vec![]),
+            ("models/gemini-3.8-live", vec!["live"]),
+            ("gemini-2.0-flash-exp-native-audio", vec!["live"]),
+            ("gpt-realtime", vec!["live"]),
+            ("some-chat-model", vec!["chat"]),
+            ("qwen2.5:7b-instruct", vec!["chat"]),
+        ] {
+            assert_eq!(roles_from_id(id), roles, "{id}");
+        }
+    }
+
+    #[test]
+    fn wrong_rows_of_the_old_fetch_get_the_roles_of_their_id_at_load() {
+        // Scenario S40 item 3: the file before S40 marked every fetched model `chat`.
+        let fetched = |id: &str| ModelEntry { enabled: false, ..entry(id) };
+        let mut p = provider(vec![fetched("models/gemini-3.8-flash-tts"), fetched("models/gemini-3.8-live"), entry("gemini-3.8-pro"), entry("models/gemini-3.8-flash-tts")]);
+        p.id = "gemini".into();
+        let named = ["gemini::models/gemini-3.8-flash-tts".to_string()];
+        let before = p.clone();
+        assert_eq!(correct_roles(&mut p, &[]), 3, "both text-to-speech rows and the live row");
+        assert_eq!(correct_roles(&mut p, &[]), 0, "idempotent: a second load changes nothing");
+        let roles: Vec<&str> = p.models.iter().flat_map(|m| m.roles.iter().map(String::as_str)).collect();
+        assert_eq!(roles, ["live", "chat"], "the text-to-speech rows have no job, the live row has live, the chat model stays");
+        for (was, now) in before.models.iter().zip(&p.models) {
+            assert_eq!((was.id.as_str(), was.enabled, &was.config), (now.id.as_str(), now.enabled, &now.config), "nothing else moves");
+        }
+
+        // The model that is the chatModel is left alone.
+        let mut p = provider(vec![fetched("models/gemini-3.8-flash-tts"), fetched("models/gemini-3.8-live"), entry("gemini-3.8-pro")]);
+        p.id = "gemini".into();
+        assert_eq!(correct_roles(&mut p, &named), 1);
+        assert_eq!(p.models[0].roles, ["chat"], "named in settings");
+        assert_eq!(p.models[1].roles, ["live"]);
+        assert_eq!(p.models[2].roles, ["chat"], "a chat model stays one");
+
+        // A row the owner configured is not the old fetch's: it stays too.
+        let mut own = entry("models/gemini-3.8-flash-tts");
+        own.config.context_window = Some(8_192);
+        let mut p = provider(vec![own]);
+        assert_eq!(correct_roles(&mut p, &[]), 0);
+        assert_eq!(p.models[0].roles, ["chat"]);
     }
 
     #[test]

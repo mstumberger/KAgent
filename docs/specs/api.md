@@ -133,7 +133,7 @@ Server -> client:
   and a `status` carries `detail: "no chat model: the live model thinks"` when
   `routed` falls back to `live` (voice.md).
 
-## 6. Phase 4 endpoints (S17-S33)
+## 6. Phase 4 endpoints (S17-S33), and the coding agents (S35-S38)
 
 Same transport, auth and error shape as section 3. `GET /api/sessions` without
 `parent` hides sessions with origin `subagent`. Each listed session has `agents`, how
@@ -199,6 +199,12 @@ for a plan, `preview` holds the plan text.
 | | DELETE `/api/hooks/:id` | | 204 |
 | | POST `/api/hooks/:id/test` | `{event, sample?: object}` | `{exitCode, stdout, stderr, decision?, durationMs, timedOut, error?}` (`decision` is left out when the hook decided nothing) |
 | widgets | GET `/api/widgets/:session/:id` | | `text/html; charset=utf-8`, the title percent-encoded in `X-KAgent-Title`, `Cache-Control: no-store` (bearer auth); 400 for a session id that is not plain or an id that is not a number from 1 to 200, 404 when there is no such fragment |
+| coders | GET `/api/coders` | | `{tools: CoderToolView[], profiles: CoderProfileView[], invalid: [{file, reason}], running: CoderRunView[]}` (S35; the profiles of the owner and `invalid` from S36). A run is stopped through `/api/sessions/:id/subagents/:child/stop`, and `GET /api/sessions/:id` returns `coder` in the meta of a run (config.md section 11) |
+| | POST `/api/coders/test` | `{tool, run?: boolean}` | `{tool, installed, path, version, ok?, seconds?, reply?, error?}`; with `run` it starts one short real job and uses the owner's subscription (`coders.md` section 6); 400 for an unknown tool |
+| | PUT `/api/coders/:name` (S36) | `{description, tool?, mode?, model?, effort?, allowedTools?, args?, env?, prompt?}` | `CoderProfileView` (201 when it creates, 200 when it changes; a field left out keeps its value); a built-in name -> 409; an invalid name, a missing description, an unknown tool or mode, a reserved flag in `args`, a reserved name in `env` -> 400 |
+| | DELETE `/api/coders/:name` (S36) | | 204; a built-in -> 409 |
+| | POST `/api/coders/terminal` (S37) | `{tool, sessionId, project?}` | `{ok: true}`; 400 for an unknown tool or when no terminal can be opened; 409 while a run of KAgent uses the conversation |
+| | GET `/api/coders/:id/review` (S38) | | `CoderReview`; 404 for a session that is not a coder run |
 
 ```ts
 type SkillView = { name: string; description: string; whenToUse?: string;
@@ -216,6 +222,14 @@ type TaskRun = { at: string; status: "running" | "ok" | "failed" | "cancelled" |
 type AgentProfileView = { name: string; description: string; builtIn: boolean; source: "builtin" | "user";
   model: string; toolGroups: string[]; maxIterations: number; prompt: string };
 type HookView = /* config.md section 11, Hook */;
+type CoderToolView = { tool: "claude" | "codex"; installed: boolean; path: string | null; version: string | null };
+type CoderProfileView = { name: string; description: string; builtIn: boolean; source: "builtin" | "user";
+  tool: "claude" | "codex"; mode: "plan" | "edit" | "full"; model: string; effort: string; allowedTools: string[];
+  args: string[]; env: Record<string, string>; prompt: string };
+type CoderRunView = { id: string; parent: string; title: string; profile: string;
+  status: "queued" | "running" | "done" | "failed" | "cancelled"; startedAt?: string; endedAt?: string; project: string };
+type CoderReview = { tool: string; profile: string; project: string; branch: string | null; worktree: string | null;
+  files: string[]; status: string; stat: string };
 ```
 
 `SkillView`: `path` is the skill's folder as found and `realPath` the same with links
@@ -239,3 +253,6 @@ body. A refused write is 400 (`invalid_input`) or 409 (`conflict`).
 
 `uiCommand` `show` args gain `section` (settings section id). `notice` with level
 `tasks` is no longer used once S28 is done (`tasksChanged` replaces it).
+
+Phase 5 adds no event: a coder run is reported with `subagentUpdated`, as a subagent is
+(`coders.md` section 2).

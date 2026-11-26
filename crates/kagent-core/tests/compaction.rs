@@ -261,7 +261,7 @@ async fn a_capacity_error_compacts_once_before_the_fallback_model_is_used() {
     assert_eq!(seen[2].messages[1].content, "question 2");
     assert_eq!(r.summary_upto().await, Some(4));
     let notices: Vec<String> = events.iter().filter_map(|e| if let AgentEvent::Notice { text, .. } = e { Some(text.clone()) } else { None }).collect();
-    assert_eq!(notices, ["fake::test is busy - answering with fake::backup"], "one notice, when the fallback comes");
+    assert_eq!(notices, ["fake::test is out of quota - answering with fake::backup"], "one notice, when the fallback comes: the retry failed with 429 (models.md section 5)");
 }
 
 #[tokio::test]

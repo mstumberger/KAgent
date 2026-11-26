@@ -606,6 +606,36 @@
    "models": [],
    "liveModels": [],
    "voices": []
+  },
+  {
+   "id": "custom",
+   "name": "Custom (OpenAI-compatible)",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "",
+    "headers": {}
+   },
+   "keyUrl": "",
+   "models": [],
+   "liveModels": [],
+   "voices": []
+  },
+  {
+   "id": "nvidia",
+   "name": "NVIDIA",
+   "api": {
+    "type": "openai-chat-completions",
+    "baseUrl": "https://integrate.api.nvidia.com/v1",
+    "headers": {}
+   },
+   "keyUrl": "https://build.nvidia.com/settings/api-keys",
+   "models": [
+    "poolside/laguna-xs-2.1",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-super-vl-120b-a12b"
+   ],
+   "liveModels": [],
+   "voices": []
   }
  ],
  "modelRules": [
@@ -4564,6 +4594,26 @@
     "contextWindow": 16384,
     "maxOutputTokens": 4096,
     "supportsToolCall": true
+   }
+  },
+  {
+   "match": {
+    "model": "poolside/laguna-xs-2\\.1",
+    "apiType": "openai-chat-completions",
+    "baseUrl": "https://integrate\\.api\\.nvidia\\.com/v1/?"
+   },
+   "config": {
+    "contextWindow": 262144
+   }
+  },
+  {
+   "match": {
+    "model": "nvidia/nemotron-3\\.5-super-vl-120b-a12b",
+    "apiType": "openai-chat-completions",
+    "baseUrl": "https://integrate\\.api\\.nvidia\\.com/v1/?"
+   },
+   "config": {
+    "supportsImage": true
    }
   }
  ]

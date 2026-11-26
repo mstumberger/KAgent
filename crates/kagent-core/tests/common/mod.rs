@@ -23,18 +23,27 @@ use kagent_core::tool::{Risk, SideEffect, Tool, ToolContext, ToolContract, ToolO
 
 #[derive(Clone)]
 pub struct ScriptedModel {
-    pub queue: Arc<Mutex<Vec<ModelResponse>>>,
+    /// The answers in order; `Err` fails its request with that text.
+    pub queue: Arc<Mutex<Vec<Result<ModelResponse, String>>>>,
     pub requests: Arc<Mutex<Vec<Vec<Message>>>>,
     /// The system prompt of every request, in order.
     pub systems: Arc<Mutex<Vec<String>>>,
+    /// The model and the output limit of every request, in order.
+    pub model_refs: Arc<Mutex<Vec<(String, Option<u64>)>>>,
 }
 
 impl ScriptedModel {
     pub fn new(responses: Vec<ModelResponse>) -> Self {
+        Self::scripted(responses.into_iter().map(Ok).collect())
+    }
+
+    /// Answers from a script: a response, or the text of the error the request fails with.
+    pub fn scripted(script: Vec<Result<ModelResponse, String>>) -> Self {
         Self {
-            queue: Arc::new(Mutex::new(responses)),
+            queue: Arc::new(Mutex::new(script)),
             requests: Arc::new(Mutex::new(Vec::new())),
             systems: Arc::new(Mutex::new(Vec::new())),
+            model_refs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -49,8 +58,10 @@ impl ModelClient for ScriptedModel {
     ) -> anyhow::Result<ModelResponse> {
         self.requests.lock().unwrap().push(request.messages.clone());
         self.systems.lock().unwrap().push(request.system.clone());
+        self.model_refs.lock().unwrap().push((request.model_ref.clone(), request.options.max_output_tokens));
+        let reply = self.queue.lock().unwrap().remove(0).map_err(anyhow::Error::msg)?;
         let _ = deltas.send(ModelDelta::Text(request.system.clone()));
-        Ok(self.queue.lock().unwrap().remove(0))
+        Ok(reply)
     }
 }
 
@@ -128,6 +139,11 @@ pub fn config() -> AgentConfig {
 }
 
 pub async fn rig(responses: Vec<ModelResponse>, spans: Arc<Mutex<Spans>>) -> Rig {
+    rig_with(ScriptedModel::new(responses), spans, config()).await
+}
+
+/// The rig with a model of one's own script and the config of every turn.
+pub async fn rig_with(model: ScriptedModel, spans: Arc<Mutex<Spans>>, cfg: AgentConfig) -> Rig {
     let dir = tempfile::tempdir().unwrap();
     let store = SessionStore::new(dir.path()).unwrap();
     let meta = store.create("t").await.unwrap();
@@ -136,8 +152,6 @@ pub async fn rig(responses: Vec<ModelResponse>, spans: Arc<Mutex<Spans>>) -> Rig
     tools.register(Arc::new(ProbeTool::ro("probe_a", &spans)));
     tools.register(Arc::new(ProbeTool::ro("probe_b", &spans)));
     tools.register(Arc::new(ProbeTool::mut_("probe_c", &spans)));
-    let model = ScriptedModel::new(responses);
-    let cfg = config();
     let agent = Agent::new(AgentDeps {
         services: None,
         hooks: None,

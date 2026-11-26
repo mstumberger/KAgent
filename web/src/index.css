@@ -652,6 +652,9 @@ input, select, textarea {
 }
 :root[data-theme="light"] input, :root[data-theme="light"] select, :root[data-theme="light"] textarea { background: #fff; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: rgba(124, 196, 255, 0.6); box-shadow: 0 0 0 3px rgba(124, 196, 255, 0.15); }
+/* The popup of a select is drawn by the browser and stays light in Brave on Linux,
+   also in the dark theme, so each row carries its own colours (as `.perm option` does). */
+select option { background-color: var(--glass-2); color: var(--ink); }
 input[type="range"] { accent-color: var(--ice); padding: 0; border: none; background: transparent; box-shadow: none; }
 
 /* chat: sessions rail + a readable conversation column */

@@ -393,3 +393,96 @@ lists under "Tests".
    without it.
 4. Started with stdout that is not a terminal, `kagentd` prints no token (the journal of
    its first start under systemd shows the new line).
+
+## S35 coding agents: runs and Claude Code
+1. **[auto]** `tests/subagents/coder.rs` and `children/external.rs`: the scenarios of
+   `coders.md` section 11 (a run is a child; the report reaches an idle and a busy
+   parent; stop, the kill switch and the delete of the parent; the depth limit).
+2. **[auto]** The Claude Code adapter on recorded lines: the transcript, each result
+   subtype, a refused call, a stream without a result.
+3. **[auto]** The runner with a fake `claude`: process group, stdin, the timeout, stop,
+   the run record, the recovery at start, the redactor.
+4. **[auto]** The assessment of each profile in each permission mode; an unknown
+   profile, project or binary, the folder of KAgent and the rate cap start nothing.
+5. The owner: Settings -> Coding agents finds `claude` with its version; Test answers
+   OK (it uses a little of the subscription). With the daemon's environment and, if
+   that fails, with the login shell on.
+6. The owner, or the stage agent with the owner's leave: one job per mode in a
+   temporary repository: `plan` changes nothing; `edit` edits a file, runs a test of
+   the allowlist and cannot write outside the folder; a job outside the allowlist is
+   refused and the report says so; `full` shows its card in `trusted` mode.
+7. "Use Claude Code to add a unit test for X in <project>": one card `claude-edit`; the
+   child session shows its steps; the report arrives without a new message. (With the
+   local qwen2.5:7b-instruct: to measure; a cloud model otherwise.)
+8. Headless Chrome: the card (queued, running, done), the read-only header of the coder
+   session, the Settings page at 1200x820 and 700x500.
+
+## S36 Codex and profiles
+1. **[auto]** The Codex adapter on recorded lines: each item type, `turn.failed`,
+   `error`, the report's third line without a cost.
+2. **[auto]** Profile files: every field; each refusal of `args` and `env`; an invalid
+   file is listed with its reason; a built-in name cannot be a file; `<config>/coders`
+   is protected.
+3. **[auto]** `PUT` and `DELETE /api/coders/:name`: 201, 200, 400, 409.
+4. The owner: Codex installed and logged in; Test answers OK; one job per mode; the
+   rows marked "verify" in `coders.md` section 3 are settled.
+5. "Use Codex to ...": the card says `codex-edit`; the report arrives.
+6. Headless Chrome: the profile editor; an invalid file with its reason.
+
+## S37 history, resume and the terminal
+1. **[auto]** The index on temporary stores: the folder encoding, the attribution of a
+   record (two projects that encode alike), titles, sub-agent rollouts left out, a
+   failed read changes nothing.
+2. **[auto]** `resume`: a unique prefix; a profile of another tool; a conversation in
+   use.
+3. **[auto]** `coder_sessions`: `list`, and `read` (cut, labelled untrusted).
+4. The owner: `coder_sessions list` shows the Claude Code conversations of a project,
+   also those started in a terminal; "Open in a terminal" continues one in Konsole.
+5. "Ask Claude Code to review the pending changes, then have Codex continue from its
+   report": two runs; the job of the second starts with the handover report.
+
+## S38 worktree, review, notifications
+1. **[auto]** A run with `worktree: true` in a temporary repository: the checkout and
+   the branch exist during the run, the report names them, nothing is removed after.
+2. **[auto]** The review: the files of the run, the branch, the status and the stat.
+3. **[auto]** Notifications: after `notifyAfterMin` for `done`, always for a failure;
+   the two channels by their keys.
+4. The owner: a job with `worktree: true` leaves its branch for a look; the review
+   block is in the header of its session.
+
+## S39 automation
+1. **[auto]** A `coder` task starts a run at its time and records the report; under
+   `onApproval: deny` an `edit` profile is not started; the timeout; delivery.
+2. The owner: a paused `coder` task, run now from the Tasks tab, delivers its report.
+
+## S40 models and providers
+1. **[auto]** The resolver: a smart entry takes the rules under its patch; a manual
+   entry ignores the rules for the six editable fields and keeps their request patch.
+2. **[auto]** A fetch on a list that holds `gemini-3.8-flash`: `models/gemini-3.8-flash`
+   is not added; `models/gemini-3.8-flash-tts` arrives disabled with no role;
+   `models/gemini-4-neon` arrives disabled with role `chat`.
+3. **[auto]** A file whose rows were marked `chat` by the old fetch: at load the
+   text-to-speech, image and music rows lose the role and the live rows get `live`; a
+   row that is the `chatModel` is left alone; a second load changes nothing.
+4. **[auto]** `PUT` with `smart: false` and no `maxOutputTokens`: 400 naming
+   `maxOutputTokens`, the file unchanged. `removeModels` of the `fallbackModel`: 409
+   naming the role.
+5. **[auto]** Scripted model, 429 with "quota": with the fallback's provider off the
+   turn fails with the 429 text; with it on the notice says "out of quota".
+6. Headless Chrome (dark and light, 1200x820 and 700x500): the pencil opens the dialog
+   with the inherited values as placeholders; a typed context window saves as an
+   override (accent border, the badge of the row changes); clearing it removes the
+   override.
+7. Headless: Smart off fills the fields; Save with an empty Max output tokens is
+   refused and that field has the focus; a valid save sends the six fields.
+8. Headless: a dragged model row and a dragged provider keep their order after a
+   reload of the page.
+9. Headless: the Defaults card shows "provider switched off" under a fallback whose
+   provider is off; leaving the name field of a provider saves it with one `PUT`. A
+   dropdown of the Defaults card opens in the colours of the theme (dark and light),
+   picks with the mouse and with the keyboard (open, ArrowDown, Enter), closes with
+   Escape and gives the focus back to its trigger, and closes on a click outside.
+10. The owner, on the real Gemini provider after a restart (and after the copy of
+    `providers.json`, section G): Fetch models adds no `models/` twin; the
+    text-to-speech, image and music rows have no role badge; a chat turn while the key
+    is over quota ends with the quota message in the header notice.

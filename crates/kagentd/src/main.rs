@@ -217,7 +217,9 @@ async fn run() -> anyhow::Result<()> {
     // started under KAGENT_HOME or from target/ leaves the owner's unit alone.
     startup::sync_at_start(settings.startup.autostart);
     let catalog = kagent_providers::ProviderStore::builtin_catalog()?;
-    let providers = Arc::new(kagent_providers::ProviderStore::load(paths.providers(), catalog)?);
+    // A model the settings name keeps its roles when the rows of an old fetch are corrected (models.md section 3).
+    let named: Vec<String> = api::named_models(&settings).into_iter().map(|(_, r)| r).collect();
+    let providers = Arc::new(kagent_providers::ProviderStore::load(paths.providers(), catalog, &named)?);
     let keyring = secrets::attach(providers.clone()).await;
     tracing::info!("provider keys: {}", if keyring { "Secret Service (desktop keyring)" } else { "providers.json (0600)" });
 
@@ -348,7 +350,8 @@ async fn run() -> anyhow::Result<()> {
             .collect();
         let memory_tools = enabled.iter().any(|n| kagent_core::tools::group_of(n) == "memory");
         let mode = serde_json::to_value(s.permission_mode).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
-        let resolved = providers_for_config.resolve(&s.chat_model).ok();
+        // Usable only: enabled, with the chat role, in a provider that is on (models.md section 2).
+        let resolved = providers_for_config.usable(&s.chat_model);
         let context_tokens = resolved.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0);
         // The memory block (memory.md section 2), recalled by the words of this turn's message.
         let (memory_block, memory_rule) = memory_for_config.prompt_parts(&s.memory_config(), &turn.user_text, context_tokens, memory_tools);
@@ -364,21 +367,23 @@ async fn run() -> anyhow::Result<()> {
             permission_mode: &mode,
             now: chrono::Local::now(),
         });
-        let max_output = s.options.max_output_tokens.or(resolved.as_ref().map(|r| r.config.max_output_tokens));
+        // The model's own output limit is the only source: `options.maxOutputTokens` is no longer read (models.md section 6).
+        let fallback = providers_for_config.usable(&s.fallback_model);
         AgentConfig {
             model_ref: s.chat_model.clone(),
             system_prompt,
             max_iterations: s.max_iterations,
             options: kagent_core::model::ModelOptions {
                 reasoning_level: s.options.reasoning_level.clone(),
-                max_output_tokens: max_output,
+                max_output_tokens: resolved.as_ref().map(|r| r.config.max_output_tokens),
                 temperature: s.options.temperature,
             },
             privilege: s.privilege_method(),
             context_tokens,
-            fallback_context_tokens: providers_for_config.resolve(&s.fallback_model).map(|r| r.config.context_window as usize).unwrap_or(0),
-            fallback_max_output: providers_for_config.resolve(&s.fallback_model).ok().map(|r| r.config.max_output_tokens),
-            fallback_model_ref: s.fallback_model.clone(),
+            // A fallback that cannot be used is none: the turn then fails with the model's own error (models.md section 5).
+            fallback_context_tokens: fallback.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0),
+            fallback_max_output: fallback.as_ref().map(|r| r.config.max_output_tokens),
+            fallback_model_ref: fallback.as_ref().map(|_| s.fallback_model.clone()).unwrap_or_default(),
         }
     };
 
@@ -424,8 +429,8 @@ async fn run() -> anyhow::Result<()> {
         kagent_core::compact::CompactionConfig {
             enabled: section.enabled,
             threshold_pct: section.threshold_pct,
-            // A fast model that is not set, or does not resolve, is none.
-            fast_model_ref: if providers_for_compaction.resolve(&s.fast_model).is_ok() { s.fast_model.clone() } else { String::new() },
+            // A fast model that is not set, or cannot be used, is none.
+            fast_model_ref: if providers_for_compaction.usable(&s.fast_model).is_some() { s.fast_model.clone() } else { String::new() },
         }
     }));
 

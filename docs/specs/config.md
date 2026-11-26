@@ -132,6 +132,15 @@ literal containing `reasoningLevel` as a value, render one patch per level into
 `reasoningPatches` (try `json.loads` after substitution; skip on failure). Skip
 templates with access type `zhipu-account` and `builtinProviderModelRules`.
 
+**Extras** (`EXTRA_TEMPLATES` and `EXTRA_RULES` of the script, written by hand):
+gemini, ollama, lmstudio, groq, mistral, `custom` ("Custom (OpenAI-compatible)":
+`openai-chat-completions`, no base URL, no models; `name` and `baseUrl` are required
+when it is added, `apiType` may be given) and `nvidia` ("NVIDIA":
+`https://integrate.api.nvidia.com/v1`, three models). Site rules of `nvidia`:
+`poolside/laguna-xs-2\.1` has a 262144 context window and
+`nvidia/nemotron-3\.5-super-vl-120b-a12b` reads images (the values ZCode holds for
+them); every other NVIDIA model takes the catch-all rule.
+
 ## 4. providers.json (personal, editable)
 
 ```json
@@ -289,3 +298,35 @@ when `shell` is empty; `timeoutMs` 100..60000. Unknown keys are rejected.
 come from compaction (`compaction.md`), `approvedPlan` from plan mode (`plan-todo.md`):
 `{"path": "<data>/plans/<sessionId>-<n>.md", "text": "<the plan>"}` once a plan was
 approved; `n` is the first number the session has not used.
+
+### Coding agents (S35-S39; `coders.md`)
+
+Settings section `coders`, typed like the others:
+
+```json
+"coders": {"defaultProfile": "claude-edit", "timeoutMin": 60, "launchesPerMinute": 6,
+  "loginShell": false, "claudeBinary": "", "codexBinary": ""}
+```
+
+| Key | Values |
+|---|---|
+| `coders.defaultProfile` | a profile name (`^[a-z0-9][a-z0-9-]{0,63}$`), default `claude-edit`; a name that is no profile when `coder_run` runs is an error of the call, not of the settings |
+| `coders.timeoutMin` | 1..1440 |
+| `coders.launchesPerMinute` | 1..30 |
+| `coders.loginShell` | boolean: the tool runs through a login shell (`coders.md` section 1) |
+| `coders.claudeBinary`, `coders.codexBinary` | empty (the name on `PATH`) or an absolute path (else 400, and refused on load); `codexBinary` from S36 |
+| `coders.notifyDesktop`, `coders.notifyTelegram` | boolean (S38; default true and false) |
+| `coders.notifyAfterMin` | 0..120 (S38; default 2) |
+
+Paths: a run record `<data>/coders/<childId>.json` for each running coder run, removed
+when it ended (`coders.md` section 2); the profiles of the owner
+`<config>/coders/<name>.md` (S36), a folder protected like `<config>/agents`.
+
+Session meta: the session of a coder run carries `coder`; every other session has none:
+
+```json
+"coder": {"tool": "claude", "sessionId": "<the tool's own conversation id>",
+  "profile": "claude-edit", "project": "/home/me/code/app", "resume": null}
+```
+S38 adds `branch` (string or null), `worktree` (the folder, or null) and `files` (the
+files the tool edited).

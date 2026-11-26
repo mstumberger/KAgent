@@ -22,9 +22,9 @@ async fn ollama_tool_round_trip() {
     std::fs::create_dir_all(&home).unwrap();
     let catalog: BuiltinCatalog =
         serde_json::from_str(include_str!("../../../config/providers.builtin.json")).unwrap();
-    let store = Arc::new(ProviderStore::load(home.join("providers.json"), catalog).unwrap());
+    let store = Arc::new(ProviderStore::load(home.join("providers.json"), catalog, &[]).unwrap());
     if store.provider("ollama").is_none() {
-        store.add_from_template("ollama", None, None, None, Default::default()).unwrap();
+        store.add_from_template("ollama", None, None, None, Default::default(), None).unwrap();
     }
     store
         .update("ollama", |p| {
@@ -36,6 +36,7 @@ async fn ollama_tool_round_trip() {
                         name: String::new(),
                         enabled: true,
                         roles: vec!["chat".into()],
+                        smart: true,
                         config: ModelConfigPatch::default(),
                     },
                 );

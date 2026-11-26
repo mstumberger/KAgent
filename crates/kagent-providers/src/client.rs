@@ -241,8 +241,8 @@ mod tests {
     fn store_with_ollama(dir: &std::path::Path) -> Arc<ProviderStore> {
         let catalog: BuiltinCatalog =
             serde_json::from_str(include_str!("../../../config/providers.builtin.json")).unwrap();
-        let s = ProviderStore::load(dir.join("providers.json"), catalog).unwrap();
-        s.add_from_template("ollama", None, Some("http://127.0.0.1:1/v1".into()), None, Default::default())
+        let s = ProviderStore::load(dir.join("providers.json"), catalog, &[]).unwrap();
+        s.add_from_template("ollama", None, Some("http://127.0.0.1:1/v1".into()), None, Default::default(), None)
             .unwrap();
         s.update("ollama", |p| {
             p.models.push(crate::config::ModelEntry {
@@ -250,6 +250,7 @@ mod tests {
                 name: String::new(),
                 enabled: true,
                 roles: vec!["chat".into()],
+                smart: true,
                 config: ModelConfigPatch::default(),
             })
         })

@@ -1,20 +1,39 @@
 // Tools and permissions: the permission mode, the always-allow rules and the tool
-// groups of a chat and of the MCP server. The per-tool overrides sit in the contracts.
-import { useEffect, useState } from "react";
+// groups of a chat and of the MCP server. The per-tool overrides sit in the contracts;
+// the limits of a turn (S40) are the last card.
+import { useEffect, useState, type FormEvent } from "react";
 import { api, type ToolView } from "../../api";
 import { useStore } from "../../store";
 import type { SectionProps } from "../registry";
-import { GroupCard, Row, SectionPage } from "../ui";
+import { Field, GroupCard, Row, SectionPage } from "../ui";
+import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import ToolContracts from "./ToolContracts";
 
 const MODES = ["read-only", "ask", "trusted", "full"];
+const LIMITS = { maxIterations: 40, approvalTimeoutSec: 600 };
+type Numberish = number | null;
+const positive = (n: Numberish) => n === null || (Number.isInteger(n) && n > 0);
+const number = (v: string): Numberish => (v.trim() === "" ? null : Number(v));
 
 export default function Tools({ title, description }: SectionProps) {
   const settings = useStore().state?.settings;
   const { save } = useSettingPatch();
   const [tools, setTools] = useState<ToolView[]>([]);
   const [round, setRound] = useState(0);
+  const [limits, setLimits, limitsDirty] = useDraft<{ maxIterations: Numberish; approvalTimeoutSec: Numberish }>({
+    maxIterations: settings?.maxIterations ?? LIMITS.maxIterations,
+    approvalTimeoutSec: settings?.approvalTimeoutSec ?? LIMITS.approvalTimeoutSec,
+  });
+  const limitsOk = positive(limits.maxIterations) && positive(limits.approvalTimeoutSec);
+  // One PUT per changed key.
+  const saveLimits = (e: FormEvent) => {
+    e.preventDefault();
+    const { maxIterations, approvalTimeoutSec } = limits;
+    if (maxIterations === null || approvalTimeoutSec === null) return;
+    if (maxIterations !== (settings?.maxIterations ?? LIMITS.maxIterations)) void save("maxIterations", maxIterations);
+    if (approvalTimeoutSec !== (settings?.approvalTimeoutSec ?? LIMITS.approvalTimeoutSec)) void save("approvalTimeoutSec", approvalTimeoutSec);
+  };
 
   // `enabled` and `mcp` of a tool follow the groups: read the list again when they move.
   useEffect(() => {
@@ -100,6 +119,25 @@ export default function Tools({ title, description }: SectionProps) {
           <code>claude mcp add kagent -- kagentd mcp</code> lets Claude Code use them.
         </p>
         {chips(mcpOn, "mcpToolGroups")}
+      </GroupCard>
+
+      <GroupCard title="Limits of a turn" description="How far one message may go.">
+        <form className="ui-form" onSubmit={saveLimits}>
+          <div className="ui-form-grid">
+            <Field label="Max iterations" hint="Tool calls and replies one turn may take before it stops.">
+              <input type="number" min={1} value={limits.maxIterations ?? ""} onChange={(e) => setLimits({ ...limits, maxIterations: number(e.target.value) })} />
+            </Field>
+            <Field label="Approval timeout (seconds)" hint="How long an approval card waits before the call counts as refused.">
+              <input type="number" min={1} value={limits.approvalTimeoutSec ?? ""} onChange={(e) => setLimits({ ...limits, approvalTimeoutSec: number(e.target.value) })} />
+            </Field>
+          </div>
+          <div className="row">
+            <button className="primary" type="submit" disabled={!limitsDirty || !limitsOk}>
+              Save limits
+            </button>
+            {!limitsOk && limitsDirty && <span className="ui-inline-bad">Both must be whole numbers above 0.</span>}
+          </div>
+        </form>
       </GroupCard>
     </SectionPage>
   );

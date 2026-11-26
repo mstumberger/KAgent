@@ -102,10 +102,20 @@ pub struct ModelEntry {
     pub name: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    #[serde(default)]
+    /// The jobs the model can take (`chat`, `live`; empty is none). A file written
+    /// before S40 has no `roles`: its rows are chat models (models.md section 1).
+    #[serde(default = "default_roles")]
     pub roles: Vec<String>,
+    /// On: `config` holds only what the owner changed and the built-in rules give the
+    /// rest. Off: the six editable fields come from `config` alone (models.md section 2).
+    #[serde(default = "default_true")]
+    pub smart: bool,
     #[serde(default)]
     pub config: ModelConfigPatch,
+}
+
+fn default_roles() -> Vec<String> {
+    vec!["chat".into()]
 }
 
 /// Partial model config; layers overlay each other (every field optional).
@@ -137,6 +147,21 @@ pub struct ModelConfigPatch {
 }
 
 impl ModelConfigPatch {
+    /// `true` while nothing is set.
+    pub fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.context_window.is_none()
+            && self.max_output_tokens.is_none()
+            && self.supports_tool_call.is_none()
+            && self.supports_image.is_none()
+            && self.reasoning_levels.is_none()
+            && self.reasoning_patches.is_none()
+            && self.supports_live.is_none()
+            && self.live_protocol.is_none()
+            && self.request_patch.is_none()
+            && self.roles.is_none()
+    }
+
     /// `self` overlaid by `over`: `over`'s present fields win.
     pub fn overlay(&self, over: &Self) -> Self {
         Self {
@@ -229,6 +254,18 @@ mod tests {
         let merged = base.overlay(&over);
         assert_eq!(merged.context_window, Some(50_000));
         assert_eq!(merged.reasoning_levels, Some(vec!["low".into()]));
+    }
+
+    #[test]
+    fn entry_defaults_of_a_file_written_before_s40() {
+        let e: ModelEntry = serde_json::from_str(r#"{"id": "m"}"#).unwrap();
+        assert!(e.enabled && e.smart, "smart is the default, also for an old file");
+        assert_eq!(e.roles, vec!["chat".to_string()], "a row without roles is a chat model");
+        // An empty list is no job, and a manual model is written as such.
+        let e: ModelEntry = serde_json::from_str(r#"{"id": "m", "roles": [], "smart": false}"#).unwrap();
+        assert!(e.roles.is_empty());
+        assert!(!e.smart);
+        assert_eq!(serde_json::to_string(&e).unwrap(), r#"{"id":"m","name":"","enabled":true,"roles":[],"smart":false,"config":{}}"#);
     }
 
     #[test]

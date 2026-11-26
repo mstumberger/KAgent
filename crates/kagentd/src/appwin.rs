@@ -260,6 +260,12 @@ impl AppWindows {
         *self.maximized.lock().unwrap()
     }
 
+    /// Set the flag from what the window manager says: the desktop can maximize or
+    /// restore the window too, and a maximized window outlives a daemon restart.
+    pub fn set_maximized(&self, value: bool) {
+        *self.maximized.lock().unwrap() = value;
+    }
+
     /// Move the window's top-left corner to screen coordinates (drag from the page).
     pub async fn move_to(&self, x: i32, y: i32) {
         let Some(id) = self.fast_id().await else { return };

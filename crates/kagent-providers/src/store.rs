@@ -1,10 +1,17 @@
 //! ProviderStore: the single owner of providers.json (config.md section 4).
 
+mod patch;
+#[cfg(test)]
+mod tests;
+
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use crate::config::{mask_key, BuiltinCatalog, ModelConfigPatch, ModelEntry, ProviderEntry, ProvidersFile, Template};
+use crate::config::{mask_key, ApiType, BuiltinCatalog, ModelConfigPatch, ModelEntry, ProviderEntry, ProvidersFile, Template};
+use crate::discovery::correct_roles;
 use crate::rules::{resolve, ModelConfig};
+
+pub use patch::{ModelAdd, ModelChange, ProviderPatch, Refused};
 
 pub struct ProviderStore {
     path: PathBuf,
@@ -24,6 +31,10 @@ pub fn split_ref(model_ref: &str) -> Option<(&str, &str)> {
 
 pub const SECRET_SERVICE: &str = "secret-service";
 
+/// The models the settings name: `(setting, model ref)` for `chatModel`, `fastModel`,
+/// `fallbackModel`, `visionModel` and `liveModel`.
+pub type Named<'a> = [(&'a str, &'a str)];
+
 /// Where API keys go when a keyring is available. Implementations must not block
 /// (the daemon forwards to an async task).
 pub trait SecretSink: Send + Sync {
@@ -38,13 +49,23 @@ pub struct ResolvedModel {
 }
 
 impl ProviderStore {
-    pub fn load(path: impl Into<PathBuf>, catalog: BuiltinCatalog) -> anyhow::Result<Self> {
+    /// `named`: the models the settings name. They keep their roles when the rows of
+    /// an old fetch are corrected (models.md section 3).
+    pub fn load(path: impl Into<PathBuf>, catalog: BuiltinCatalog, named: &[String]) -> anyhow::Result<Self> {
         let path = path.into();
-        let file = if path.exists() {
+        let mut file = if path.exists() {
             serde_json::from_slice(&std::fs::read(&path)?)?
         } else {
             ProvidersFile { schema_version: 1, ..Default::default() }
         };
+        // Rows the fetch before S40 marked `chat` (a text-to-speech, image or music
+        // model) get the roles of their id. In memory: the next save writes them.
+        for p in file.providers.values_mut() {
+            let fixed = correct_roles(p, named);
+            if fixed > 0 {
+                tracing::info!("{}: {} models are not chat models", p.id, fixed);
+            }
+        }
         Ok(Self { path, file: RwLock::new(file), catalog, secrets: RwLock::new(None) })
     }
 
@@ -121,13 +142,30 @@ impl ProviderStore {
         Ok(out)
     }
 
+    /// The keys of `PUT /api/providers/:id` (models.md section 4). Every check runs
+    /// before anything is written: a refused patch leaves the file as it was.
+    pub fn patch(&self, id: &str, patch: &ProviderPatch, named: &Named<'_>) -> Result<ProviderEntry, Refused> {
+        let mut file = self.file.write().unwrap();
+        let entry = file.providers.get_mut(id).ok_or(Refused::UnknownProvider)?;
+        let next = patch::plan(&self.catalog, entry, patch, named)?;
+        *entry = next;
+        entry.last_error.clear();
+        let out = entry.clone();
+        drop(file);
+        self.save().map_err(|e| Refused::NotSaved(format!("{e:#}")))?;
+        Ok(out)
+    }
+
     pub fn set_error(&self, id: &str, error: &str) {
         if let Some(p) = self.file.write().unwrap().providers.get_mut(id) {
             p.last_error = error.to_string();
         }
     }
 
-    /// Add a provider from a template; ids are `templateId`, `templateId-2`, ...
+    /// Add a provider from a template; ids are `templateId`, `templateId-2`, ... The
+    /// `custom` template has no address of its own: `name` and `base_url` are required,
+    /// and `api_type` chooses the message format (models.md section 4).
+    #[allow(clippy::too_many_arguments)]
     pub fn add_from_template(
         &self,
         template_id: &str,
@@ -135,6 +173,7 @@ impl ProviderStore {
         base_url: Option<String>,
         api_key: Option<String>,
         headers: std::collections::BTreeMap<String, String>,
+        api_type: Option<ApiType>,
     ) -> anyhow::Result<ProviderEntry> {
         let tpl = self
             .catalog
@@ -142,6 +181,14 @@ impl ProviderStore {
             .iter()
             .find(|t| t.id == template_id)
             .ok_or_else(|| anyhow::anyhow!("unknown template {template_id}"))?;
+        if tpl.id == "custom" {
+            if name.as_deref().is_none_or(|n| n.trim().is_empty()) {
+                anyhow::bail!("a custom provider needs a name");
+            }
+            if base_url.as_deref().is_none_or(|b| b.trim().is_empty()) {
+                anyhow::bail!("a custom provider needs a base URL");
+            }
+        }
         let mut file = self.file.write().unwrap();
         let mut id = tpl.id.clone();
         let mut n = 2;
@@ -152,6 +199,9 @@ impl ProviderStore {
         let mut api = tpl.api.clone();
         if let Some(base) = base_url.filter(|b| !b.is_empty()) {
             api.base_url = base;
+        }
+        if let Some(t) = api_type {
+            api.api_type = t;
         }
         api.headers = headers;
         let models = tpl
@@ -164,6 +214,7 @@ impl ProviderStore {
                 // Live models are always on: they only show up in the voice picker.
                 enabled: tpl.live_models.contains(m) || tpl.models.len() + tpl.live_models.len() < 5,
                 roles: if tpl.live_models.contains(m) { vec!["live".into()] } else { vec!["chat".into()] },
+                smart: true,
                 config: ModelConfigPatch::default(),
             })
             .collect();
@@ -215,6 +266,16 @@ impl ProviderStore {
         self.save()
     }
 
+    /// The config a model works with: `inherited` is what the built-in rules give it
+    /// (an empty personal patch, smart on), `effective` what is sent (models.md
+    /// section 2).
+    pub fn configs(&self, provider: &ProviderEntry, model: &ModelEntry) -> (ModelConfig, ModelConfig) {
+        let at = |personal: &ModelConfigPatch, smart| {
+            resolve(&self.catalog, &model.id, provider.api.api_type.as_str(), &provider.api.base_url, &provider.template_id, personal, smart)
+        };
+        (at(&ModelConfigPatch::default(), true), at(&model.config, model.smart))
+    }
+
     /// Resolve `"<providerId>::<modelId>"` into provider + model + full config.
     pub fn resolve(&self, model_ref: &str) -> anyhow::Result<ResolvedModel> {
         let (pid, mid) = split_ref(model_ref).ok_or_else(|| {
@@ -230,18 +291,18 @@ impl ProviderStore {
             .iter()
             .find(|m| m.id == mid)
             .ok_or_else(|| anyhow::anyhow!("provider '{pid}' has no model '{mid}'"))?;
-        let config = resolve(
-            &self.catalog,
-            mid,
-            provider.api.api_type.as_str(),
-            &provider.api.base_url,
-            &provider.template_id,
-            &model.config,
-        );
+        let config = self.configs(provider, model).1;
         Ok(ResolvedModel { provider: provider.clone(), model: model.clone(), config })
     }
 
-    /// All enabled models with their resolved config, in `order` order.
+    /// The model a text turn may use: it exists, is enabled, has role `chat`, and its
+    /// provider is enabled (models.md section 2). `None` for anything else.
+    pub fn usable(&self, model_ref: &str) -> Option<ResolvedModel> {
+        let r = self.resolve(model_ref).ok()?;
+        (r.provider.enabled && r.model.enabled && r.model.roles.iter().any(|role| role == "chat")).then_some(r)
+    }
+
+    /// All enabled models of enabled providers with their resolved config, in `order` order.
     pub fn enabled_models(&self) -> Vec<(String, ModelEntry, ModelConfig)> {
         let file = self.file.read().unwrap();
         let mut out = Vec::new();
@@ -254,34 +315,50 @@ impl ProviderStore {
                 if !m.enabled {
                     continue;
                 }
-                let config = resolve(&self.catalog, &m.id, p.api.api_type.as_str(), &p.api.base_url, &p.template_id, &m.config);
-                out.push((pid.clone(), m.clone(), config));
+                out.push((pid.clone(), m.clone(), self.configs(p, m).1));
             }
         }
         out
     }
 
-    /// Masked view of every provider (for the API), keeping `order`.
-    pub fn masked(&self) -> Vec<serde_json::Value> {
-        let file = self.file.read().unwrap();
-        file.order
+    /// One provider as the API shows it: the key masked, and every model with its
+    /// `inherited` and `effective` config (models.md section 4).
+    pub fn view(&self, p: &ProviderEntry) -> serde_json::Value {
+        let models: Vec<serde_json::Value> = p
+            .models
             .iter()
-            .filter_map(|id| file.providers.get(id))
-            .map(|p| {
+            .map(|m| {
+                let (inherited, effective) = self.configs(p, m);
                 serde_json::json!({
-                    "id": p.id,
-                    "name": p.name,
-                    "templateId": p.template_id,
-                    "enabled": p.enabled,
-                    "api": p.api,
-                    "apiKeyMasked": mask_key(&p.api_key),
-                    "hasKey": !p.api_key.is_empty(),
-                    "models": p.models,
-                    "modelsFetchedAt": p.models_fetched_at,
-                    "lastError": p.last_error,
+                    "id": m.id,
+                    "name": m.name,
+                    "enabled": m.enabled,
+                    "roles": m.roles,
+                    "smart": m.smart,
+                    "config": m.config,
+                    "inherited": inherited,
+                    "effective": effective,
                 })
             })
-            .collect()
+            .collect();
+        serde_json::json!({
+            "id": p.id,
+            "name": p.name,
+            "templateId": p.template_id,
+            "enabled": p.enabled,
+            "api": p.api,
+            "apiKeyMasked": mask_key(&p.api_key),
+            "hasKey": !p.api_key.is_empty(),
+            "models": models,
+            "modelsFetchedAt": p.models_fetched_at,
+            "lastError": p.last_error,
+        })
+    }
+
+    /// Every provider as the API shows it, in `order`.
+    pub fn masked(&self) -> Vec<serde_json::Value> {
+        let file = self.file.read().unwrap();
+        file.order.iter().filter_map(|id| file.providers.get(id)).map(|p| self.view(p)).collect()
     }
 }
 
@@ -296,98 +373,4 @@ fn write_atomic_0600(path: &Path, data: &[u8]) -> anyhow::Result<()> {
     drop(f);
     std::fs::rename(&tmp, path)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn store(dir: &tempfile::TempDir) -> ProviderStore {
-        let catalog = serde_json::from_str(include_str!("../../../config/providers.builtin.json")).unwrap();
-        ProviderStore::load(dir.path().join("providers.json"), catalog).unwrap()
-    }
-
-    #[test]
-    fn keys_go_to_the_secret_sink_not_the_file() {
-        #[derive(Default)]
-        struct Sink(std::sync::Mutex<Vec<(String, String)>>);
-        impl SecretSink for Sink {
-            fn put(&self, id: &str, key: &str) {
-                self.0.lock().unwrap().push((id.into(), key.into()));
-            }
-            fn delete(&self, id: &str) {
-                self.0.lock().unwrap().push((id.into(), String::new()));
-            }
-        }
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("providers.json");
-        let store = ProviderStore::load(&path, ProviderStore::builtin_catalog().unwrap()).unwrap();
-        let p = store.add_from_template("anthropic", None, None, Some("sk-ant-secret-123456".into()), Default::default()).unwrap();
-        let sink = std::sync::Arc::new(Sink::default());
-        store.set_secret_sink(sink.clone());
-        store.save().unwrap();
-        let disk = std::fs::read_to_string(&path).unwrap();
-        assert!(!disk.contains("sk-ant-secret"), "{disk}");
-        assert!(disk.contains("\"apiKeyRef\": \"secret-service\""));
-        assert_eq!(sink.0.lock().unwrap()[0], (p.id.clone(), "sk-ant-secret-123456".into()));
-        // Memory still has the key for requests.
-        assert_eq!(store.provider(&p.id).unwrap().api_key, "sk-ant-secret-123456");
-    }
-
-    #[test]
-    fn add_from_template_twice_and_mask() {
-        let dir = tempfile::tempdir().unwrap();
-        let s = store(&dir);
-        let p1 = s.add_from_template("anthropic", None, None, Some("sk-ant-abcdefghijkl1234".into()), Default::default()).unwrap();
-        let p2 = s.add_from_template("anthropic", None, None, None, Default::default()).unwrap();
-        assert_eq!(p1.id, "anthropic");
-        assert_eq!(p2.id, "anthropic-2");
-        assert_eq!(s.providers().order, vec!["anthropic", "anthropic-2"]);
-
-        let masked = s.masked();
-        assert_eq!(masked[0]["apiKeyMasked"], "sk-...1234");
-        assert_eq!(masked[0]["hasKey"], true);
-        assert_eq!(masked[1]["apiKeyMasked"], "****");
-
-        s.delete("anthropic-2").unwrap();
-        assert_eq!(s.providers().order, vec!["anthropic"]);
-    }
-
-    #[test]
-    fn file_is_0600_and_roundtrips() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("providers.json");
-        {
-            let s = store(&dir);
-            s.add_from_template("ollama", None, None, None, Default::default()).unwrap();
-        }
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
-        assert_eq!(mode & 0o777, 0o600);
-        let catalog = serde_json::from_str(include_str!("../../../config/providers.builtin.json")).unwrap();
-        let s2 = ProviderStore::load(&path, catalog).unwrap();
-        assert_eq!(s2.provider("ollama").unwrap().api.base_url, "http://127.0.0.1:11434");
-    }
-
-    #[test]
-    fn resolves_model_ref() {
-        let dir = tempfile::tempdir().unwrap();
-        let s = store(&dir);
-        s.add_from_template("ollama", None, None, None, Default::default()).unwrap();
-        s.update("ollama", |p| {
-            p.models.push(ModelEntry {
-                id: "qwen2.5:7b-instruct".into(),
-                name: String::new(),
-                enabled: true,
-                roles: vec!["chat".into()],
-                config: ModelConfigPatch::default(),
-            })
-        })
-        .unwrap();
-        let r = s.resolve("ollama::qwen2.5:7b-instruct").unwrap();
-        assert_eq!(r.provider.id, "ollama");
-        assert!(r.config.supports_tool_call);
-        assert!(s.resolve("nope::x").is_err());
-        assert!(split_ref("bad").is_none());
-    }
 }

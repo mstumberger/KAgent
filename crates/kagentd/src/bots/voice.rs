@@ -198,9 +198,9 @@ mod tests {
     #[test]
     fn enabled_gemini_models_come_with_their_key_and_address() {
         let dir = tempfile::tempdir().unwrap();
-        let store = ProviderStore::load(dir.path().join("providers.json"), ProviderStore::builtin_catalog().unwrap()).unwrap();
+        let store = ProviderStore::load(dir.path().join("providers.json"), ProviderStore::builtin_catalog().unwrap(), &[]).unwrap();
         assert!(gemini_models(&store).is_empty(), "nothing enabled with a key yet");
-        store.add_from_template("gemini", None, None, Some("a-key".into()), Default::default()).unwrap();
+        store.add_from_template("gemini", None, None, Some("a-key".into()), Default::default(), None).unwrap();
         let models = gemini_models(&store);
         assert!(!models.is_empty(), "the Gemini template has chat models");
         assert!(models.iter().all(|m| m.base_url.contains("generativelanguage.googleapis.com") && m.key == "a-key" && m.id.starts_with("gemini-")), "{:?}",

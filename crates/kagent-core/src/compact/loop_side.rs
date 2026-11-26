@@ -135,18 +135,26 @@ impl Agent {
     /// The rest of the turn goes to `fallbackModel`: the chat model is overloaded or out of quota (429/503), or its key is broken.
     fn switch_to_fallback(&self, session_id: &str, config: &mut AgentConfig, error: &anyhow::Error) {
         tracing::warn!(session_id, "chat model {} unavailable ({error:#}); falling back to {}", config.model_ref, config.fallback_model_ref);
-        let _ = self.events.send(AgentEvent::Notice {
-            level: "warn".into(),
-            text: if format!("{error:#}").to_lowercase().contains("key") {
-                format!("{} rejected the API key (Providers) - answering with {}", config.model_ref, config.fallback_model_ref)
-            } else {
-                format!("{} is busy - answering with {}", config.model_ref, config.fallback_model_ref)
-            },
-        });
+        let _ = self.events.send(AgentEvent::Notice { level: "warn".into(), text: fallback_notice(&config.model_ref, &config.fallback_model_ref, &format!("{error:#}")) });
         config.model_ref = config.fallback_model_ref.clone();
         config.context_tokens = config.fallback_context_tokens;
         config.options.max_output_tokens = config.fallback_max_output;
     }
+}
+
+/// What the owner is told when a turn changes models, and why the first one could not
+/// answer (models.md section 5): out of quota when the error says 429 or "quota", a
+/// rejected key as before, busy otherwise.
+pub(crate) fn fallback_notice(model: &str, fallback: &str, error: &str) -> String {
+    let error = error.to_lowercase();
+    let why = if error.contains("429") || error.contains("quota") {
+        "is out of quota"
+    } else if error.contains("key") {
+        "rejected the API key (Providers)"
+    } else {
+        "is busy"
+    };
+    format!("{model} {why} - answering with {fallback}")
 }
 
 /// The model that summarizes (compaction.md section 3): `fastModel` when it is set, else the chat model.
