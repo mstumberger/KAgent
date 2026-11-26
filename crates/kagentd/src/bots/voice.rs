@@ -33,8 +33,9 @@ pub struct GeminiModel {
 pub fn is_gemini_chat(base_url: &str, model: &str) -> bool {
     let host = reqwest::Url::parse(base_url).ok().and_then(|u| u.host_str().map(str::to_string));
     let id = model.trim_start_matches("models/");
-    let not_chat = ["-live", "native-audio", "-tts", "image", "embedding"].iter().any(|bad| id.contains(bad));
-    host.as_deref() == Some("generativelanguage.googleapis.com") && id.starts_with("gemini-") && !not_chat
+    // The same table that gives a fetched row its roles (models.md section 3).
+    let chat = kagent_providers::discovery::roles_from_id(id) == ["chat"];
+    host.as_deref() == Some("generativelanguage.googleapis.com") && id.starts_with("gemini-") && chat
 }
 
 /// The native `generateContent` address: a Gemini provider's base URL is that of its

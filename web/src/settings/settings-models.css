@@ -1,0 +1,162 @@
+/* The Models section (models.md section 7). Part of settings.css, imported after
+   settings-shell.css: the order is the cascade. */
+
+/* ---- Models (models.md section 7): the provider list, the card of a provider, its model rows */
+.pv-list {
+  min-width: 0;
+}
+
+/* Under 900 px the list is a dropdown, as the settings menu is. */
+.pv-list-narrow {
+  display: none;
+}
+
+.pv-nav-item.draggable,
+.pv-model.draggable {
+  user-select: none;
+}
+
+.pv-nav-item.drop-before,
+.pv-model.drop-before {
+  box-shadow: inset 0 2px 0 var(--ice);
+}
+
+.pv-nav-item.drop-after,
+.pv-model.drop-after {
+  box-shadow: inset 0 -2px 0 var(--ice);
+}
+
+/* The drag handle of a row: it also takes the up and down arrows */
+button.pv-grip {
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  cursor: grab;
+}
+
+button.pv-grip:hover:not(:disabled) {
+  background: rgba(124, 196, 255, 0.1);
+  color: var(--ink);
+}
+
+button.pv-grip.held {
+  color: var(--ice);
+  cursor: grabbing;
+}
+
+/* The row is a drag handle and, beside it, the button that opens the provider */
+.pv-nav-item > .pv-nav-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+button.pv-nav-main:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+}
+
+button.pv-nav-main:active:not(:disabled) {
+  transform: none;
+}
+
+.pv-nav-item:focus-within {
+  outline: 2px solid rgba(124, 196, 255, 0.6);
+  outline-offset: -2px;
+}
+
+.pv-grip-space {
+  flex: 0 0 20px;
+  width: 20px;
+}
+
+/* The name of a provider is an input in the title */
+.pv-title-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+input.pv-title-input {
+  width: 220px;
+  max-width: 100%;
+  padding: 4px 8px;
+  font-size: 16px;
+  font-weight: 600;
+  background: transparent;
+}
+
+input.pv-title-input:focus {
+  background: rgba(124, 196, 255, 0.08);
+}
+
+/* An icon of a model row: it reads images; the pencil; the trash */
+.pv-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--ice);
+}
+
+.pv-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+}
+
+.pv-models-head .pv-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ui-section-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A dropdown in the row of a card is as wide as the select it replaces */
+.ui-row-control > .dd-cell {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 380px;
+}
+
+/* ---- under 900 px: the provider list is a dropdown above the card */
+@media (width < 900px) {
+  .pv-list-narrow {
+    display: block;
+  }
+
+  nav.pv-nav {
+    display: none;
+  }
+
+  .settings .pv-layout.ld {
+    grid-template-columns: 1fr;
+  }
+
+  input.pv-title-input {
+    width: 160px;
+  }
+}

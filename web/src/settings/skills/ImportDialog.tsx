@@ -1,7 +1,7 @@
 // Import skills from other tools (skills.md sections 7 and 9): the folders that were
 // found and the skills they hold, what will be imported and how, and what the import did.
 import { useEffect, useState } from "react";
-import { skillsApi, type ImportMode, type ImportResult, type ImportSource } from "../../api";
+import { skillsApi, type ImportMode, type ImportResult, type ImportSource } from "../../skillsApi";
 import Dialog from "../dialog";
 import "./dialogs.css";
 

@@ -1,7 +1,7 @@
 // Shared by the Skills page: names, filters, time, and the rules a draft must follow.
 // The rules are the daemon's (tools.md section 17), so a field says what is wrong
 // before anything is sent.
-import type { SkillView } from "../../api";
+import type { SkillView } from "../../skillsApi";
 
 /** Skills KAgent ships with whose names a new skill must not take. */
 export const RESERVED: string[] = ["skill-creator", "widget-design"];

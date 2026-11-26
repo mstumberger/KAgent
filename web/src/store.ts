@@ -2,7 +2,8 @@
 // wholesale by the reducer; views subscribe via useStore().
 
 import { useSyncExternalStore } from "react";
-import { api, initialSection, initialSession, initialView, postPlan, putTodo, requestCompaction, skillsApi, type SessionMeta, type Message, type ApprovalRequest, type SkillView, type StateView, type TodoItem } from "./api";
+import { api, initialSection, initialSession, initialView, postPlan, putTodo, requestCompaction, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
+import { skillsApi, type SkillView } from "./skillsApi";
 import { builtinOf } from "./commands";
 import { events, type AgentEvent } from "./events";
 import { resolveView, type View } from "./nav";

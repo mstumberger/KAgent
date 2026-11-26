@@ -86,9 +86,11 @@ chat, fast and fallback model where it only called `resolve` before.
 3. **New rows arrive disabled**, whatever the size of the list (the rule "on while
    fewer than five" is gone). The owner switches on what they want, so the picker of
    S41 never lists a music model.
-4. **Rows that are wrong today.** At every load, a row is given the roles of the table
-   when three things hold: its `config` is empty, its `roles` are `["chat"]`, and its
-   id matches the first or the second row of the table. The correction is idempotent;
+4. **Rows that are wrong today.** Once, at the first load of a `providers.json` with
+   `schemaVersion` below 2, a row is given the roles of the table when three things
+   hold: its `config` is empty, its `roles` are `["chat"]`, and its id matches the first
+   or the second row of the table. The next save writes `schemaVersion: 2`, so a role
+   the owner gives such a row afterwards is never taken back at a start. The correction is idempotent;
    when it changes a row, that is logged once per provider with the number of rows
    ("gemini: 31 models are not chat models"). A row named in settings (`chatModel`,
    `fastModel`, `fallbackModel`, `visionModel`) is left alone. Nothing else moves in

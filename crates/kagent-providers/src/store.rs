@@ -13,6 +13,9 @@ use crate::rules::{resolve, ModelConfig};
 
 pub use patch::{ModelAdd, ModelChange, ProviderPatch, Refused};
 
+/// `providers.json` version 2 (S40): the roles of the rows of an old fetch are corrected.
+pub const SCHEMA_VERSION: u32 = 2;
+
 pub struct ProviderStore {
     path: PathBuf,
     file: RwLock<ProvidersFile>,
@@ -48,6 +51,17 @@ pub struct ResolvedModel {
     pub config: ModelConfig,
 }
 
+impl ResolvedModel {
+    /// A live (speech-to-speech) model by nature: it cannot answer text turns. The one
+    /// place that decides it: the resolved config says so, every role the rules give is
+    /// `live`, or the id reads as one (`discovery::roles_from_id`). The row's own roles
+    /// are the owner's choice of job, checked apart (`ProviderStore::usable`).
+    pub fn is_live(&self) -> bool {
+        let rules_live = !self.config.roles.is_empty() && self.config.roles.iter().all(|x| x == "live");
+        self.config.supports_live || rules_live || crate::discovery::roles_from_id(&self.model.id) == ["live"]
+    }
+}
+
 impl ProviderStore {
     /// `named`: the models the settings name. They keep their roles when the rows of
     /// an old fetch are corrected (models.md section 3).
@@ -56,15 +70,20 @@ impl ProviderStore {
         let mut file = if path.exists() {
             serde_json::from_slice(&std::fs::read(&path)?)?
         } else {
-            ProvidersFile { schema_version: 1, ..Default::default() }
+            ProvidersFile { schema_version: SCHEMA_VERSION, ..Default::default() }
         };
-        // Rows the fetch before S40 marked `chat` (a text-to-speech, image or music
-        // model) get the roles of their id. In memory: the next save writes them.
-        for p in file.providers.values_mut() {
-            let fixed = correct_roles(p, named);
-            if fixed > 0 {
-                tracing::info!("{}: {} models are not chat models", p.id, fixed);
+        // Once, for a file written before S40: rows its fetch marked `chat` (a
+        // text-to-speech, image or music model) get the roles of their id. In memory:
+        // the next save writes them with the new version, so a role the owner gives
+        // such a row later is never taken back at a start.
+        if file.schema_version < SCHEMA_VERSION {
+            for p in file.providers.values_mut() {
+                let fixed = correct_roles(p, named);
+                if fixed > 0 {
+                    tracing::info!("{}: {} models are not chat models", p.id, fixed);
+                }
             }
+            file.schema_version = SCHEMA_VERSION;
         }
         Ok(Self { path, file: RwLock::new(file), catalog, secrets: RwLock::new(None) })
     }
@@ -132,28 +151,50 @@ impl ProviderStore {
     }
 
     pub fn update(&self, id: &str, f: impl FnOnce(&mut ProviderEntry)) -> anyhow::Result<ProviderEntry> {
-        let mut file = self.file.write().unwrap();
-        let entry = file.providers.get_mut(id).ok_or_else(|| anyhow::anyhow!("unknown provider {id}"))?;
-        f(entry);
-        entry.last_error.clear();
-        let out = entry.clone();
-        drop(file);
-        self.save()?;
+        let (before, out) = {
+            let mut file = self.file.write().unwrap();
+            let entry = file.providers.get_mut(id).ok_or_else(|| anyhow::anyhow!("unknown provider {id}"))?;
+            let before = entry.clone();
+            f(entry);
+            entry.last_error.clear();
+            (before, entry.clone())
+        };
+        self.save_or_undo(id, before, &out)?;
         Ok(out)
     }
 
     /// The keys of `PUT /api/providers/:id` (models.md section 4). Every check runs
-    /// before anything is written: a refused patch leaves the file as it was.
+    /// before anything is written: a refused patch leaves the file as it was, and so
+    /// does one whose save fails (memory included).
     pub fn patch(&self, id: &str, patch: &ProviderPatch, named: &Named<'_>) -> Result<ProviderEntry, Refused> {
-        let mut file = self.file.write().unwrap();
-        let entry = file.providers.get_mut(id).ok_or(Refused::UnknownProvider)?;
-        let next = patch::plan(&self.catalog, entry, patch, named)?;
-        *entry = next;
-        entry.last_error.clear();
-        let out = entry.clone();
-        drop(file);
-        self.save().map_err(|e| Refused::NotSaved(format!("{e:#}")))?;
+        let (before, out) = {
+            let mut file = self.file.write().unwrap();
+            let entry = file.providers.get_mut(id).ok_or(Refused::UnknownProvider)?;
+            let next = patch::plan(&self.catalog, entry, patch, named)?;
+            let before = std::mem::replace(entry, next);
+            entry.last_error.clear();
+            (before, entry.clone())
+        };
+        self.save_or_undo(id, before, &out).map_err(|e| Refused::NotSaved(format!("{e:#}")))?;
         Ok(out)
+    }
+
+    /// Save; when the file cannot be written, put the entry back as it was, so memory
+    /// never holds what the API reported as not saved. A change made by someone else in
+    /// the meantime (the entry is no longer `after`) is left alone.
+    fn save_or_undo(&self, id: &str, before: ProviderEntry, after: &ProviderEntry) -> anyhow::Result<()> {
+        let result = self.save();
+        if result.is_err() {
+            let mut file = self.file.write().unwrap();
+            if let Some(entry) = file.providers.get_mut(id) {
+                // `save` may have set the key's reference: compare without it.
+                let unchanged = ProviderEntry { api_key_ref: after.api_key_ref.clone(), ..entry.clone() } == *after;
+                if unchanged {
+                    *entry = before;
+                }
+            }
+        }
+        result
     }
 
     pub fn set_error(&self, id: &str, error: &str) {
@@ -188,6 +229,9 @@ impl ProviderStore {
             if base_url.as_deref().is_none_or(|b| b.trim().is_empty()) {
                 anyhow::bail!("a custom provider needs a base URL");
             }
+        }
+        if let Some(b) = base_url.as_deref().filter(|b| !b.trim().is_empty()) {
+            patch::check_base_url(b).map_err(|e| anyhow::anyhow!(e))?;
         }
         let mut file = self.file.write().unwrap();
         let mut id = tpl.id.clone();

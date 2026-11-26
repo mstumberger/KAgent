@@ -2678,7 +2678,43 @@ Decisions (the owner may veto):
   CPU-s in 52 s at the start after a reboot), not fixed: the edit is someone else's
   and uncommitted. A fix compares canonical forms or area plus extents, with a test
   at a real size; the ignored X11 test of the file passes only because its 1x1
-  window clamps the radius to 0.
+  window clamps the radius to 0. Fixed 2026-11-27, see the next block.
+
+### Review 2026-11-27 (after the S40 agent; owner-requested fixes)
+
+- `rounded.rs`: shapes are compared as the pixels they cover (per-row merged spans),
+  not rectangle by rectangle, so the server's banded answer is the shape that was
+  sent. A window without a shape is answered as one rectangle over the window: that
+  counts as "no shape", or a maximized window was cleared in a loop too. The guard
+  puts a shape back at most every 50 ms as a brake. The X11 test runs at 120x80.
+- `providers.json` has `schemaVersion` 2: the role correction of models.md section 3
+  item 4 runs once (file below 2), not at every load, so a role the owner gives a
+  `-tts` or `-live` row is kept across restarts.
+- Fetch models merges into the entry as it is when the answer arrives (inside
+  `update`), not into the copy taken before the request.
+- Deleting a provider empties every model setting that names it (chat, fast,
+  fallback, vision, live), not only `chatModel`.
+- `ProviderStore::patch` and `update` put the entry back in memory when the save
+  fails: "not saved" never leaves a change in the running daemon.
+- `ResolvedModel::is_live` is the one test of a live model (`check_model_roles`, the
+  voice brain); it reads the rules' roles and the id table, not the row's roles (the
+  owner's choice of job, which `usable` checks). The voice brain's chat check is
+  `usable` and not live. `is_gemini_chat` uses `roles_from_id`.
+- A provider name may not be blank and a base URL must be `http` or `https` with a
+  host (PUT, and POST when one is given).
+- The setuid scan runs at `nice 19` / `ionice -c 3`, only for root-owned files, and
+  not in the first round after a start unless there is no baseline (a baseline must
+  hold the setuid programs, or each one reads as new later).
+- Under systemd (`INVOCATION_ID`) the app window's browser starts in its own user
+  scope (`systemd-run --user --scope`, fixed description: the default would put the
+  token's URL in the unit). A unit stop no longer kills it (it dumped a core at every
+  stop) and the next daemon adopts the window; tray Quit still closes it.
+- Old schedule tags (`At`, `Every`, `Daily`) are read in any case: the owner's
+  `tasks.json` held `"type": "at"` and would have lost that record at the next save.
+- Files split by concern: `appwin/layout.rs` and `appwin/scope.rs`, `cli.rs` and
+  `turn_config.rs` out of `main.rs`, `skillsApi.ts` out of `api.ts`, `index.css` into
+  `styles/*.css` and `settings.css` into two parts, imported in order (the built
+  CSS is byte-identical).
 
 ## F. Progress
 

@@ -68,7 +68,7 @@ Kernel lines have `_TRANSPORT=kernel`.
 | `persist-authorized-keys` | baseline diff of `~/.ssh/authorized_keys` (and `/root/.ssh/authorized_keys` via `read_root` if allowed) | high | added key fingerprints (`ssh-keygen -lf`) |
 | `persist-unit` | new unit/timer file in `~/.config/systemd/user/`, `/etc/systemd/system/`, `/etc/systemd/user/`; inotify + 10 min diff | review (high if ExecStart points into `/tmp`, `/dev/shm`, `~/.cache`, or a hidden dir) | unit file content (first 40 lines) |
 | `persist-cron` | crontab hash change (`crontab -l`), `/etc/cron.*` new files | review | diff |
-| `persist-suid` | hourly `find /usr /opt /home -xdev -perm -4000 -type f` vs baseline | high for new file | path, owner, mtime, sha256, `dpkg -S` owner package (none = suspicious) |
+| `persist-suid` | hourly (not in the first round after a start, unless there is no baseline yet) `nice -n 19 ionice -c 3 find /usr /opt /home -xdev -user root -perm -4000 -type f` vs baseline | high for new file | path, owner, mtime, sha256, `dpkg -S` owner package (none = suspicious) |
 | `persist-preload` | `/etc/ld.so.preload` exists or changed; `LD_PRELOAD` in `/proc/*/environ` of user processes (hourly sample) | high | content |
 | `module-new` | `/proc/modules` set vs baseline + kernel log `module verification failed` / taint bits O, E newly set | review (high if unsigned and not from dkms) | name, `modinfo` filename/signer |
 | `sudoers-change` | `/etc/sudoers.d/*`, `/etc/pam.d/*` hash change (`read_root` allowed for sudoers.d) | high | file, diff when readable |

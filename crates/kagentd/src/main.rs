@@ -2,6 +2,7 @@
 //! subcommands arrive with their stages (S6 audit, S8 sudoers, S12 mcp).
 
 mod api;
+mod cli;
 mod bots;
 mod compact_api;
 mod rounded;
@@ -10,6 +11,7 @@ mod todo_api;
 mod screen;
 mod appwin;
 mod tray;
+mod turn_config;
 mod ui;
 mod browser;
 mod hooks;
@@ -44,7 +46,7 @@ use std::sync::Arc;
 
 use tokio::sync::broadcast;
 
-use kagent_core::agent::{Agent, AgentConfig, AgentDeps, TurnContext};
+use kagent_core::agent::{Agent, AgentDeps, TurnContext};
 use kagent_core::permission::{PermissionBroker, PermissionEngine};
 use kagent_core::protocol::AgentEvent;
 use kagent_core::session::SessionStore;
@@ -106,69 +108,8 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        "audit" => {
-            if std::env::args().nth(2).as_deref() == Some("verify") {
-                let path = paths::Paths::resolve().data.join("audit.jsonl");
-                match kagent_core::audit::verify(&path) {
-                    Ok(n) => println!("OK: {n} records, chain intact ({})", path.display()),
-                    Err((line, reason)) => {
-                        println!("BROKEN at line {line}: {reason} ({})", path.display());
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                usage();
-            }
-        }
-        "sudoers" => print_sudoers(),
-        "mikrotik-setup" => net::print_setup(&std::env::args().nth(2).unwrap_or_else(|| "<this-PC-IP>".into())),
-        "router-unblock" => {
-            // Undo path for router_block_ip (recorded in the change journal).
-            let addr = std::env::args().nth(2).unwrap_or_default();
-            let token = std::fs::read_to_string(paths::Paths::resolve().token()).unwrap_or_default();
-            let out = std::process::Command::new("curl")
-                .args(["-fsS", "-X", "POST", "-H", &format!("Authorization: Bearer {}", token.trim()), "-H", "Content-Type: application/json", "-d", &serde_json::json!({"address": addr}).to_string(), "http://127.0.0.1:7878/api/net/unblock"])
-                .status();
-            std::process::exit(if out.is_ok_and(|s| s.success()) { 0 } else { 1 });
-        }
-        "mcp" => {
-            // stdout is the protocol channel: logs must not go there.
-            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-            if let Err(e) = rt.block_on(mcp::serve_stdio(&paths::Paths::resolve())) {
-                eprintln!("kagentd mcp: {e:#}");
-                std::process::exit(1);
-            }
-        }
-        _ => usage(),
+        other => cli::run(other),
     }
-}
-
-/// Owner action (never executed by KAgent): install the root helper + sudoers rule.
-fn print_sudoers() {
-    let user = std::env::var("USER").unwrap_or_else(|_| "<your-user>".into());
-    let repo = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| ".".into());
-    if let Some(line) = kagent_core::tools::privop::setup_oneliner() {
-        println!("# KAgent root helper setup: paste this ONE line into a terminal (asks for your password once):");
-        println!("{line}");
-        println!();
-        println!("# Or step by step from the source tree:");
-    } else {
-        println!("# KAgent root helper setup. Review, then run these yourself (KAgent never runs sudo).");
-    }
-    println!("cd {repo}");
-    println!("cargo build --release -p kagent-priv");
-    println!("sudo install -o root -g root -m 0755 target/release/kagent-priv {}", kagent_core::tools::privop::DEFAULT_HELPER);
-    println!("echo '{user} ALL=(root) NOPASSWD: {}' | sudo tee /etc/sudoers.d/kagent", kagent_core::tools::privop::DEFAULT_HELPER);
-    println!("sudo chmod 0440 /etc/sudoers.d/kagent && sudo visudo -c");
-    println!();
-    println!("# Optional: allow free-form root shell commands (each one still asks in KAgent):");
-    println!("# sudo mkdir -p /etc/kagent && sudo touch /etc/kagent/allow-root-shell");
-    println!("# Remove everything: sudo rm /etc/sudoers.d/kagent {}", kagent_core::tools::privop::DEFAULT_HELPER);
-}
-
-fn usage() {
-    eprintln!("usage: kagentd [serve | audit verify | sudoers | mcp]");
-    std::process::exit(2);
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -334,58 +275,16 @@ async fn run() -> anyhow::Result<()> {
         }));
     }
     alerts.set_alert_hooks(hooks.clone());
-    let settings_for_config = settings_arc.clone();
-    let providers_for_config = providers.clone();
-    let (machine_for_config, skills_for_config) = (machine.clone(), skills.clone());
-    let memory_for_config = memory.clone();
-    // Built for every turn: persona, language, enabled tools, clock, memory and the chat
-    // model's context window are always current.
-    let cfg = move |turn: TurnContext| {
-        let s = settings_for_config.read().unwrap();
-        skills_for_config.refresh(&s.skills_config()); // first: new or edited skills are in this prompt
-        let enabled: Vec<String> = tool_index
-            .iter()
-            .filter(|(_, g)| s.tool_groups.is_empty() || s.tool_groups.iter().any(|x| x == g))
-            .map(|(n, _)| n.clone())
-            .collect();
-        let memory_tools = enabled.iter().any(|n| kagent_core::tools::group_of(n) == "memory");
-        let mode = serde_json::to_value(s.permission_mode).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
-        // Usable only: enabled, with the chat role, in a provider that is on (models.md section 2).
-        let resolved = providers_for_config.usable(&s.chat_model);
-        let context_tokens = resolved.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0);
-        // The memory block (memory.md section 2), recalled by the words of this turn's message.
-        let (memory_block, memory_rule) = memory_for_config.prompt_parts(&s.memory_config(), &turn.user_text, context_tokens, memory_tools);
-        let system_prompt = prompt::build(&prompt::PromptInput {
-            persona_name: &s.persona.name,
-            address: &s.persona.address,
-            language: &s.persona.language,
-            machine: &machine_for_config,
-            tool_names: &enabled,
-            skills_index: &skills_for_config.index(s.skills_config().index_budget_chars),
-            memory_block: &memory_block,
-            memory_rule,
-            permission_mode: &mode,
-            now: chrono::Local::now(),
-        });
-        // The model's own output limit is the only source: `options.maxOutputTokens` is no longer read (models.md section 6).
-        let fallback = providers_for_config.usable(&s.fallback_model);
-        AgentConfig {
-            model_ref: s.chat_model.clone(),
-            system_prompt,
-            max_iterations: s.max_iterations,
-            options: kagent_core::model::ModelOptions {
-                reasoning_level: s.options.reasoning_level.clone(),
-                max_output_tokens: resolved.as_ref().map(|r| r.config.max_output_tokens),
-                temperature: s.options.temperature,
-            },
-            privilege: s.privilege_method(),
-            context_tokens,
-            // A fallback that cannot be used is none: the turn then fails with the model's own error (models.md section 5).
-            fallback_context_tokens: fallback.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0),
-            fallback_max_output: fallback.as_ref().map(|r| r.config.max_output_tokens),
-            fallback_model_ref: fallback.as_ref().map(|_| s.fallback_model.clone()).unwrap_or_default(),
-        }
+    // Built for every turn (turn_config.rs).
+    let turn_config = turn_config::TurnConfig {
+        settings: settings_arc.clone(),
+        providers: providers.clone(),
+        machine: machine.clone(),
+        skills: skills.clone(),
+        memory: memory.clone(),
+        tool_index,
     };
+    let cfg = move |turn: TurnContext| turn_config.build(turn);
 
     let agent = Agent::new(AgentDeps {
         services: Some(services.clone()),

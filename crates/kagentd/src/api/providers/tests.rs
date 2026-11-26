@@ -186,3 +186,19 @@ fn the_named_models_are_the_settings_that_name_one() {
     assert_eq!(named, [("chatModel", "a::x".to_string()), ("fallbackModel", "b::y".to_string()), ("visionModel", "d::w".to_string()), ("liveModel", "c::z".to_string())]);
     assert_eq!(as_named(&named), [("chatModel", "a::x"), ("fallbackModel", "b::y"), ("visionModel", "d::w"), ("liveModel", "c::z")]);
 }
+
+#[test]
+fn deleting_a_provider_empties_every_setting_that_names_it() {
+    let mut s = Settings::defaults();
+    s.chat_model = "gemini::a".into();
+    s.fast_model = "gemini::b".into();
+    s.fallback_model = "ollama::c".into();
+    s.live_model = "gemini::models/x-live".into();
+    s.patch(json!({"visionModel": "gemini::d"})).unwrap();
+    assert!(clear_provider_refs(&mut s, "gemini"));
+    assert_eq!(named_models(&s), [("fallbackModel", "ollama::c".to_string())], "only the other provider's model is left");
+    assert!(!clear_provider_refs(&mut s, "gemini"), "nothing left to clear");
+    // A provider whose id is the start of another's is not the other one.
+    s.fallback_model = "ollama2::c".into();
+    assert!(!clear_provider_refs(&mut s, "ollama"));
+}

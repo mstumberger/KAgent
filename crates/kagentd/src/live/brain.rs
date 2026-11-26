@@ -86,14 +86,10 @@ pub fn sorry(why: &str) -> String {
     format!("Sorry, I could not think: {why}")
 }
 
-/// A live (speech-to-speech) model, as `put_settings` tells one: it cannot answer text turns.
-fn is_live(r: &kagent_providers::store::ResolvedModel) -> bool {
-    r.config.supports_live || (!r.model.roles.is_empty() && r.model.roles.iter().all(|x| x == "live")) || r.model.id.contains("-live") || r.model.id.contains("native-audio")
-}
-
 fn chat_model_usable(st: &AppState) -> bool {
     let chat = st.settings.read().unwrap().chat_model.clone();
-    st.providers.resolve(&chat).map(|r| r.provider.enabled && !is_live(&r)).unwrap_or(false)
+    // The same test the turn uses (`usable`: enabled, chat role, provider on), and not live.
+    st.providers.usable(&chat).is_some_and(|r| !r.is_live())
 }
 
 /// The brain of a session, read when it connects (voice.md section 1): the section,

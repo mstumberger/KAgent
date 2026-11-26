@@ -3,7 +3,7 @@
 // `/<name> <request>`; a built-in command is done by the UI: `/new` starts a session,
 // `/compact` calls the compaction route of the active session, `/plan <request>` sends the
 // message with `plan: true` (plan-todo.md section 2) and `/plan` alone arms the Plan toggle.
-import type { SkillView } from "./api";
+import type { SkillView } from "./skillsApi";
 
 export interface SlashCommand {
   name: string;

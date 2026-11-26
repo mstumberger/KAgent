@@ -174,6 +174,8 @@ fn stored_shapes_the_old_names_and_an_unknown_field() {
     assert_eq!(serde_json::to_value(&Schedule::interval(Unit::Minute, 20, None, None, None)).unwrap(), json!({"type": "interval", "unit": "minute", "n": 20}));
     // Before S28.
     assert_eq!(Schedule::from_value(json!({"type": "At", "at": "2026-12-01T12:00:00+01:00"})).unwrap(), Schedule::Once { at: noon });
+    // A record written as `at` (the tasks.json of the owner had one).
+    assert_eq!(Schedule::from_value(json!({"type": "at", "at": "2026-12-01T12:00:00+01:00"})).unwrap(), Schedule::Once { at: noon });
     assert_eq!(Schedule::from_value(json!({"type": "Every", "minutes": 20})).unwrap(), Schedule::interval(Unit::Minute, 20, None, None, None));
     assert_eq!(Schedule::from_value(json!({"type": "Daily", "time": "09:00", "days": [0, 4]})).unwrap(), daily("09:00", Some(vec![0, 4])));
     assert_eq!(Schedule::from_value(json!({"type": "Daily", "time": "09:00", "days": []})).unwrap(), daily("09:00", None), "no day named is every day");

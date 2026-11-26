@@ -2,7 +2,7 @@
 // description, when to use, body. A field says what is wrong with it before anything
 // is sent; what the daemon refuses on top of that is shown above the form.
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import type { SkillDraft } from "../../api";
+import type { SkillDraft } from "../../skillsApi";
 import { Field } from "../ui";
 import { draftErrors, emptyDraft, type Draft } from "./shared";
 

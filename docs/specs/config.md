@@ -143,9 +143,12 @@ them); every other NVIDIA model takes the catch-all rule.
 
 ## 4. providers.json (personal, editable)
 
+`schemaVersion` 2 since S40: a file below 2 has the roles of its old fetch corrected
+once at load (models.md section 3, item 4) and is saved as 2.
+
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "order": ["ollama", "anthropic"],
   "providers": {
     "ollama": {

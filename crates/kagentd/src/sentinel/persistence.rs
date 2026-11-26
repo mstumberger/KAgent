@@ -72,13 +72,38 @@ pub fn take(home: &Path, with_suid: bool) -> Snapshot {
     // Bits 12 (O, out-of-tree) and 13 (E, unsigned) mark foreign kernel code.
     s.insert("taint:foreign_modules".into(), ((taint >> 12) & 0b11).to_string());
     if with_suid {
-        if let Ok(out) = std::process::Command::new("find").args(["/usr", "/opt", "/home", "-xdev", "-perm", "-4000", "-type", "f"]).output() {
-            for l in String::from_utf8_lossy(&out.stdout).lines() {
-                s.insert(format!("suid:{l}"), String::new());
-            }
+        for l in suid_scan() {
+            s.insert(format!("suid:{l}"), String::new());
         }
     }
     s
+}
+
+/// The `find` of setuid-root programs. It walks all of `/usr`, `/opt` and `/home`
+/// (millions of entries on one filesystem: a full core for seconds), so it runs at idle
+/// CPU and IO priority; without `nice`/`ionice` it runs as it is.
+const SUID_FIND: [&str; 11] = ["find", "/usr", "/opt", "/home", "-xdev", "-user", "root", "-perm", "-4000", "-type", "f"];
+
+fn suid_scan() -> Vec<String> {
+    let gentle = std::process::Command::new("nice").args(["-n", "19", "ionice", "-c", "3"]).args(SUID_FIND).output();
+    let out = match gentle {
+        Ok(o) if o.status.success() || !o.stdout.is_empty() => o,
+        _ => match std::process::Command::new(SUID_FIND[0]).args(&SUID_FIND[1..]).output() {
+            Ok(o) => o,
+            Err(_) => return Vec::new(),
+        },
+    };
+    String::from_utf8_lossy(&out.stdout).lines().map(str::to_string).collect()
+}
+
+/// Whether round `round` scans for setuid programs: hourly, but not in the first
+/// round of a start (a boot is busy enough), unless there is no baseline yet: the
+/// first baseline must hold them, or every one would later read as new.
+fn suid_round(round: u64, has_baseline: bool) -> bool {
+    if !has_baseline {
+        return true;
+    }
+    round % 6 == 3
 }
 
 /// Added or changed items -> hits. Removals are not intrusions (uninstalls).
@@ -145,10 +170,10 @@ pub fn rebaseline(data: &Path, home: &Path) -> anyhow::Result<usize> {
 pub async fn watch(data: PathBuf, home: PathBuf, alerts: Arc<AlertManager>, cancel: CancellationToken) -> anyhow::Result<()> {
     let mut round = 0u64;
     loop {
-        let with_suid = round % 6 == 0; // SUID scan hourly (slow-ish)
-        let (d, h) = (data.clone(), home.clone());
+        let base: Option<Snapshot> = std::fs::read(baseline_path(&data)).ok().and_then(|b| serde_json::from_slice(&b).ok());
+        let with_suid = suid_round(round, base.is_some());
+        let h = home.clone();
         let now = tokio::task::spawn_blocking(move || take(&h, with_suid)).await?;
-        let base: Option<Snapshot> = std::fs::read(baseline_path(&d)).ok().and_then(|b| serde_json::from_slice(&b).ok());
         match base {
             None => {
                 std::fs::create_dir_all(baseline_path(&data).parent().unwrap())?;
@@ -191,6 +216,13 @@ mod tests {
         assert_eq!(hits.len(), 4);
         // SUID items are ignored on rounds without a SUID scan.
         assert_eq!(diff(&base, &now, false).len(), 3);
+    }
+
+    #[test]
+    fn the_suid_scan_is_hourly_but_not_at_start() {
+        let rounds: Vec<u64> = (0..13).filter(|r| suid_round(*r, true)).collect();
+        assert_eq!(rounds, [3, 9], "every sixth 10-minute round, the first half an hour in");
+        assert!(suid_round(0, false), "the first baseline holds the setuid programs");
     }
 
     #[test]

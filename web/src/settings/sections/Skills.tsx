@@ -1,7 +1,7 @@
 // Skills (skills.md section 9): the library of the agent. The list on the left with a
 // switch per skill, the selected skill on the right. Import and sources open dialogs.
 import { useEffect, useState } from "react";
-import { skillsApi, type SkillDraft, type SkillView } from "../../api";
+import { skillsApi, type SkillDraft, type SkillView } from "../../skillsApi";
 import { prefillComposer, useStore } from "../../store";
 import type { SectionProps } from "../registry";
 import ImportDialog from "../skills/ImportDialog";

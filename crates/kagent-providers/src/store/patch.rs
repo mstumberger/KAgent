@@ -77,6 +77,16 @@ const MANUAL_FIELDS: [(&str, fn(&ModelConfigPatch) -> bool); 5] = [
     ("supportsImage", |c| c.supports_image.is_none()),
 ];
 
+/// A base URL is an `http` or `https` address with a host.
+pub(super) fn check_base_url(base: &str) -> Result<(), String> {
+    let bad = || format!("baseUrl: '{}' is not an http or https address", base.trim());
+    let url = reqwest::Url::parse(base.trim()).map_err(|_| bad())?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none_or(str::is_empty) {
+        return Err(bad());
+    }
+    Ok(())
+}
+
 /// The first entry of a list that comes twice.
 fn repeated<'a, T: PartialEq>(items: &'a [T]) -> Option<&'a T> {
     items.iter().enumerate().find(|(i, x)| items[..*i].contains(x)).map(|(_, x)| x)
@@ -89,10 +99,14 @@ pub(super) fn plan(catalog: &BuiltinCatalog, entry: &ProviderEntry, patch: &Prov
         out.api.api_type = t;
     }
     if let Some(name) = &patch.name {
-        out.name = name.clone();
+        if name.trim().is_empty() {
+            return Err(Refused::Invalid("name: a provider needs a name".into()));
+        }
+        out.name = name.trim().to_string();
     }
     if let Some(base) = &patch.base_url {
-        out.api.base_url = base.clone();
+        check_base_url(base).map_err(Refused::Invalid)?;
+        out.api.base_url = base.trim().to_string();
     }
     match &patch.api_key {
         Some(Some(key)) if !key.is_empty() => out.api_key = key.clone(),

@@ -1,7 +1,7 @@
 // Git sources of skills (skills.md sections 8 and 9): the sources, their sync and their
 // removal, and the form that adds one, with the catalog as suggestions.
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { skillsApi, type CatalogEntry, type SourceForm, type SourceReport, type SourceView } from "../../api";
+import { skillsApi, type CatalogEntry, type SourceForm, type SourceReport, type SourceView } from "../../skillsApi";
 import Dialog from "../dialog";
 import "./dialogs.css";
 import { Field } from "../ui";

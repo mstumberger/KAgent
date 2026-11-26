@@ -42,8 +42,8 @@ type AuditRecord = /* config.md section 6 */;
 | GET `/api/providers` | | `ProviderView[]` in `order` |
 | POST `/api/providers` | `{templateId, name?, baseUrl?, apiKey?, headers?}` | `ProviderView` (201). Prefills models from the template |
 | PUT `/api/providers/:id` | `{name?, baseUrl?, apiKey? /*"" = keep, null = clear*/, headers?, enabled?, models?: [{id, enabled, config?}]}` | `ProviderView` |
-| DELETE `/api/providers/:id` | | 204; if it held `chatModel`, settings.chatModel = "" |
-| POST `/api/providers/:id/fetch-models` | | `ProviderView` (merged; new models disabled unless < 5 total) or 502 `provider_error` |
+| DELETE `/api/providers/:id` | | 204; every model setting naming one of its models (`chatModel`, `fastModel`, `fallbackModel`, `visionModel`, `liveModel`) is set to "" |
+| POST `/api/providers/:id/fetch-models` | | `ProviderView` (merged into the entry as it is when the answer arrives; new models arrive disabled, models.md section 3) or 502 `provider_error` |
 | POST `/api/providers/:id/test` | `{modelId?}` | `{ok, latencyMs, error?}` (one short completion "Reply with OK") |
 | PUT `/api/providers/order` | `{order: string[]}` | 204 |
 | GET `/api/models` | | `{chat: ModelView[], fast: ModelView[], live: ModelView[], vision: ModelView[]}` (enabled only) |

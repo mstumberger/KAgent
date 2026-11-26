@@ -1,7 +1,7 @@
 // The composer's input with the slash picker (skills.md section 6): while the text is one
 // word that starts with `/`, the matching skills and built-in commands open above it.
 import { useId, useState, type KeyboardEvent } from "react";
-import type { SkillView } from "../api";
+import type { SkillView } from "../skillsApi";
 import { matchSlash, slashItems, slashWord, type SlashItem } from "../commands";
 import "./command.css";
 

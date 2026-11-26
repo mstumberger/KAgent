@@ -2,7 +2,8 @@
 // owner can do with it. The edit switch shows the form instead.
 import { useEffect, useState } from "react";
 import Markdown from "../../components/Markdown";
-import { api, skillsApi, type SkillDraft, type SkillView } from "../../api";
+import { api } from "../../api";
+import { skillsApi, type SkillDraft, type SkillView } from "../../skillsApi";
 import { Badge, Confirm, Toggle } from "../ui";
 import SkillEditor from "./SkillEditor";
 import { SOURCE_LABEL, ago, copyName } from "./shared";

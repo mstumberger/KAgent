@@ -133,7 +133,7 @@ pub fn check_model_roles(store: &ProviderStore, patch: &Value) -> Result<(), Htt
     for key in ["chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel"] {
         let Some(r) = patch.get(key).and_then(Value::as_str).filter(|r| !r.is_empty()) else { continue };
         let Ok(m) = store.resolve(r) else { continue };
-        let live = m.config.supports_live || (!m.config.roles.is_empty() && m.config.roles.iter().all(|x| x == "live")) || m.model.id.contains("-live") || m.model.id.contains("native-audio");
+        let live = m.is_live();
         if key == "liveModel" {
             if !live {
                 return Err(bad_request(format!("{r} is not a live voice model; pick a Gemini *-live model")));
@@ -181,17 +181,28 @@ pub async fn update_provider(State(st): State<Arc<AppState>>, Path(id): Path<Str
     Ok(super::ok_json(view))
 }
 
+/// Empty every model setting that names a model of provider `id`: deleting the
+/// provider leaves no setting pointing at it. Answers whether one changed.
+pub fn clear_provider_refs(s: &mut Settings, id: &str) -> bool {
+    let prefix = format!("{id}::");
+    let mut changed = false;
+    for r in [&mut s.chat_model, &mut s.fast_model, &mut s.fallback_model, &mut s.live_model] {
+        if r.starts_with(&prefix) {
+            r.clear();
+            changed = true;
+        }
+    }
+    if s.extra.get("visionModel").and_then(Value::as_str).is_some_and(|r| r.starts_with(&prefix)) {
+        s.extra.insert("visionModel".into(), Value::String(String::new()));
+        changed = true;
+    }
+    changed
+}
+
 pub async fn delete_provider(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
-    let had_chat = st
-        .settings
-        .read()
-        .unwrap()
-        .chat_model
-        .starts_with(&format!("{id}::"));
     st.providers.delete(&id).map_err(|e| not_found(format!("{e:#}")))?;
-    if had_chat {
-        let mut s = st.settings.write().unwrap();
-        s.chat_model = String::new();
+    let mut s = st.settings.write().unwrap();
+    if clear_provider_refs(&mut s, &id) {
         s.save(&crate::paths::Paths::resolve().settings()).map_err(super::internal)?;
     }
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -201,9 +212,10 @@ pub async fn fetch_models(State(st): State<Arc<AppState>>, Path(id): Path<String
     let provider = st.providers.provider(&id).ok_or_else(|| not_found(format!("unknown provider {id}")))?;
     match kagent_providers::discovery::fetch_models(&provider).await {
         Ok(ids) => {
-            let merged = kagent_providers::discovery::merge_models(&provider, ids);
+            // Merged into the entry as it is now, not the copy taken before the request:
+            // a change saved while the fetch ran stays.
             let updated = st.providers.update(&id, |p| {
-                *p = merged;
+                *p = kagent_providers::discovery::merge_models(p, ids);
                 p.models_fetched_at = Some(chrono::Utc::now().to_rfc3339());
             });
             match updated {

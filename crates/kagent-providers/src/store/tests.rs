@@ -202,6 +202,25 @@ fn load_corrects_the_rows_of_an_old_fetch_and_leaves_the_named_model_alone() {
     s.update("gemini", |_| {}).unwrap();
     let again = ProviderStore::load(&path, small_catalog(), &named).unwrap();
     assert_eq!(again.provider("gemini").unwrap().models, s.provider("gemini").unwrap().models);
+    assert!(std::fs::read_to_string(&path).unwrap().contains(r#""schemaVersion": 2"#), "saved as version 2");
+}
+
+#[test]
+fn a_role_the_owner_gives_after_the_correction_survives_a_restart() {
+    // The correction runs once (schemaVersion 1 to 2), not at every start: the owner
+    // gives a text-to-speech row the chat role, and the next start keeps it.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("providers.json");
+    let old = json!({"schemaVersion": 1, "order": ["gemini"], "providers": {"gemini": {
+        "id": "gemini", "name": "Gemini", "templateId": "gemini", "enabled": true, "api": {"type": "openai-chat-completions", "baseUrl": "https://x/v1", "headers": {}},
+        "models": [{"id": "models/gemini-3.8-flash-tts", "name": "", "enabled": false, "roles": ["chat"], "config": {}}]}}});
+    std::fs::write(&path, old.to_string()).unwrap();
+    let s = ProviderStore::load(&path, small_catalog(), &[]).unwrap();
+    assert!(s.provider("gemini").unwrap().models[0].roles.is_empty(), "corrected at the first start");
+    let change: ProviderPatch = serde_json::from_value(json!({"models": [{"id": "models/gemini-3.8-flash-tts", "roles": ["chat"]}]})).unwrap();
+    s.patch("gemini", &change, &[]).unwrap();
+    let again = ProviderStore::load(&path, small_catalog(), &[]).unwrap();
+    assert_eq!(again.provider("gemini").unwrap().models[0].roles, ["chat"], "the owner's role stays");
 }
 
 #[test]
@@ -350,4 +369,35 @@ fn the_patch_types_refuse_what_the_spec_does_not_name() {
     assert_eq!((clear.api_key, keep.api_key), (Some(None), Some(Some(String::new()))));
     assert!(patch("{}").api_key.is_none());
     assert!(patch(r#"{"modelOrder": []}"#).model_order.is_some(), "an empty list is a list");
+}
+
+#[test]
+fn a_patch_whose_save_fails_leaves_memory_as_it_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = store(&dir);
+    let p = s.add_from_template("ollama", None, None, None, Default::default(), None).unwrap();
+    // The file's place becomes a directory: the save fails.
+    let path = dir.path().join("providers.json");
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let r = s.patch(&p.id, &patch(r#"{"name": "Renamed"}"#), &[]);
+    assert!(matches!(r, Err(Refused::NotSaved(_))), "{r:?}");
+    assert_eq!(s.provider(&p.id).unwrap().name, p.name, "not saved is not changed");
+    assert!(s.update(&p.id, |e| e.name = "Again".into()).is_err());
+    assert_eq!(s.provider(&p.id).unwrap().name, p.name);
+}
+
+#[test]
+fn a_blank_name_or_an_address_that_is_not_http_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = store(&dir);
+    let p = s.add_from_template("ollama", None, None, None, Default::default(), None).unwrap();
+    for body in [r#"{"name": "  "}"#, r#"{"baseUrl": "localhost:11434"}"#, r#"{"baseUrl": "ftp://x/v1"}"#, r#"{"baseUrl": ""}"#] {
+        assert!(matches!(s.patch(&p.id, &patch(body), &[]), Err(Refused::Invalid(_))), "{body}");
+    }
+    assert_eq!(s.provider(&p.id).unwrap(), p, "nothing changed");
+    let ok = s.patch(&p.id, &patch(r#"{"name": " Local ", "baseUrl": " http://127.0.0.1:11434 "}"#), &[]).unwrap();
+    assert_eq!((ok.name.as_str(), ok.api.base_url.as_str()), ("Local", "http://127.0.0.1:11434"), "trimmed");
+    let err = s.add_from_template("custom", Some("Mine".into()), Some("not a url".into()), None, Default::default(), None).unwrap_err();
+    assert!(err.to_string().contains("not an http or https address"), "{err}");
 }

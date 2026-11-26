@@ -45,17 +45,48 @@ pub enum Action {
     Clear,
 }
 
-/// `Rectangle` has no `PartialEq` in this build.
-fn same(current: &[Rectangle], wanted: &[Rectangle]) -> bool {
-    current.len() == wanted.len()
-        && current.iter().zip(wanted).all(|(a, b)| a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height)
+/// The area `rects` cover inside a `w` x `h` window, as one sorted list of merged
+/// `[x0, x1)` spans per row: the same for every list of rectangles that covers the same
+/// pixels. The X server stores a shape as a banded region (neighbouring rows merged,
+/// sorted by position), so what it answers is never the list that was sent.
+fn coverage(rects: &[Rectangle], w: u16, h: u16) -> Vec<Vec<(i32, i32)>> {
+    let mut rows: Vec<Vec<(i32, i32)>> = vec![Vec::new(); h as usize];
+    for r in rects {
+        let (x0, x1) = ((r.x as i32).max(0), (r.x as i32 + r.width as i32).min(w as i32));
+        if x0 >= x1 {
+            continue;
+        }
+        let (y0, y1) = ((r.y as i32).max(0), (r.y as i32 + r.height as i32).min(h as i32));
+        for y in y0..y1 {
+            rows[y as usize].push((x0, x1));
+        }
+    }
+    for row in &mut rows {
+        row.sort_unstable();
+        let mut merged: Vec<(i32, i32)> = Vec::with_capacity(row.len());
+        for &(a, b) in row.iter() {
+            match merged.last_mut() {
+                Some(last) if a <= last.1 => last.1 = last.1.max(b),
+                _ => merged.push((a, b)),
+            }
+        }
+        *row = merged;
+    }
+    rows
 }
 
-/// `radius` 0 means the window should have no shape.
+/// Whether two shapes cover the same pixels of the window.
+fn same(current: &[Rectangle], wanted: &[Rectangle], w: u16, h: u16) -> bool {
+    coverage(current, w, h) == coverage(wanted, w, h)
+}
+
+/// `radius` 0 means the window should have no shape. A window without a shape is
+/// answered as one rectangle over the whole window (or none at all).
 pub fn action(current: &[Rectangle], w: u16, h: u16, radius: u16) -> Action {
     if radius == 0 {
-        if current.is_empty() { Action::Keep } else { Action::Clear }
-    } else if same(current, &rounded_rects(w, h, radius)) {
+        let whole = [Rectangle { x: 0, y: 0, width: w, height: h }];
+        if current.is_empty() || same(current, &whole, w, h) { Action::Keep } else { Action::Clear }
+    } else if same(current, &rounded_rects(w, h, radius), w, h) {
         Action::Keep
     } else {
         Action::Round
@@ -113,9 +144,14 @@ fn check(window_hex: &str, radius: u16) -> Option<bool> {
 /// Until the window is destroyed: whenever the bounding shape is no longer the wanted
 /// one (the browser clears it on every move or resize), put it back. Ends with `None`
 /// when the window is gone.
+const MIN_PUT_GAP: Duration = Duration::from_millis(50);
+
 fn guard<C: Connection>(conn: &C, id: u32, radius: u16, is_maximized: impl Fn() -> bool) -> Option<()> {
     conn.shape_select_input(id, true).ok()?.check().ok()?;
     conn.change_window_attributes(id, &ChangeWindowAttributesAux::new().event_mask(EventMask::STRUCTURE_NOTIFY)).ok()?.check().ok()?;
+    // A brake: should the server ever answer a shape that never compares equal, the
+    // guard puts it back at most this often instead of spinning on its own events.
+    let mut last_put = std::time::Instant::now() - MIN_PUT_GAP;
     loop {
         match conn.wait_for_event().ok()? {
             Event::DestroyNotify(e) if e.window == id => return None,
@@ -125,7 +161,12 @@ fn guard<C: Connection>(conn: &C, id: u32, radius: u16, is_maximized: impl Fn() 
         let r = if is_maximized() { 0 } else { radius };
         let (w, h, current) = state(conn, id)?;
         if action(&current, w, h, r) != Action::Keep {
+            let since = last_put.elapsed();
+            if since < MIN_PUT_GAP {
+                std::thread::sleep(MIN_PUT_GAP - since);
+            }
             put(conn, id, w, h, r);
+            last_put = std::time::Instant::now();
         }
     }
 }
@@ -193,13 +234,53 @@ mod tests {
         assert_eq!(action(&rounded_rects(90, 60, 10), 100, 60, 10), Action::Round);
     }
 
+    /// What the X server answers for a shape: one rectangle per band of equal rows,
+    /// sorted by y then x (as XShapeGetRectangles does).
+    fn banded(rects: &[Rectangle], w: u16, h: u16) -> Vec<Rectangle> {
+        let rows = coverage(rects, w, h);
+        let mut out = Vec::new();
+        let mut y = 0;
+        while y < rows.len() {
+            let mut end = y + 1;
+            while end < rows.len() && rows[end] == rows[y] {
+                end += 1;
+            }
+            for &(a, b) in &rows[y] {
+                out.push(Rectangle { x: a as i16, y: y as i16, width: (b - a) as u16, height: (end - y) as u16 });
+            }
+            y = end;
+        }
+        out
+    }
+
+    #[test]
+    fn the_shape_the_server_answers_is_the_shape_that_was_sent() {
+        // The CPU spin: 29 rectangles sent for 340x460, 17 answered, compared in order.
+        let sent = rounded_rects(340, 460, 14);
+        let answered = banded(&sent, 340, 460);
+        assert_ne!(answered.len(), sent.len(), "the server's form differs from the sent list");
+        assert_eq!(action(&answered, 340, 460, 14), Action::Keep);
+        let mut reversed = sent.clone();
+        reversed.reverse();
+        assert_eq!(action(&reversed, 340, 460, 14), Action::Keep, "order does not matter");
+        assert_eq!(action(&banded(&rounded_rects(340, 460, 8), 340, 460), 340, 460, 14), Action::Round, "another radius is another shape");
+    }
+
+    #[test]
+    fn a_window_without_a_shape_is_answered_as_the_whole_window() {
+        let whole = [Rectangle { x: 0, y: 0, width: 340, height: 460 }];
+        assert_eq!(action(&whole, 340, 460, 0), Action::Keep, "a cleared shape is not cleared again");
+        assert_eq!(action(&whole, 340, 460, 14), Action::Round);
+    }
+
     #[test]
     fn a_maximized_window_is_left_without_a_shape() {
         assert_eq!(action(&[], 100, 60, 0), Action::Keep);
         assert_eq!(action(&rounded_rects(100, 60, 10), 100, 60, 0), Action::Clear);
     }
 
-    /// The guard against the real X server, on a window of this test (1x1, never shown):
+    /// The guard against the real X server, on a window of this test (120x80, never shown; a 1x1 window clamps the radius to 0
+    /// and hid the spin):
     /// `KAGENT_X11=1 cargo test -p kagentd x11_ -- --ignored --nocapture`.
     #[test]
     #[ignore = "needs an X server: see the comment"]
@@ -208,7 +289,7 @@ mod tests {
         let (mine, _) = x11rb::connect(None).unwrap();
         let (its, _) = x11rb::connect(None).unwrap();
         let id = mine.generate_id().unwrap();
-        mine.create_window(x11rb::COPY_DEPTH_FROM_PARENT, id, mine.setup().roots[0].root, 0, 0, 1, 1, 0, x11rb::protocol::xproto::WindowClass::INPUT_OUTPUT, 0, &x11rb::protocol::xproto::CreateWindowAux::new()).unwrap().check().unwrap();
+        mine.create_window(x11rb::COPY_DEPTH_FROM_PARENT, id, mine.setup().roots[0].root, 0, 0, 120, 80, 0, x11rb::protocol::xproto::WindowClass::INPUT_OUTPUT, 0, &x11rb::protocol::xproto::CreateWindowAux::new()).unwrap().check().unwrap();
         assert_eq!(wm_maximized(&mine, id), Some(false), "a plain window is not maximized");
         let guard = std::thread::spawn(move || guard(&its, id, 14, || false));
         let mut back = false;
@@ -216,12 +297,12 @@ mod tests {
         while !back && std::time::Instant::now() < deadline {
             // What the browser does on every move or resize: clear the shape, from its own
             // connection (repeated until the guard has had its say).
-            put(&mine, id, 1, 1, 14);
+            put(&mine, id, 120, 80, 14);
             mine.shape_mask(SO::SET, SK::BOUNDING, id, 0, 0, x11rb::NONE).unwrap().check().unwrap();
             let until = std::time::Instant::now() + Duration::from_millis(200);
             while std::time::Instant::now() < until {
                 let (_, _, current) = state(&mine, id).unwrap();
-                if action(&current, 1, 1, 14) == Action::Keep {
+                if action(&current, 120, 80, 14) == Action::Keep {
                     back = true;
                     break;
                 }
@@ -229,6 +310,12 @@ mod tests {
             }
         }
         assert!(back, "the shape was not put back");
+        // No spin: once the shape is back the guard sees it as kept and stops putting it.
+        let (_, _, settled) = state(&mine, id).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let (_, _, later) = state(&mine, id).unwrap();
+        assert_eq!(action(&settled, 120, 80, 14), Action::Keep);
+        assert_eq!(coverage(&settled, 120, 80), coverage(&later, 120, 80), "the shape is stable");
         mine.destroy_window(id).unwrap().check().unwrap();
         assert_eq!(guard.join().unwrap(), None, "the guard ends when the window is destroyed");
     }

@@ -185,16 +185,17 @@ impl Schedule {
         };
         let kind = fields.remove("type").and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
         let rest = Value::Object(fields);
-        let schedule = match kind.as_str() {
-            "once" | "At" => Self::Once { at: read::<OnceAt>(&kind, &rest)?.at },
+        // The tags before S28 are read in any case: files hold both `At` and `at`.
+        let schedule = match kind.to_ascii_lowercase().as_str() {
+            "once" | "at" => Self::Once { at: read::<OnceAt>(&kind, &rest)?.at },
             "interval" => read::<IntervalFields>(&kind, &rest)?.into(),
-            "Every" => Self::interval(Unit::Minute, read::<OldEvery>(&kind, &rest)?.minutes, None, None, None),
-            "Daily" => {
+            "every" => Self::interval(Unit::Minute, read::<OldEvery>(&kind, &rest)?.minutes, None, None, None),
+            "daily" => {
                 let daily = read::<OldDaily>(&kind, &rest)?;
                 Self::interval(Unit::Day, 1, Some(daily.time), (!daily.days.is_empty()).then_some(daily.days), None)
             }
             "cron" => Self::Cron { expr: read::<CronFields>(&kind, &rest)?.expr },
-            other => return Err(format!("unknown schedule type '{other}'")),
+            _ => return Err(format!("unknown schedule type '{kind}'")),
         };
         schedule.validate()?;
         Ok(schedule)
