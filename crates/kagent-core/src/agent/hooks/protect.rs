@@ -1,16 +1,21 @@
-//! The protection of KAgent's own configuration (hooks.md section 5). Hooks live in
-//! `settings.json` and run with the owner's privileges, so the agent must not write
-//! them, nor the files that hold its other rules, without a card. The card is the
-//! engine's `destructive` gate: it asks in every mode (`full` control lets `always_ask`
-//! through, the finding of S27) and is never remembered.
+//! The protection of KAgent's own configuration (hooks.md section 5) and of its
+//! credentials (token-guard.md). Hooks live in `settings.json` and run with the owner's
+//! privileges, so the agent must not write them, nor the files that hold its other rules,
+//! without a card. The agent never reads the API token nor a secret file: with the token
+//! it could call the daemon's own API. Both go through the engine's `destructive` gate:
+//! it asks in every mode (`full` control lets `always_ask` through, the finding of S27)
+//! and is never remembered.
 
 use std::path::{Component, Path, PathBuf};
 
-/// The files a call may not change without a card, and the folder of the profiles.
+/// The files a call may not change without a card, the folder of the profiles, and the
+/// files that hold a credential.
 struct Protected {
     files: Vec<PathBuf>,
     /// `<config>/agents`: every file in it is a profile the agent runs with.
     agents: PathBuf,
+    /// The API token, and the secret files of the features that have a file fallback.
+    credentials: Vec<PathBuf>,
 }
 
 fn home() -> PathBuf {
@@ -35,6 +40,7 @@ fn protected() -> Protected {
     Protected {
         files: [config.join("settings.json"), config.join("telegram.json"), data.join("audit.jsonl"), data.join("tasks.json")].map(|p| lexical(&p)).to_vec(),
         agents: lexical(&config.join("agents")),
+        credentials: [config.join("token"), config.join("router.secret"), config.join("telegram.secret"), config.join("search.secret")].map(|p| lexical(&p)).to_vec(),
     }
 }
 
@@ -54,11 +60,23 @@ impl Protected {
         let prefix = prefix.to_string_lossy();
         self.files.iter().chain(std::iter::once(&self.agents)).any(|n| n.to_string_lossy().starts_with(prefix.as_ref()))
     }
+
+    /// `path` is one of the credential files.
+    fn credential(&self, path: &Path) -> bool {
+        self.credentials.iter().any(|f| path == f)
+    }
+
+    /// A name with a wildcard (`tok*`, `kagent/*`) covers one of the credentials.
+    fn credential_wildcard(&self, prefix: &Path) -> bool {
+        let prefix = prefix.to_string_lossy();
+        self.credentials.iter().any(|n| n.to_string_lossy().starts_with(prefix.as_ref()))
+    }
 }
 
-/// `~`, `$HOME` and `${HOME}` expanded; the quotes and the brackets of the line taken off.
+/// `~`, `$HOME` and `${HOME}` expanded; the quotes, the brackets and the backticks of the
+/// line taken off.
 fn expand(text: &str) -> String {
-    let text = text.trim_matches(|c| matches!(c, '"' | '\'' | ')' | '}' | ';')).replace('"', "");
+    let text = text.trim_matches(|c| matches!(c, '"' | '\'' | ')' | '}' | ';' | '`' | '(')).replace('"', "");
     if text == "~" {
         return home().to_string_lossy().to_string();
     }
@@ -117,11 +135,27 @@ fn hits(text: &str, base: &Path, protected: &Protected) -> bool {
     forms(text, base).iter().any(|p| protected.holds_or_above(p))
 }
 
+/// Whether a name a command reads is one of the credential files, or (with a wildcard)
+/// something that covers one.
+fn credential_hits(text: &str, base: &Path, protected: &Protected) -> bool {
+    if let Some(i) = text.find(['*', '?']) {
+        return protected.credential_wildcard(&resolve(&text[..i], base));
+    }
+    forms(text, base).iter().any(|p| protected.credential(p))
+}
+
 /// Whether a file the file tools may write is KAgent's own configuration: `settings.json`
 /// (the hooks, the rules), a subagent profile, `telegram.json`, the audit log or the automations.
 pub fn is_protected(path: &str) -> bool {
     let protected = protected();
     forms(path, &Path::new(".")).iter().any(|p| protected.holds(p))
+}
+
+/// Whether a path names one of KAgent's credential files: the API token, or the secret
+/// file of a feature (token-guard.md). The file tools refuse them, in every mode.
+pub fn is_credential(path: &str) -> bool {
+    let protected = protected();
+    forms(path, &Path::new(".")).iter().any(|p| protected.credential(p))
 }
 
 /// Whether a shell command line changes one of those files (hooks.md section 5): a part
@@ -142,8 +176,53 @@ pub fn protected_command(command: &str, cwd: Option<&str>) -> bool {
     false
 }
 
+/// Whether a shell command line reads one of KAgent's credential files in any written form
+/// (token-guard.md): as an argument, inside `$(...)` or backticks, after a `cd` of the
+/// line, through a wildcard, or in the journal of the daemon, whose start line may hold
+/// the token.
+pub fn credential_command(command: &str, cwd: Option<&str>) -> bool {
+    let protected = protected();
+    let mut base = base(cwd);
+    for part in command.split([';', '|', '&', '\n']) {
+        if program_of(part) == "journalctl" && part.contains("kagent") {
+            return true;
+        }
+        for word in part.split(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '{' | '}' | '"' | '\'' | '`')) {
+            if !word.is_empty() && credential_hits(word, &base, &protected) {
+                return true;
+            }
+        }
+        if let Some(dir) = cd_target(part) {
+            base = resolve(dir, &base);
+        }
+    }
+    false
+}
+
+/// Whether a shell command goes to KAgent's own API, whose port is fixed: with the token
+/// it could change the settings and the hooks, or answer an approval card (token-guard.md).
+pub fn own_api(command: &str) -> bool {
+    command.contains("7878")
+}
+
 /// The programs that wrap the one that changes a file.
 const WRAPPERS: [&str; 7] = ["sudo", "command", "nohup", "time", "builtin", "exec", "env"];
+
+/// The program a command runs: past variables set for the call, options of a wrapper, and
+/// the wrappers.
+fn program_of(part: &str) -> &str {
+    let part = part.trim_start_matches(['(', '{', '!', ' ']);
+    let tokens: Vec<&str> = part.split_whitespace().collect();
+    let mut i = 0;
+    while let Some(t) = tokens.get(i) {
+        let assignment = t.contains('=') && !t.starts_with('-') && !t.contains('/');
+        if !(assignment || t.starts_with('-') || WRAPPERS.contains(t)) {
+            break;
+        }
+        i += 1;
+    }
+    tokens.get(i).and_then(|t| t.rsplit('/').next()).unwrap_or("")
+}
 
 /// One command of a line (between `;`, `|`, `&&` and a new line): does it change a protected file?
 fn part_changes(part: &str, base: &Path, protected: &Protected) -> bool {

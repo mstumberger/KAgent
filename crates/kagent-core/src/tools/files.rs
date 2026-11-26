@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::Arc;
 
 use super::exec::exec;
 use super::parse;
@@ -21,10 +22,18 @@ fn expand(path: &str) -> String {
 
 pub struct ReadFile {
     contract: ToolContract,
+    /// Whether a path is one of KAgent's credential files, which the agent never reads
+    /// (token-guard.md).
+    credential: Arc<dyn Fn(&str) -> bool + Send + Sync>,
 }
 
 impl ReadFile {
     pub fn new() -> Self {
+        Self::with_credential_check(Arc::new(crate::agent::hooks::protect::is_credential))
+    }
+
+    /// With a check of the caller's (a test's).
+    pub fn with_credential_check(credential: Arc<dyn Fn(&str) -> bool + Send + Sync>) -> Self {
         Self {
             contract: ToolContract::read_only(
                 "read_file",
@@ -36,6 +45,7 @@ impl ReadFile {
                 }}),
             )
             .timeout(10_000, 30_000),
+            credential,
         }
     }
 }
@@ -58,6 +68,11 @@ impl Tool for ReadFile {
             return Ok(ToolOutput::error("path is required"));
         };
         let path = expand(path);
+        if (self.credential)(&path) {
+            return Ok(ToolOutput::error(format!(
+                "{path}: refused, the file holds a KAgent credential (the API token or a secret). The agent never reads it."
+            )));
+        }
         let bytes = match tokio::fs::read(&path).await {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -273,12 +288,48 @@ impl Tool for SearchFiles {
         if !r.success() && r.stdout.trim().is_empty() {
             return Ok(ToolOutput::error(format!("no matches for /{pattern}/ (exit {})", r.code.unwrap_or(1))));
         }
-        let lines: Vec<&str> = r.stdout.lines().take(max).collect();
+        // Rows from one of KAgent's credential files are left out (token-guard.md).
+        let lines: Vec<&str> = r.stdout.lines().filter(|l| !credential_line(l)).take(max).collect();
         let mut out = format!("{} matches for /{pattern}/ in {}\n", lines.len(), path);
         for l in lines {
             out.push_str(crate::util::truncate_str(l, 400));
             out.push('\n');
         }
         Ok(ToolOutput::ok(out))
+    }
+}
+
+/// Whether a `file:line:match` row of `search_files` comes from one of KAgent's credential files.
+fn credential_line(line: &str) -> bool {
+    line.split(':').next().is_some_and(crate::agent::hooks::protect::is_credential)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn read_file_refuses_a_credential_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let secret = dir.path().join("token");
+        std::fs::write(&secret, "not-a-real-token\n").unwrap();
+        let other = dir.path().join("notes.txt");
+        std::fs::write(&other, "hello\n").unwrap();
+        let tool = ReadFile::with_credential_check(Arc::new(|p: &str| p.ends_with("/token")));
+        let ctx = ToolContext::standalone(std::time::Duration::from_secs(5), 4_000);
+        let out = tool.call(json!({"path": secret.display().to_string()}), ctx.clone()).await.unwrap();
+        assert!(out.is_error && out.content.contains("refused"), "{}", out.content);
+        assert!(!out.content.contains("not-a-real-token"), "the content must not leak");
+        let out = tool.call(json!({"path": other.display().to_string()}), ctx).await.unwrap();
+        assert!(!out.is_error && out.content.contains("hello"), "{}", out.content);
+    }
+
+    #[test]
+    fn search_rows_from_a_credential_file_are_recognised() {
+        let (config, _) = crate::agent::hooks::protect::dirs();
+        let token = config.join("token").display().to_string();
+        assert!(credential_line(&format!("{token}:1:abc")));
+        assert!(!credential_line("/etc/hostname:1:box"));
+        assert!(!credential_line(&format!("{}/skills/x/SKILL.md:1:token", config.display())));
     }
 }

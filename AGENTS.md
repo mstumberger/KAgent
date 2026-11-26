@@ -31,6 +31,7 @@ and section G for owner actions).
 | `docs/specs/scenarios.md` | acceptance scenarios per stage |
 | `docs/PLASMA-NATIVE.md` | plan: native Plasma widget/app (voice in daemon first) |
 | `docs/specs/platform.md` | desktop (KDE/GNOME/other) and package manager (apt/dnf/pacman) backends |
+| `docs/specs/token-guard.md` | token guard: the agent never reads KAgent's own API token (S34) |
 | `docs/specs/foundations.md` | phase 4 foundations: turn handle, session allowances, settings sections (S17) |
 | `docs/specs/skills.md` | skills library, self-authoring, import and git sources (S18, S20, S21) |
 | `docs/specs/ui-settings.md` | settings screen with a side menu; where each setting lives (S19 and later) |

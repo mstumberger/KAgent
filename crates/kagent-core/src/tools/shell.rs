@@ -131,6 +131,7 @@ impl Tool for Shell {
     }
     fn assess(&self, input: &Value) -> CallAssessment {
         let command = input.get("command").and_then(Value::as_str).unwrap_or("");
+        let cwd = input.get("cwd").and_then(Value::as_str);
         let sudo = input.get("sudo").and_then(Value::as_bool).unwrap_or(false);
         let words: Vec<&str> = command.split_whitespace().collect();
         let rule_key = words
@@ -144,8 +145,13 @@ impl Tool for Shell {
         } else {
             CallAssessment::from_contract(&self.contract, truncate(command, 100), rule_key)
         };
-        if crate::safety::looks_destructive(command) || crate::agent::hooks::protect::protected_command(command, input.get("cwd").and_then(Value::as_str)) {
-            // Destructive, or it changes KAgent's own configuration (hooks.md section 5): both ask in every mode.
+        // Destructive, it changes KAgent's own configuration (hooks.md section 5), reads one of its
+        // credentials or calls its own API (token-guard.md): all ask in every mode.
+        if crate::safety::looks_destructive(command)
+            || crate::agent::hooks::protect::protected_command(command, cwd)
+            || crate::agent::hooks::protect::credential_command(command, cwd)
+            || crate::agent::hooks::protect::own_api(command)
+        {
             a = a.destructive();
         }
         if sudo {
@@ -265,5 +271,25 @@ mod tests {
         let a = t.assess(&json!({"command": "echo hi"}));
         assert!(!a.read_only);
         assert_eq!(a.rule_key, "echo hi");
+    }
+
+    #[test]
+    fn credentials_and_the_own_api_ask_in_every_mode() {
+        let t = Shell::new();
+        let (config, _) = crate::agent::hooks::protect::dirs();
+        let token = config.join("token").display().to_string();
+        for cmd in [
+            format!("cat {token}"),
+            format!("curl -s -H \"Authorization: Bearer $(cat {token})\" -X POST http://127.0.0.1:7878/api/approvals/1"),
+            "curl http://127.0.0.1:7878/api/state".to_string(),
+            format!("cd {} && cat token", config.display()),
+        ] {
+            let a = t.assess(&json!({"command": cmd}));
+            assert!(a.destructive && a.needs_approval && !a.read_only, "must ask in every mode: {cmd}");
+        }
+        let a = t.assess(&json!({"command": format!("cat {}", config.join("settings.json").display())}));
+        assert!(a.read_only && !a.destructive, "reading the settings is still read-only");
+        let a = t.assess(&json!({"command": "cat /proc/cpuinfo"}));
+        assert!(a.read_only && !a.destructive);
     }
 }

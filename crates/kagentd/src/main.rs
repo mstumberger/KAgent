@@ -319,6 +319,18 @@ async fn run() -> anyhow::Result<()> {
     // cannot write them (hooks.md section 5); a change applies from the next event.
     let hooks = Arc::new(hooks::HookHub::new(settings_arc.clone(), paths.settings(), audit.clone(), events.clone()));
     *services.hooks.write().unwrap() = Some(hooks.clone());
+    // Token guard (token-guard.md): the daemon's API token never reaches the model, whatever a
+    // tool read it from (a file, the journal, a browser profile on disk).
+    {
+        let token = token.clone();
+        *services.redact.write().unwrap() = Some(Arc::new(move |text: &str| {
+            if token.is_empty() {
+                text.to_string()
+            } else {
+                text.replace(token.as_str(), "<redacted: KAgent API token>")
+            }
+        }));
+    }
     alerts.set_alert_hooks(hooks.clone());
     let settings_for_config = settings_arc.clone();
     let providers_for_config = providers.clone();

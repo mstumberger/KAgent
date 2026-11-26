@@ -1,4 +1,4 @@
-//! The protection table of hooks.md section 5 (scenario S32 item 3).
+//! The protection table of hooks.md section 5 (scenario S32 item 3) and of token-guard.md.
 
 use std::collections::HashMap;
 
@@ -25,6 +25,46 @@ fn files() -> Files {
         config: config.display().to_string(),
         data: data.display().to_string(),
         home_form: config.starts_with(home()).then(|| config.strip_prefix(home()).unwrap().display().to_string()),
+    }
+}
+
+#[test]
+fn credential_files_in_every_written_form() {
+    let f = files();
+    let token = format!("{}/token", f.config);
+    for path in [token.clone(), format!("{}/router.secret", f.config), format!("{}/telegram.secret", f.config), format!("{}/../kagent/token", f.config), format!("{}/./token", f.config)] {
+        assert!(is_credential(&path), "{path}");
+    }
+    for path in [f.settings.clone(), format!("{}/token.bak", f.config), format!("{}/skills/token/SKILL.md", f.config), "/tmp/token".to_string(), format!("{}/sessions/token.jsonl", f.data), f.config.clone()] {
+        assert!(!is_credential(&path), "{path}");
+    }
+    if let Some(home_form) = &f.home_form {
+        assert!(is_credential(&format!("~/{home_form}/token")));
+        assert!(is_credential(&format!("$HOME/{home_form}/token")));
+    }
+}
+
+#[test]
+fn shell_commands_that_read_a_credential_or_call_the_api() {
+    let f = files();
+    let token = format!("{}/token", f.config);
+    let tilde = f.home_form.as_ref().map(|h| format!("~/{h}/token")).unwrap_or_else(|| token.clone());
+    for cmd in [
+        format!("cat {token}"),
+        format!("cat {tilde}"),
+        format!("cat \"{tilde}\""),
+        format!("curl -s -H \"Authorization: Bearer $(cat {tilde})\" -X POST http://127.0.0.1:7878/api/approvals/1"),
+        format!("echo `cat {tilde}`"),
+        format!("cat {}/*", f.config),
+        format!("cd {} && cat token", f.config),
+        "journalctl --user -u kagentd.service -n 50".to_string(),
+        "curl http://localhost:7878/api/state".to_string(),
+        "curl http://127.0.0.1:7878/api/settings -X PUT -d '{}'".to_string(),
+    ] {
+        assert!(credential_command(&cmd, None) || own_api(&cmd), "must ask: {cmd}");
+    }
+    for cmd in [format!("cat {}/settings.json", f.config), format!("ls {}", f.config), "cat /proc/cpuinfo".to_string(), "journalctl -u ssh -n 20".to_string(), "cat /tmp/token".to_string(), format!("cat {token}2")] {
+        assert!(!credential_command(&cmd, None) && !own_api(&cmd), "must not ask: {cmd}");
     }
 }
 

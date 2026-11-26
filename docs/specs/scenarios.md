@@ -382,3 +382,14 @@ lists under "Tests".
 3. Headless Chrome: a fragment's `fetch`, `top.location` and `localStorage` stay
    blocked; the height follows the content.
 4. Voice: the same question is answered in words, without the marker.
+
+## S34 token guard
+1. **[auto]** `read_file` of a credential file is refused without a card, and its content
+   does not leak, in every mode.
+2. **[auto]** A shell command that names a credential file, runs `journalctl` on the daemon
+   or contains `7878` asks in every mode, including `full`; reading `settings.json` stays
+   read-only.
+3. **[auto]** A tool output that holds the API token reaches the model and the session
+   without it.
+4. Started with stdout that is not a terminal, `kagentd` prints no token (the journal of
+   its first start under systemd shows the new line).

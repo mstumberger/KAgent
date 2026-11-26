@@ -187,11 +187,14 @@ pub struct ToolServices {
     pub desktop: std::sync::RwLock<DesktopPrefs>,
     /// The daemon's hooks of the tool calls (hooks.md section 4); `None`: no hook runs.
     pub hooks: std::sync::RwLock<Option<Arc<dyn crate::agent::hooks::ToolHooks>>>,
+    /// The daemon's redactor of every tool output (token-guard.md): it takes the API token
+    /// out; `None`: outputs pass as they are.
+    pub redact: std::sync::RwLock<Option<Arc<dyn Fn(&str) -> String + Send + Sync>>>,
 }
 
 impl ToolServices {
     pub fn new(journal: Arc<crate::journal::ChangeJournal>, priv_client: Arc<crate::tools::privop::PrivClient>) -> Self {
-        Self { journal, priv_client, desktop: Default::default(), hooks: Default::default() }
+        Self { journal, priv_client, desktop: Default::default(), hooks: Default::default(), redact: Default::default() }
     }
 }
 

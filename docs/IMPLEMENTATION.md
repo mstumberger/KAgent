@@ -748,6 +748,18 @@ Do:
 Tests: `specs/widgets.md` section 7.
 Check: the standard checks with `web/`; headless Chrome (the sandbox checks of scenario S33 item 3); scenario S33 item 2, and item 4 by voice.
 
+### S34 - Token guard (~300 lines; a security follow-up to S32)
+Spec: `specs/token-guard.md` (all); `specs/tools.md` sections 4 and 5.
+Read: `crates/kagent-core/src/agent/hooks/protect.rs` (the protection table of S32) and its tests, `crates/kagent-core/src/tools/{files,shell}.rs`, `crates/kagent-core/src/agent/calls.rs` (`execute_call`, after `budget_output`), `crates/kagent-core/src/tool.rs` (`ToolServices`), `crates/kagent-core/tests/common/mod.rs` (the rig), `crates/kagentd/src/main.rs` (where `services.hooks` is set) and `crates/kagentd/src/server.rs` (the start line with the URL).
+Do:
+- `protect.rs`: the credential files (`is_credential`) and the two shell rules (`credential_command`, `own_api`), with tests.
+- `shell`: the two rules in `assess`, through the destructive gate.
+- `read_file` refuses a credential file (its check is a field, so the test uses a temporary file); `search_files` leaves out their rows.
+- `ToolServices.redact`: the daemon's redactor, applied in `execute_call` to every tool output; wired in `main.rs`.
+- `server.rs`: the URL with the token is printed to a terminal only.
+Tests: `specs/token-guard.md` section 4; `crates/kagent-core/tests/token_guard.rs`.
+Check: the standard checks; `python3 scripts/test-live.py` (the daemon changed).
+
 ---
 
 ## E. Decisions log (append during implementation)
@@ -2412,6 +2424,29 @@ not run. With this stage phase 4 is implemented from S17 to S33.
   decision on a document CSP (the coordinator recommends one: `frame-src 'none'` with
   `child-src`, or `frame-ancestors` as the app needs, on `web/index.html`).
 
+### Session 2026-11-26 (S34 token guard)
+
+Done by the coordinator itself, at the owner's command ("fix, commit and start"), on the
+finding of S32. 622 workspace tests (615 before), 2 ignored.
+- The credential files, the two shell rules and the redactor are as `token-guard.md`
+  says. The shell rules sit beside the protection of S32 (`agent/hooks/protect.rs`) and
+  use its gate: a card in every mode, never rememberable.
+- `read_file` holds its credential check as a field (the default is
+  `protect::is_credential`), so its test uses a temporary file and never the owner's
+  token. `search_files` drops the rows of a credential file.
+- `ToolServices.redact` is set by the daemon with its own token and applied in
+  `execute_call` after the output budget: one place for chat, voice, subagents, tasks and
+  the MCP server (`tests/token_guard.rs`).
+- `kagentd` prints the URL with the token only when stdout is a terminal. Under systemd
+  the journal held it at every start; entries written before this stage still do.
+- Verification: `RUSTFLAGS="-D warnings" cargo build --workspace` clean; 622 tests; the
+  gated Ollama test; `pnpm -C web lint` (4 warnings, 0 errors, the baseline);
+  `python3 scripts/test-live.py` `LIVE OK: 34/34` with its cleanup
+  (`/tmp/kagent-final-check-2.log`).
+- Seen, not changed: the limits of `token-guard.md` section 5 (a token transformed
+  before the output, a script that hides the path or the port, older journal entries).
+  The status lines of `AGENTS.md` and the phase 4 header above are still stale.
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2450,6 +2485,10 @@ Phase 4 (planned 2026-11-24, implemented 2026-11-25 to 2026-11-26; live-UI scena
 - [x] S31 subagents and background tasks (relaunched after an interrupted run; items 1 and 2 automatic; item 3 with the local model in process: two `agent_run` calls in 6 of 6 runs; items 3 to 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
 - [x] S32 hooks (items 1 to 3 automatic; item 4's rule on the scripted model and with `/bin/sh` hooks; the real local model with five hooks in process; the headless pass with stubbed routes; items 4 and 5 through the live UI left for the owner: the daemon needs a release rebuild and restart, the UI `pnpm -C web build`; section E)
 - [x] S33 inline widgets (item 1 and item 3 automatic; item 2 with the real loop against the local model only: the tool is called when the window holds the daemon's 67 tools, before the data; items 2 and 4 by the owner with the Gemini model; open: a fragment can send its own frame away, a document CSP would stop it; section E)
+
+Follow-up after phase 4
+
+- [x] S34 token guard (items 1 to 3 automatic; item 4 is seen at the first start under systemd; section E)
 
 ## G. Owner actions (things KAgent prints, you run)
 

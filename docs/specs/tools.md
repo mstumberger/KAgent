@@ -167,6 +167,9 @@ argv builder is a pure fn (tested): `journalctl --no-pager -o short-iso -n N [--
 ## 4. Group `files` (S1; edits S8)
 
 ### read_file (RO)
+Refuses KAgent's credential files (`<config>/token`, the `*.secret` files) with an error, in
+every mode: the agent never reads its own API token (`token-guard.md`). `search_files` leaves
+out rows that come from them.
 ```json
 {"type":"object","required":["path"],"properties":{
  "path":{"type":"string","description":"absolute or ~/..."},
@@ -220,6 +223,12 @@ allowlist: read via priv, replace, write via priv. Error when `old` occurs 0 or 
   flatpak(only list|info) docker(only ps|images|inspect|logs) podman(same) wpctl(only status|inspect)
   nmcli(only dev status|dev wifi list|con show|general) bluetoothctl(only devices|info|show)`.
 - Otherwise MUT, risk medium; rule_key = first two words of the command.
+- Asks in every mode, never rememberable (the destructive gate, `token-guard.md`): a
+  command that names one of KAgent's credential files (`<config>/token`, the `*.secret`
+  files: as an argument, inside `$(...)` or backticks, after a `cd`, through a wildcard),
+  that runs `journalctl` on the daemon, or that contains `7878`, the port of KAgent's own
+  API. With the token, a command could change the settings and hooks or answer an approval
+  card.
 - Tests: >= 10 RO and >= 10 MUT cases (`ls -la | grep x` RO; `ls > f` MUT; `sed -i`
   MUT; `systemctl restart x` MUT; `find / -delete` MUT; `echo $(id)` MUT).
 

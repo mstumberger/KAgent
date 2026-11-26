@@ -171,6 +171,12 @@ impl Agent {
             None => (ToolCallStatus::Error, format!("timed out after {timeout_ms} ms")),
         };
         let content = budget_output(&content, contract.max_output_bytes);
+        // Token guard (token-guard.md): the daemon's redactor takes its API token out of the
+        // output, whatever a tool read it from (a file, the journal, a browser profile on disk).
+        let content = match self.services.as_ref().and_then(|s| s.redact.read().ok().and_then(|r| r.clone())) {
+            Some(redact) => redact(&content),
+            None => content,
+        };
         let (is_error, duration_ms) = (status != ToolCallStatus::Ok, started.elapsed().as_millis() as u64);
         let done = self.finish(session_id, turn_id, &call, status, content.clone(), started, assessment.summary);
         // Hooks (hooks.md section 1): `PostToolUse` after the tool returned.

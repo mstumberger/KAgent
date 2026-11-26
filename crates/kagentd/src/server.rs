@@ -198,7 +198,13 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
     }
     let url = format!("http://127.0.0.1:7878/#token={}", state.token);
     println!("kagentd {} listening on http://127.0.0.1:7878", state.version);
-    println!("open {url}");
+    // The token is printed to a terminal only: under systemd stdout is the journal, which the
+    // agent can read (token-guard.md).
+    if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        println!("open {url}");
+    } else {
+        println!("open http://127.0.0.1:7878/ (the token is in KAgent's config folder, file `token`)");
+    }
     axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
     Ok(())
 }
