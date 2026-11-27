@@ -158,3 +158,32 @@ password fields that are emptied after a save, and the page only hears whether t
   that mocks the calendar and Telegram routes (no Google host is reached), headless Chrome, the
   seven states of the connection in dark and light at 1200x820 (top and bottom of the page,
   screenshots in `/tmp/kagent-s45-shots/`), 700x500, the behaviours above and no console error.
+
+## 11. The model picker, the widget sheet and the house popup (S41)
+
+Spec: `picker.md`. (The number is 11, not 10: S45 took 10.)
+
+- Composer: two rows. Row 1 is `CommandInput`; row 2 (32 px) has the model trigger at the left
+  and the microphone, the Plan toggle and Send or Stop at the right. The trigger is a 28 px pill:
+  a chevron, the model's id without a leading `models/`, and the effort in the dim colour after a
+  middle dot. Below 900 px it is a 28 x 28 px button with the text in its `title`. "No model" in
+  the bad colour when nothing can answer (Send is then disabled); a chosen model that the list
+  no longer has is in the signal colour with the reason in its title.
+- Menu (`components/ModelMenu.tsx`): above the trigger. "Default" (names the default model),
+  the chosen model if it cannot be used (disabled, with the reason), one group per provider
+  with its enabled chat models (the image icon where the model reads images, a check on the
+  current one), the Effort slider (hidden when the answering model offers no levels; stops are
+  "Provider default" and the levels; one PUT per change) and "Manage models" (Settings at Models).
+  Keys: the trigger opens on click, Enter, Space, ArrowDown or Ctrl+M; Up, Down, Home, End, Enter,
+  Space and typed letters in the list; Tab goes to the slider and to "Manage models"; Escape closes
+  and returns the focus. A click outside, a resize or a scroll of the page closes it.
+- The `.dot` with the model left the header; Defaults has no reasoning-level row.
+- Widget: a chip `.widget-model` in the status line opens the sheet "Model and effort"
+  (`components/Sheet.tsx`, the widget's one sheet; `sheet` in the store). Ctrl+M opens it and never
+  mutes; while a sheet is open the widget's keys do nothing and Escape closes it. The sheet keeps
+  the night tokens in both themes; an approval card stays above it.
+- House popup (`components/popup.css`): `.pop`, `.pop-head`, `.pop-item`, `.pop-text`, `.pop-hint`,
+  `.pop-check`, `.pop-sep`; the settings `Dropdown` takes its look from the same file.
+- Verified by `scripts/test-picker-web.py` (with `scripts/picker_web_lib.py`): a real daemon behind
+  a proxy that mocks the model and session routes, headless Chrome, dark and light at 1200x820,
+  700x500 and the widget size 340x460, screenshots in `/tmp/kagent-s41-shots/`.

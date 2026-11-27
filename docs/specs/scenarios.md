@@ -490,6 +490,36 @@ lists under "Tests".
     text-to-speech, image and music rows have no role badge; a chat turn while the key
     is over quota ends with the quota message in the header notice.
 
+## S41 model picker in the composer
+1. **[auto]** `model_api.rs`: each 400 of `picker.md` section 3 with its message, the 409,
+   the 404; a key left out keeps its value; a level is cleared when the model changes to
+   one that does not offer it; `POST /api/sessions` with both; a refused create makes no
+   session.
+2. **[auto]** Scripted model: a session's choice replaces the model, the window and the
+   output limit of the request and sends the level; a choice that cannot be used makes
+   the default answer and a notice says why; a level the model does not offer is not
+   sent; a subagent keeps the model of its job.
+3. **[auto]** The fields round-trip; a meta from before S41 loads; `unusable` names the
+   reason; an old `options.reasoningLevel` survives a load and a save.
+4. Headless Chrome (dark and light, 1200x820 and 700x500): the trigger shows the model
+   and the effort; Ctrl+M opens the menu; a pick sends one PUT and the trigger changes;
+   the check sits on the current one; the image icon shows where the model reads images;
+   the slider is hidden for a model without levels and sends one PUT per change; "Manage
+   models" opens Settings at Models; "Default" clears the choice.
+5. Headless: a new conversation starts with the last choice; a remembered model that is
+   gone is not sent.
+6. Headless, in the widget (340x460): the chip opens the sheet; a pick applies and the
+   sheet stays open; Escape closes it; Space and M do nothing to the voice while it is
+   open; Ctrl+M opens it and does not mute.
+7. Headless: the header has no model dot; with no usable model the trigger reads "No
+   model" and Send is disabled; with no default but a usable choice, Send is enabled.
+8. The owner, live: pick another model in one conversation and ask something; the answer
+   comes from that model, the other conversations keep the default; a task and a Telegram
+   chat keep the default too.
+
+Items 4 to 7 are `scripts/test-picker-web.py` (103 checks, with the keyboard and mouse rules
+of `picker.md` section 5.3). Item 8 is the owner's.
+
 ## S44 settings by voice and the voice rules
 Spec: `voice-control.md` section 7. Items 1 to 7 are `[auto]`; the last two are the owner's.
 1. **[auto]** `settings get` masks the secrets; `models` lists the refs and the jobs

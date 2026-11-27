@@ -2881,6 +2881,48 @@ Decisions the spec did not settle:
   other candidate (the report goes to channels). (3) Should a read-only default calendar be
   refused on save as well?
 
+### Session 2026-11-27, night (S41: the model picker, v0.0.2 item 4)
+
+`specs/picker.md` built in five commits on `v0.0.2`. 779 workspace tests (765 before; 779 also
+with `KAGENT_IT=1`), `tsc` clean, `npm run lint` with only its four old warnings,
+`scripts/test-live.py` 37/37, `scripts/test-picker-web.py` 103/103 (headless Chrome, the real
+daemon behind a proxy that mocks the model and session routes; dark and light at 1200x820,
+700x500 and the widget at 340x460). Decisions the spec did not settle:
+
+- `ModelInfo` lost `Copy` (it holds the levels); `model_api::set` and `create` take the default
+  model (`settings.chatModel`) as an argument, because the level check needs it and neither
+  function reads the settings. `choice_of` takes the body of the PUT; `POST` goes through a
+  private `parse` that also accepts `title`.
+- A level with no model of its own (a session on the default model) is valid: it is checked
+  against `settings.chatModel`, and `apply_choice` applies it to the default model. Without a
+  default and without a model the API says "effort '<level>' needs a model: pick a model first".
+- `ProviderStore::unusable` reports a live-only model as "not a chat model" (it has no chat role),
+  so it agrees with `usable` on every row.
+- `Agent::set_model_choice` writes nothing and sends nothing when the meta would be the same
+  (the spec put this on the API; the loop test and the route test then share the rule).
+- The config closure is in `kagentd/src/turn_config.rs`, not `main.rs` (the spec said main.rs):
+  `reasoning_level: None` is there. `state.rs` changed by the two fields of a test literal only.
+- A conversation whose chosen model cannot be used gets two notices when it also has an effort
+  (the model, then the effort the default does not offer): both are true, and each is once per turn.
+- `useChoice` (the shared reading of the choice) is in `components/useChoice.ts`, not in
+  `ModelMenu.tsx`: a hook beside components trips the fast-refresh lint. The Ctrl+M listener lives
+  in `ModelMenu` (mounted only in the chat composer), not in `Chat`; `Chat` stays under 300 lines.
+- The reason a chosen model that is no longer in the list cannot answer is read from
+  `GET /api/providers` when the menu or the trigger needs it (`unusableWhy`, S40's function), so
+  `GET /api/models` stays a list of usable models.
+- The cursor of the menu follows the focus while it is in the list; a hover moves the cursor but
+  never takes the focus from the slider. After a pick the focus returns to the trigger.
+- The effort tag of the trigger shows the stored level even when the answering model does not offer
+  it (the default answers for a model that is gone); the daemon sends none and says so in a notice.
+- `ui-settings.md` section 11, not 10 (S45 took 10); `picker.md` is corrected. `store.ts` is 403
+  lines, `ModelMenu.tsx` 270 (spec: 400 and 260); `agent_loop.rs` is 402 lines with the six new
+  tests. The mock of the web script is in `scripts/picker_web_lib.py` so that neither file passes 400.
+- Not verified: scenario 8 (the owner, live, with a real second model; the daemon is stopped);
+  `sessionMetaChanged` arriving over a real `/ws` in the browser (the mock has no socket; the event
+  is tested in Rust and the store case is a two-line `applyMeta`); a refused PUT as a header notice.
+- Open question for the owner: should the effort tag be hidden when the stored level is not one
+  the answering model offers? Today it shows, dim, as the spec words it.
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2935,9 +2977,9 @@ v0.0.2
 - [x] S44 settings by voice and the voice rules (`specs/voice-control.md`; section E, 2026-11-27 night)
 - [x] S45 Google Calendar and the morning report (`specs/calendar.md`; items 1 to 8 automatic against a fake Google, item 9 is the owner's with a real account; section E, 2026-11-27 night)
 
-Phase 6 (planned 2026-11-27, not started; S40 first)
+Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
-- [ ] S41 model picker in the composer
+- [x] S41 model picker in the composer (`specs/picker.md`; items 1 to 7 checked, item 8 is the owner's, live; section E)
 - [ ] S42 left sidebar and projects
 - [ ] S43 work windows: agents, plan, progress
 
@@ -2967,4 +3009,5 @@ Phase 6 (planned 2026-11-27, not started; S40 first)
 | S37 | Konsole, for "Open in a terminal" |
 | S45 | console.cloud.google.com: a project; enable "Google Calendar API"; OAuth consent screen (External, your address as a test user, then "Publish app", else Google expires the token after 7 days); Credentials, OAuth client ID, Desktop app; paste the client id and secret into Settings -> Calendar, Save client, Connect |
 | S45 | for places and leave-by (optional): enable "Places API (New)" and "Routes API", create an API key restricted to those two, paste it into Settings -> Calendar (Places and travel), Test; billing must be on for the project (this use stays inside the free monthly allowance). Then restart the daemon (release rebuild) for the new tools and routes |
+| S41 | after the release rebuild: in one conversation pick another model (Ctrl+M) and ask something; the answer comes from that model while the other conversations, a task and a Telegram chat keep the default (`specs/scenarios.md` S41 item 8) |
 | S40 | once, before the first start of the new daemon: copy `~/.config/kagent/providers.json`. At load the daemon corrects the roles of the models that are not chat models (`specs/models.md` section 3) |
