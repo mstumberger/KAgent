@@ -320,6 +320,7 @@ impl Settings {
         self.section::<crate::memory::MemorySection>("memory")?.validate()?;
         self.section::<crate::web::settings::SearchSection>("search")?.validate()?;
         self.section::<crate::bots::settings::TelegramSection>("telegram")?.validate()?;
+        self.section::<crate::calendar::settings::CalendarSection>("calendar")?.validate()?;
         self.section::<crate::subagents::SubagentsSection>("subagents")?.validate()?;
         self.section::<crate::hooks::config::HooksSection>("hooks")?.validate()
     }

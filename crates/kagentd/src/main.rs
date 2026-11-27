@@ -4,6 +4,7 @@
 mod api;
 mod cli;
 mod bots;
+mod calendar;
 mod compact_api;
 mod rounded;
 mod tasks;
@@ -79,6 +80,8 @@ pub struct AppState {
     pub notifier: Arc<notify::Notifier>,
     /// The Telegram bot (bots.md): its routes, its polling task and the Telegram channel.
     pub bots: Arc<bots::Bots>,
+    /// Google Calendar (calendar.md): the connection, the tools, the morning report.
+    pub calendar: Arc<calendar::Calendar>,
     pub skills: Arc<skills::SkillHub>,
     /// The memory store, behind the routes and the memory tools (memory.md).
     pub memory: Arc<memory::MemoryHub>,
@@ -370,6 +373,7 @@ async fn run() -> anyhow::Result<()> {
 
     let notifier = notify::Notifier::new();
     let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
+    let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone()).await;
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,
@@ -379,6 +383,7 @@ async fn run() -> anyhow::Result<()> {
         alerts,
         notifier,
         bots,
+        calendar,
         skills: skills.clone(),
         memory,
         skill_sources,

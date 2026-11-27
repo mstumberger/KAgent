@@ -32,7 +32,7 @@ fn files() -> Files {
 fn credential_files_in_every_written_form() {
     let f = files();
     let token = format!("{}/token", f.config);
-    for path in [token.clone(), format!("{}/router.secret", f.config), format!("{}/telegram.secret", f.config), format!("{}/../kagent/token", f.config), format!("{}/./token", f.config)] {
+    for path in [token.clone(), format!("{}/router.secret", f.config), format!("{}/telegram.secret", f.config), format!("{}/search.secret", f.config), format!("{}/calendar.json", f.config), format!("{}/maps.secret", f.config), format!("{}/../kagent/token", f.config), format!("{}/./token", f.config)] {
         assert!(is_credential(&path), "{path}");
     }
     for path in [f.settings.clone(), format!("{}/token.bak", f.config), format!("{}/skills/token/SKILL.md", f.config), "/tmp/token".to_string(), format!("{}/sessions/token.jsonl", f.data), f.config.clone()] {

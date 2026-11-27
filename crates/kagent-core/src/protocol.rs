@@ -203,6 +203,9 @@ pub enum AgentEvent {
     /// `disabled`, `unpaired`, `polling` or `error`; `detail` says more.
     #[serde(rename_all = "camelCase")]
     TelegramStatus { status: String, detail: String },
+    /// The Google Calendar connection changed state (calendar.md section 7): `state` is
+    /// `off`, `connecting`, `connected`, `reconnect` or `error`.
+    CalendarChanged { state: String },
     /// A subagent of `session_id` changed state (agents.md section 3): `child` is a
     /// `ChildView` (id, title, profile, startedAt) and `status` one of `queued`, `running`,
     /// `done`, `failed`, `cancelled`.

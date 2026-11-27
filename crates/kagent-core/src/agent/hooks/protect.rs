@@ -40,7 +40,7 @@ fn protected() -> Protected {
     Protected {
         files: [config.join("settings.json"), config.join("telegram.json"), data.join("audit.jsonl"), data.join("tasks.json")].map(|p| lexical(&p)).to_vec(),
         agents: lexical(&config.join("agents")),
-        credentials: [config.join("token"), config.join("router.secret"), config.join("telegram.secret"), config.join("search.secret")].map(|p| lexical(&p)).to_vec(),
+        credentials: [config.join("token"), config.join("router.secret"), config.join("telegram.secret"), config.join("search.secret"), config.join("calendar.json"), config.join("maps.secret")].map(|p| lexical(&p)).to_vec(),
     }
 }
 

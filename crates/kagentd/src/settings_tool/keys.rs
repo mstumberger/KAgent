@@ -20,6 +20,7 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "approvalTimeoutSec",
     "hooks",
     "telegram",
+    "calendar.enabled",
     "calendar.clientId",
     "schemaVersion",
     "knownToolGroups",
@@ -78,6 +79,7 @@ pub fn full_view(s: &Settings) -> Value {
         ("memory", section::<crate::memory::MemorySection>(s, "memory")),
         ("search", section::<crate::web::settings::SearchSection>(s, "search")),
         ("telegram", section::<crate::bots::settings::TelegramSection>(s, "telegram")),
+        ("calendar", section::<crate::calendar::settings::CalendarSection>(s, "calendar")),
         ("subagents", section::<crate::subagents::SubagentsSection>(s, "subagents")),
         ("hooks", section::<crate::hooks::config::HooksSection>(s, "hooks")),
     ];
