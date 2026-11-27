@@ -1,0 +1,86 @@
+/* The foot of the sidebar and the title bar (amendment of 2026-11-27); the rest is sidebar.css. */
+/* the foot: the permission mode and the theme, above Settings (amendment of 2026-11-27) */
+.sb-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 6px 0;
+  border-top: 1px solid var(--rim);
+  border-bottom: 1px solid var(--rim);
+}
+.sb-perm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.04);
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+}
+.sb-perm:hover {
+  border-color: var(--rim-strong);
+}
+.sb-perm svg {
+  flex: 0 0 auto;
+  color: var(--dim);
+}
+.sb-perm-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-foot .sb-theme {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 30px;
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+}
+aside.sidebar.rail .sb-foot {
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0;
+  padding: 4px 0;
+}
+aside.sidebar.rail .sb-perm {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  border-radius: var(--radius-s);
+}
+aside.sidebar.rail .sb-perm.perm-full {
+  border-color: rgba(255, 181, 71, 0.5);
+}
+aside.sidebar.rail .sb-foot .sb-theme {
+  width: 36px;
+  border-color: transparent;
+  border-radius: var(--radius-s);
+}
+
+/* The title bar (amendment of 2026-11-27): the toggle, the name, Stop all, the voice chip and the window controls. */
+.app > header {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  gap: 8px;
+}
+.app > header .tab {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.app > header .voice-chip {
+  margin-right: 0;
+}
