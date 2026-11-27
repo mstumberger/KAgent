@@ -489,3 +489,34 @@ lists under "Tests".
     `providers.json`, section G): Fetch models adds no `models/` twin; the
     text-to-speech, image and music rows have no role badge; a chat turn while the key
     is over quota ends with the quota message in the header notice.
+
+## S44 settings by voice and the voice rules
+Spec: `voice-control.md` section 7. Items 1 to 7 are `[auto]`; the last two are the owner's.
+1. **[auto]** `settings get` masks the secrets; `models` lists the refs and the jobs
+   they hold and no key; `set` of two keys applies both or none (a bad second value
+   leaves the first unchanged, in the file too); an unknown key names the three nearest;
+   `chatModel` with a live model, or one without the chat role, is refused with the
+   route's message; the card summary reads `change setting <key> from <old> to <new>`.
+2. **[auto]** Every protected key (`PROTECTED_KEYS`) and every key below one is refused
+   with "changed on the screen only"; a walk over the keys of the defaults and of each
+   section fails when a key is in neither the protected nor the free list.
+3. **[auto]** `always_ask` from voice (a live call, or a call inside a `Via::Voice` turn)
+   raises a card in `full` mode; from chat in `full` it does not.
+4. **[auto]** `voice.volume` is 0..100 (101 and -5 are refused), default 100; `voice.brain`
+   defaults to `live`, also for a section without the key; the median of the last 5
+   brain turns is in `GET /api/state` (`voice.thinkMedianMs`).
+5. **[auto]** The prompt carries the Brain and `settings` lines while the tool is offered
+   and the name line while `persona.address` is empty; `live` and `auto` carry them once;
+   the greeting without a name ends with "What should I call you?".
+6. **[auto]** `scripts/test-live.py`: after `PUT liveVoice`, the next `turnComplete` rolls
+   the connection and the second setup has the new voice and the resumption handle;
+   `settings` is declared in `live` and `auto`; `thinkMedianMs` is a number after a
+   `routed` turn.
+7. **[auto]** A voice change whose resumption the server refuses connects fresh (the
+   decision is `voice_roll::refused`; the fake Gemini of the script does not refuse).
+8. Headless Chrome: the Volume slider in Settings -> Voice moves the gain at once and
+   saves on release; under `routed` and `auto` the line "Every request waits for the Brain
+   (<model id>)." shows, and turns into the warning over 4 s.
+9. The owner, by voice: "switch your voice to Puck" (said after its sentence, then the new
+   voice), "a bit quieter", "set the Brain to Nemotron", "change the permission mode to
+   read-only" (refused, said why); every change is asked out loud first.

@@ -14,10 +14,11 @@ replies.
 
 | Mode | Who thinks | What the live model gets | Latency |
 |---|---|---|---|
-| `routed` (default) | The chat model, as a normal text turn in the session: history, compaction, memory, skills, all tools, approvals | One function, `think` (tools.md section 24) | The chat model's time: one to a few seconds |
-| `live` | The live model itself (the old behaviour, improved below) | The tools of `voice.toolGroups` | Lowest |
+| `live` (default) | The live model itself (the old behaviour, improved below) | The tools of `voice.toolGroups` | Lowest |
 | `auto` | The live model decides per utterance: small talk and direct commands itself, everything else through `think` | `think` plus the tools of `voice.toolGroups` | Mixed |
+| `routed` | The chat model, as a normal text turn in the session: history, compaction, memory, skills, all tools, approvals | One function, `think` (tools.md section 24) | The chat model's time: one to a few seconds |
 
+- Since S44 `live` is the default (`voice-control.md` section 3), and the `settings` tool is declared to the live model in `live` and `auto` whatever `voice.toolGroups` holds.
 - `routed` needs a chat model. Without one, or when the chat model is a live model,
   the session runs in `live` and the status detail says "no chat model: the live model
   thinks".

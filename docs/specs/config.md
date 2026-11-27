@@ -254,7 +254,7 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
   "skills": {"disabled": [], "indexBudgetChars": 3000},
   "memory": {"enabled": true, "recallCount": 3, "recallChars": 1500},
   "compaction": {"enabled": true, "thresholdPct": 80},
-  "voice": {"brain": "routed", "toolGroups": ["desktop", "tasks", "system"], "context": true, "vocabulary": true, "pauseMedia": true},
+  "voice": {"brain": "live", "toolGroups": ["desktop", "tasks", "system"], "context": true, "vocabulary": true, "pauseMedia": true, "volume": 100},
   "browser": {"port": 9333, "binary": "", "backend": "own", "attachProfile": "", "attachTrust": "strict"},
   "tasks": {"onApproval": "deny", "deliver": ["desktop", "session"], "timeoutMin": 30, "maxConcurrent": 2},
   "telegram": {"enabled": false, "notifyAlerts": true, "forwardApprovals": false, "approvalForwardSec": 20, "allowPrivileged": false},
@@ -270,7 +270,8 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
 | `skills.indexBudgetChars` | 500..20000 |
 | `memory.recallCount` | 0..8; `memory.recallChars` 0..8000 |
 | `compaction.thresholdPct` | 50..95 |
-| `voice.brain` | `routed` \| `live` \| `auto` (`voice.md`); `voice.toolGroups` = groups declared to the live model in `live` and `auto` (unknown names are refused with 400 and on load; `[]` is no tools); existing keys `voice.hotkey`, `voice.orbTheme` stay untouched |
+| `voice.brain` | `live` (the default) \| `auto` \| `routed` (`voice.md`); `voice.toolGroups` = groups declared to the live model in `live` and `auto` (unknown names are refused with 400 and on load; `[]` is no tools); existing keys `voice.hotkey`, `voice.orbTheme` stay untouched |
+| `voice.volume` | 0..100, default 100: the loudness of KAgent's own speech, the playback gain of the page (`voice-control.md` section 2); not the system volume (that is the `audio` tool). Above 100 is refused with 400 |
 | `browser.backend` | `own` \| `attach`; `browser.attachProfile` = user data dir of the browser to attach to, empty = first found (`browser.md`); it must be an absolute path or start with `~/` (else 400, and refused on load); `browser.attachTrust` `strict` \| `normal` |
 | `tasks.onApproval` | `deny` \| `wait`: default policy for unattended runs (`automations.md`) |
 | `tasks.timeoutMin` | 1..1440; `tasks.maxConcurrent` 1..8; `tasks.deliver` only `desktop`, `session`, `telegram` (outside these: 400, and refused on load) |
