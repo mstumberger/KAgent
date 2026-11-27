@@ -176,7 +176,9 @@ async fn more_than_50_items_or_a_long_item_is_an_error_and_changes_nothing() {
     let (text, is_error, _) = call(&agent, &id, "todo_write", json!({"items": [{"content": "č".repeat(200)}]})).await;
     assert!(!is_error, "{text}");
     let (text, is_error, _) = call(&agent, &id, "todo_write", steps(50)).await;
-    assert!(!is_error && text.lines().count() == 50, "{} lines", text.lines().count());
+    let listed = text.lines().take_while(|l| !l.is_empty()).count();
+    assert!(!is_error && listed == 50, "{listed} lines");
+    assert!(text.contains("Removed 1 open item(s)"), "the long item it replaced is named: {text}");
 }
 
 #[tokio::test]
@@ -262,4 +264,28 @@ fn an_item_takes_its_three_fields_and_a_misspelt_one_is_refused() {
     assert_eq!(serde_json::to_value(&one).unwrap(), json!([{"content": "Check disk", "status": "in_progress", "priority": "high"}]));
     let event = AgentEvent::TodoUpdated { session_id: "s".into(), items: one };
     assert_eq!(serde_json::to_value(&event).unwrap(), json!({"type": "todoUpdated", "sessionId": "s", "items": [{"content": "Check disk", "status": "in_progress", "priority": "high"}]}));
+}
+
+/// The voice session of 2026-11-27: the owner added three items one at a time, the model
+/// sent only the new one each time and the list kept only the last. Mode `add` appends,
+/// and a replace that drops open items names them.
+#[tokio::test]
+async fn mode_add_appends_and_a_replace_that_drops_open_items_says_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let (agent, _events) = agent_over(dir.path(), PermissionMode::Ask);
+    let id = agent.store().create("t").await.unwrap().id;
+    let (text, ..) = call(&agent, &id, "todo_write", json!({"items": [input("Voice control", None, None)]})).await;
+    assert_eq!(text, "[1] [ ] Voice control", "a first replace of an empty list drops nothing");
+    let (text, is_error, _) = call(&agent, &id, "todo_write", json!({"mode": "add", "items": [input("Settings in the sidebar", None, Some("high"))]})).await;
+    assert!(!is_error, "{text}");
+    assert_eq!(text, "[1] [ ] Voice control\n[2] [ ] Settings in the sidebar (high)", "added after the item already there");
+    let (text, ..) = call(&agent, &id, "todo_write", json!({"items": [input("Provider errors as a toast", None, None)]})).await;
+    assert!(text.starts_with("[1] [ ] Provider errors as a toast\n\nRemoved 2 open item(s)"), "{text}");
+    assert!(text.contains("\"Voice control\"") && text.contains("\"Settings in the sidebar\"") && text.contains("mode \"add\""), "{text}");
+    // A completed item that goes is not named.
+    call(&agent, &id, "todo_write", json!({"items": [input("Done thing", Some("completed"), None), input("Open thing", None, None)]})).await;
+    let (text, ..) = call(&agent, &id, "todo_write", json!({"items": [input("Open thing", None, None)]})).await;
+    assert_eq!(text, "[1] [ ] Open thing");
+    let (_, is_error, _) = call(&agent, &id, "todo_write", json!({"mode": "append", "items": []})).await;
+    assert!(is_error, "an unknown mode is refused");
 }

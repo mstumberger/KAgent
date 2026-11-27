@@ -163,7 +163,9 @@ const WRITE_DESCRIPTION: &str = "Create or update the todo list of this conversa
      short content (at most 200 characters), a status (pending, in_progress or completed) and a priority \
      (high, medium or low). Keep one item in_progress, the step you are working on now; mark an item \
      completed as soon as its work is done, and update the list together with starting the next step. The \
-     owner sees the list in the chat.";
+     owner sees the list in the chat. The list you send replaces the whole list: an item you leave out is \
+     gone. When the owner asks you to add an item, send only the new items with mode \"add\": they are put \
+     after the items already there.";
 
 const READ_DESCRIPTION: &str = "Read the todo list of this conversation: one line per item, [x] done, [>] in \
      progress, [ ] open. Use it when you no longer know what is open, for example after the conversation \
@@ -189,7 +191,8 @@ impl TodoWrite {
                         "content":{"type":"string","maxLength":200,"description":"one step, at most 200 characters"},
                         "status":{"type":"string","enum":["pending","in_progress","completed"],"description":"default: pending"},
                         "priority":{"type":"string","enum":["high","medium","low"],"description":"default: medium"}
-                    }}}
+                    }}},
+                    "mode":{"type":"string","enum":["replace","add"],"description":"replace (default): the items are the whole list; add: they are put after the items already there"}
                 }}),
             ),
             access,
@@ -201,6 +204,32 @@ impl TodoWrite {
 #[serde(rename_all = "camelCase")]
 struct WriteArgs {
     items: Vec<TodoItemInput>,
+    #[serde(default)]
+    mode: WriteMode,
+}
+
+#[derive(Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum WriteMode {
+    #[default]
+    Replace,
+    Add,
+}
+
+impl From<&TodoItem> for TodoItemInput {
+    fn from(i: &TodoItem) -> Self {
+        Self { content: i.content.clone(), status: Some(i.status), priority: Some(i.priority) }
+    }
+}
+
+/// The open items of `before` that `after` no longer has (by content): a replace that
+/// drops them says so, since a model that meant to add an item often sends only it.
+fn dropped_open(before: &[TodoItem], after: &[TodoItem]) -> Vec<String> {
+    before
+        .iter()
+        .filter(|b| b.status != TodoStatus::Completed && !after.iter().any(|a| a.content == b.content))
+        .map(|b| b.content.clone())
+        .collect()
 }
 
 #[async_trait]
@@ -221,11 +250,31 @@ impl Tool for TodoWrite {
 
     async fn call(&self, input: Value, ctx: ToolContext) -> anyhow::Result<ToolOutput> {
         // Not `tools::parse`: input `null` must not read as an empty list, which would clear this one.
-        let items = serde_json::from_value::<WriteArgs>(input).map_err(|e| anyhow::anyhow!("items: {e}"))?;
+        let args = serde_json::from_value::<WriteArgs>(input).map_err(|e| anyhow::anyhow!("items: {e}"))?;
         let agent = self.access.agent()?;
-        let stored = agent.set_todo(&ctx.session_id, items.items).await.map_err(|e| explain(&e, &ctx.session_id));
+        let before = match agent.todo(&ctx.session_id).await {
+            Ok(items) => items,
+            Err(e) => return Ok(ToolOutput::error(explain(&e, &ctx.session_id))),
+        };
+        let items = match args.mode {
+            WriteMode::Replace => args.items,
+            WriteMode::Add => before.iter().map(TodoItemInput::from).chain(args.items).collect(),
+        };
+        let stored = agent.set_todo(&ctx.session_id, items).await.map_err(|e| explain(&e, &ctx.session_id));
         Ok(match stored {
-            Ok(items) => ToolOutput::ok(render(&items)),
+            Ok(items) => {
+                // An empty list is a clear the model asked for: nothing to warn about.
+                let dropped = if items.is_empty() { Vec::new() } else { dropped_open(&before, &items) };
+                let mut out = render(&items);
+                if !dropped.is_empty() {
+                    out.push_str(&format!(
+                        "\n\nRemoved {} open item(s) the list had: {}. If that was not meant, send them again with mode \"add\".",
+                        dropped.len(),
+                        dropped.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+                ToolOutput::ok(out)
+            }
             Err(reason) => ToolOutput::error(reason),
         })
     }

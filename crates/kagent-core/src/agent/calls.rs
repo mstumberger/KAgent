@@ -67,6 +67,17 @@ impl Agent {
 
     /// Execute one call through validation, permission and the tool itself. Always
     /// returns a tool-result message. Also used by the live voice bridge.
+    /// The assessment of `call` when the permission engine would ask before running it
+    /// (a card), else `None`. Nothing runs. Hooks are not consulted: a hook that asks
+    /// still raises its card when the call runs. Used by the live voice session to ask
+    /// out loud first (voice.md section 12).
+    pub fn approval_needed(&self, session_id: &str, call: &ToolCall) -> Option<CallAssessment> {
+        let tool = self.tools.get(&call.name)?;
+        let input = normalize_input(&tool.contract().input_schema, call.input.clone());
+        let assessment = self.named(session_id, tool.assess(&input));
+        matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }).then_some(assessment)
+    }
+
     pub async fn execute_call(
         &self,
         session_id: &str,

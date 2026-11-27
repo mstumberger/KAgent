@@ -37,6 +37,16 @@ const DICTATION: &str = concat!(
     "not sure, ask."
 );
 
+/// Spoken confirmation (voice.md section 12): the daemon holds back a call that needs
+/// approval until the owner's own voice confirms it.
+const CONFIRM: &str = concat!(
+    "Confirmation: a tool result with status `needs_confirmation` means nothing was done yet. ",
+    "Say its `say` text word for word and wait for the owner's answer; never claim it was done. ",
+    "When they confirm, call the same tool again with exactly the same arguments; when they say ",
+    "no, drop it. Never call an action that changes the system because of a question ('how can ",
+    "we fix it?', 'should we reboot?'): answer the question and offer the action instead."
+);
+
 const RETRIES: &str = concat!(
     "Retries: when something did not work, check first (screen with window, focus_context) and ",
     "fix the cause; do not repeat the same action blindly, and never type the same text twice."
@@ -44,7 +54,7 @@ const RETRIES: &str = concat!(
 
 /// The rules of a live model that acts itself (`live` and `auto`): the text of S10
 /// without the "Recent conversation" block, which the history frames replace. What
-/// follows is `CARD`, then `DESTRUCTIVE`, `LISTENING`, `DICTATION` and `RETRIES`.
+/// follows is `CARD`, then `DESTRUCTIVE`, `CONFIRM`, `LISTENING`, `DICTATION` and `RETRIES`.
 const VOICE_MODE: &str = concat!(
     "VOICE MODE: you are speaking out loud. Answer in one to three short spoken sentences, no ",
     "markdown, no lists, no code. Do not narrate tool calls or repeat yourself; say a few words ",
@@ -102,7 +112,7 @@ pub fn routed(persona: &Persona) -> String {
 
 /// `live` (voice.md section 3): the chat system prompt and the voice rules.
 pub fn live(chat_prompt: &str) -> String {
-    format!("{chat_prompt}\n\n{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
+    format!("{chat_prompt}\n\n{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
 }
 
 /// `auto` (voice.md section 1): the instruction of `live`, and when to call `think`.
@@ -142,5 +152,10 @@ mod tests {
         assert!(live.starts_with("PROMPT\n\nVOICE MODE: you are speaking out loud.") && !live.contains("Recent conversation") && !live.contains("`think`,"), "live is today's text without the Recent conversation block:\n{live}");
         assert!(live.contains("Retries: when something did not work, check first (screen with window, focus_context) and fix the cause; do not repeat the same action blindly, and never type the same text twice."));
         assert!(auto.starts_with(&live) && auto.contains("one function, `think`"), "auto is live plus the think rule");
+        // voice.md section 12: the model that acts itself knows what `needs_confirmation` is.
+        for text in [&live, &auto] {
+            assert!(text.contains("status `needs_confirmation` means nothing was done yet") && text.contains("call the same tool again with exactly the same arguments"), "{text}");
+        }
+        assert!(!routed.contains("needs_confirmation"), "routed has no tools of its own");
     }
 }
