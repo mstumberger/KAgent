@@ -26,6 +26,8 @@ export type AgentEvent =
   | { type: "tasksChanged" }
   | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
   | { type: "telegramStatus"; status: string; detail: string }
+  /** The Google Calendar connection changed state (calendar.md section 7). */
+  | { type: "calendarChanged"; state: string }
   /** A subagent of `sessionId` changed state (agents.md section 3). */
   | { type: "subagentUpdated"; sessionId: string; child: import("./settings/subagents/api").ChildView; status: import("./settings/subagents/api").ChildStatus };
 

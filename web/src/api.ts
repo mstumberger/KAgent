@@ -240,6 +240,17 @@ export interface Settings {
   browser?: { port?: number; binary?: string; backend?: "own" | "attach"; attachProfile?: string; attachTrust?: "strict" | "normal" };
   /** settings.telegram (bots.md): the Telegram bot, off until the owner pairs a chat. */
   telegram?: { enabled?: boolean; notifyAlerts?: boolean; forwardApprovals?: boolean; approvalForwardSec?: number; allowPrivileged?: boolean };
+  /** settings.calendar (calendar.md): Google Calendar and the morning report. The client secret, the token and the Maps key are not here. */
+  calendar?: {
+    enabled?: boolean;
+    clientId?: string;
+    calendars?: string[];
+    defaultCalendar?: string;
+    defaultDurationMin?: number;
+    home?: string;
+    travelMarginMin?: number;
+    report?: { enabled?: boolean; weekdays?: string; weekends?: string; spoken?: boolean; telegram?: boolean; tomorrow?: boolean; tasks?: boolean; leaveBy?: boolean };
+  };
   desktop?: { editor?: string; projectRoots?: string[] };
   watchers?: { quietHours?: string };
   /** Open the small widget when the daemon starts (default true). */

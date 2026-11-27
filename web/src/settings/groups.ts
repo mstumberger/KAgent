@@ -13,6 +13,7 @@ const ABOUT: Record<string, string> = {
   memory: "Memory: remember and recall",
   files: "Files: read, search, write",
   web: "Web: fetch and search",
+  calendar: "Google Calendar: events, places and the morning report",
   security: "Security: intrusion checks",
   change: "Changes: packages, undo",
   desktop: "Desktop: apps, windows, media, browser, typing",

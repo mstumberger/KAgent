@@ -1,0 +1,129 @@
+/* The Calendar section: the connection card, the list of calendars, the report. Shared
+   controls keep their rules in controls.css. */
+.cal-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 6px;
+}
+
+.cal-send {
+  align-items: center;
+  margin-top: 12px;
+}
+
+.cal-status p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cal-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-account {
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.cal-bad {
+  color: var(--bad, #d33);
+}
+
+.cal-warn {
+  color: var(--warn, #b7791f);
+}
+
+.cal-fold {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.cal-fold summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.cal-fold ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--dim);
+}
+
+.cal-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line, rgba(128, 128, 128, 0.25));
+}
+
+.cal-item:last-child {
+  border-bottom: 0;
+}
+
+.cal-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.cal-name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.cal-default {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+.cal-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cal-last {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
+  border-radius: 8px;
+}
+
+.cal-last p {
+  margin: 0 0 6px;
+}
+
+.cal-last pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
