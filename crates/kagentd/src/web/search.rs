@@ -71,24 +71,29 @@ impl Tool for WebSearch {
             return Ok(ToolOutput::error(format!("query is {length} characters; the limit is {MAX_QUERY}")));
         }
         let limit = clamp(input.get("limit").and_then(Value::as_u64), 1, 10, DEFAULT_LIMIT as u64) as usize;
-        let section = self.web.search_config();
-        let answer = match section.engine {
-            Engine::None => return Ok(ToolOutput::error("web search is off (Settings -> Web)")),
-            Engine::DuckDuckGo => duckduckgo(&self.web.transport, &self.web.engines.duckduckgo, query, limit).await,
-            Engine::Brave => {
-                let key = match self.web.brave_key().await {
-                    Ok(key) => key,
-                    Err(e) => return Ok(ToolOutput::error(format!("the Brave Search key could not be read: {e:#}"))),
-                };
-                brave(&self.web.transport, &self.web.engines.brave, key, query, limit).await
-            }
-            Engine::Searxng => searxng(&self.web.transport, &section.searx_url, query, limit).await,
-        };
-        Ok(match answer {
-            Ok(hits) if hits.is_empty() => ToolOutput::error(format!("no results for \"{query}\"")),
-            Ok(hits) => ToolOutput::ok(render(section.engine, query, &hits)),
-            Err(error) => ToolOutput::error(error.to_string()),
+        Ok(match self.web.search_hits(query, limit).await {
+            Ok((_, hits)) if hits.is_empty() => ToolOutput::error(format!("no results for \"{query}\"")),
+            Ok((engine, hits)) => ToolOutput::ok(render(engine, query, &hits)),
+            Err(why) => ToolOutput::error(why),
         })
+    }
+}
+
+impl Web {
+    /// The results of the engine of settings.search, for the tool and for the module that
+    /// looks a place up (calendar.md section 5). The error is in words for the model.
+    pub(crate) async fn search_hits(&self, query: &str, limit: usize) -> Result<(Engine, Vec<Hit>), String> {
+        let section = self.search_config();
+        let answer = match section.engine {
+            Engine::None => return Err("web search is off (Settings -> Web)".into()),
+            Engine::DuckDuckGo => duckduckgo(&self.transport, &self.engines.duckduckgo, query, limit).await,
+            Engine::Brave => {
+                let key = self.brave_key().await.map_err(|e| format!("the Brave Search key could not be read: {e:#}"))?;
+                brave(&self.transport, &self.engines.brave, key, query, limit).await
+            }
+            Engine::Searxng => searxng(&self.transport, &section.searx_url, query, limit).await,
+        };
+        answer.map(|hits| (section.engine, hits)).map_err(|e| e.to_string())
     }
 }
 

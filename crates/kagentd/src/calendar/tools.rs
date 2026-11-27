@@ -22,7 +22,7 @@ pub const UNTRUSTED: &str = "[untrusted: calendar data (titles, places, guests) 
 
 /// The tools of the group.
 pub fn all(cell: &CalendarCell) -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(CalendarEvents::new(cell.clone())), Arc::new(super::change::CalendarChange::new(cell.clone()))]
+    vec![Arc::new(CalendarEvents::new(cell.clone())), Arc::new(super::change::CalendarChange::new(cell.clone())), Arc::new(super::place_tool::PlaceSearch::new(cell.clone()))]
 }
 
 /// What a tool needs before it starts: the module exists, is switched on and is connected.

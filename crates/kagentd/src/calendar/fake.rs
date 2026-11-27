@@ -59,7 +59,15 @@ pub struct Fake {
     /// Events per page of a list; 0 means one page.
     pub page_size: usize,
     pub next_event: u32,
+    /// Places the map knows (`maps_place`), and the drive Routes answers with (seconds).
+    pub places: Vec<Value>,
+    pub drive: (i64, i64),
+    /// Places and Routes answer 500: the map is down.
+    pub maps_down: bool,
 }
+
+/// The one Maps key the fake accepts.
+pub const MAPS_KEY: &str = "AIzaSyFakeMapsKey-0000000000000000";
 
 pub type Shared = Arc<Mutex<Fake>>;
 
@@ -70,11 +78,12 @@ pub struct FakeGoogle {
 
 impl FakeGoogle {
     pub async fn start() -> Self {
-        let state: Shared = Arc::new(Mutex::new(Fake { refresh_ok: true, calendars: super::fake_api::calendars(), ..Default::default() }));
+        let state: Shared = Arc::new(Mutex::new(Fake { refresh_ok: true, calendars: super::fake_api::calendars(), drive: (1500, 1800), ..Default::default() }));
         let app = Router::new()
             .route("/token", post(token))
             .route("/revoke", post(revoke))
             .merge(super::fake_api::routes())
+            .merge(super::fake_maps::routes())
             .layer(middleware::from_fn_with_state(state.clone(), log))
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -124,6 +133,12 @@ impl FakeGoogle {
     pub fn events_of(&self, calendar: &str) -> Vec<Value> {
         let calendar = if calendar == "primary" { super::fake_api::OWNER } else { calendar };
         self.state.lock().unwrap().events.iter().filter(|(c, e)| c == calendar && e["status"] != "cancelled").map(|(_, e)| e.clone()).collect()
+    }
+
+    /// A place the map knows.
+    pub fn add_place(&self, name: &str, address: &str, lat: f64, lng: f64) {
+        let uri = format!("https://maps.google.com/?cid={}", name.len() * 1000 + address.len());
+        self.state.lock().unwrap().places.push(json!({"displayName": {"text": name}, "formattedAddress": address, "location": {"latitude": lat, "longitude": lng}, "googleMapsUri": uri}));
     }
 
     pub fn seen(&self) -> Vec<Seen> {

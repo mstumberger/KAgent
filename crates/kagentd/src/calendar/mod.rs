@@ -11,14 +11,19 @@ pub mod change;
 pub mod google;
 pub mod model;
 pub mod oauth;
+pub mod places;
 pub mod plan;
 pub mod settings;
+pub mod state;
+pub mod place_tool;
 pub mod tools;
 
 #[cfg(test)]
 mod fake;
 #[cfg(test)]
 mod fake_api;
+#[cfg(test)]
+mod fake_maps;
 #[cfg(test)]
 mod tests;
 
@@ -142,6 +147,12 @@ pub struct Parts {
     pub redirect: String,
     pub events: broadcast::Sender<AgentEvent>,
     pub clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
+    /// `<data>`: where the module keeps its small state.
+    pub data_dir: PathBuf,
+    /// The Maps key of the places lookup.
+    pub maps: TokenStore,
+    /// The web tools, for the place search without a map.
+    pub web: Option<Arc<crate::web::Web>>,
     /// The machine's offset at an instant (the system's time zone; a test passes a fixed one).
     pub zone: Zone,
 }
@@ -167,6 +178,12 @@ pub struct Calendar {
     events: broadcast::Sender<AgentEvent>,
     pub(crate) clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
     pub(crate) zone: Zone,
+    pub(crate) data_dir: PathBuf,
+    pub(crate) maps: TokenStore,
+    pub(crate) maps_cache: Mutex<Option<String>>,
+    pub(crate) web: Option<Arc<crate::web::Web>>,
+    /// `state.rs`: where home was resolved to.
+    pub(crate) saved: Mutex<state::Saved>,
     pub(crate) http: reqwest::Client,
     /// What was read before a question (`change.rs`).
     pub(crate) memo: Mutex<change::Memo>,
@@ -198,6 +215,11 @@ impl Calendar {
             events: parts.events,
             clock: parts.clock,
             zone: parts.zone,
+            saved: Mutex::new(state::load(&parts.data_dir)),
+            data_dir: parts.data_dir,
+            maps: parts.maps,
+            maps_cache: Mutex::new(None),
+            web: parts.web,
             http,
             memo: Default::default(),
             inner: Mutex::new(Inner { secrets, access: None, pending: Pending::default(), sticky: None, told_reconnect: false }),
@@ -206,7 +228,7 @@ impl Calendar {
     }
 
     /// The module of the daemon: real hosts, the keyring (or this home's file) and the clock.
-    pub async fn daemon(settings: Arc<RwLock<Settings>>, paths: &crate::paths::Paths, events: broadcast::Sender<AgentEvent>) -> Arc<Self> {
+    pub async fn daemon(settings: Arc<RwLock<Settings>>, paths: &crate::paths::Paths, events: broadcast::Sender<AgentEvent>, web: Arc<crate::web::Web>) -> Arc<Self> {
         Self::new(Parts {
             settings,
             settings_path: paths.settings(),
@@ -215,6 +237,9 @@ impl Calendar {
             redirect: REDIRECT.into(),
             events,
             clock: Arc::new(Utc::now),
+            data_dir: paths.data.clone(),
+            maps: TokenStore::slot(&paths.config, crate::secrets::MAPS),
+            web: Some(web),
             zone: Arc::new(|at| *at.with_timezone(&chrono::Local).offset()),
         })
         .await

@@ -4,6 +4,7 @@
 mod change;
 mod connection;
 mod google;
+mod places;
 
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -91,6 +92,10 @@ pub fn zone(hours: i32) -> super::model::Zone {
 }
 
 pub async fn rig() -> Rig {
+    rig_with(None).await
+}
+
+pub async fn rig_with(web: Option<Arc<crate::web::Web>>) -> Rig {
     let fake = FakeGoogle::start().await;
     let dir = tempfile::tempdir().unwrap();
     let settings = Arc::new(RwLock::new(Settings::defaults()));
@@ -107,6 +112,9 @@ pub async fn rig() -> Rig {
         events: events_tx,
         clock: Arc::new(move || start + Duration::seconds(clock_skew.load(Ordering::SeqCst))),
         zone: zone(1),
+        data_dir: dir.path().join("data"),
+        maps: TokenStore::File(dir.path().join("maps.secret")),
+        web,
     })
     .await;
     Rig { cal, fake, dir, settings, events, skew }

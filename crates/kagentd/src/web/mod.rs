@@ -3,12 +3,12 @@
 //! goes through the egress first (`guard.rs`).
 
 #[cfg(test)]
-mod fake;
+pub(crate) mod fake;
 mod fetch;
 mod guard;
 mod html;
 pub(crate) mod http;
-mod search;
+pub(crate) mod search;
 pub(crate) mod settings;
 
 use std::path::Path;

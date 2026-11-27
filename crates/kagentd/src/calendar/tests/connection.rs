@@ -199,6 +199,9 @@ async fn a_restart_reads_the_connection_back() {
         events: tokio::sync::broadcast::channel(8).0,
         clock: std::sync::Arc::new(chrono::Utc::now),
         zone: super::zone(1),
+        data_dir: r.dir.path().join("data"),
+        maps: crate::secrets::TokenStore::File(r.dir.path().join("maps.secret")),
+        web: None,
     })
     .await;
     assert_eq!(again.state(), ConnState::Connected);
