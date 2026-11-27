@@ -10,6 +10,8 @@ import Icon from "../components/Icon";
 import { ModelBody } from "../components/ModelMenu";
 import { useChoice } from "../components/useChoice";
 import Sheet from "../components/Sheet";
+import { SidebarBody } from "../components/Sidebar";
+import { showFromSidebar } from "../components/sidebar/store";
 import { startDrag } from "../frame";
 import Orb, { ORB_THEMES, normalizeTheme, type OrbTheme } from "../voice/Orb";
 import { label as modelLabel } from "../picker";
@@ -112,6 +114,9 @@ export default function Overlay({ onExpand, onHide }: Props) {
         <div className="widget-top" onPointerDown={startDrag} title="Drag to move">
           <span className="widget-name">{name}</span>
           <PermissionPicker compact />
+          <button className="wicon" title="Sessions" aria-label="Sessions" onClick={() => openSheet("sessions")}>
+            <Icon name="sidebar" size={14} />
+          </button>
           {onHide && (
             <button className="wicon" title="Hide to the tray (keeps listening)" aria-label="Hide to tray" onClick={onHide}>
               <Icon name="tray" size={14} />
@@ -193,6 +198,21 @@ export default function Overlay({ onExpand, onHide }: Props) {
       {s.sheet === "models" && (
         <Sheet title="Model and effort" onClose={closeSheet}>
           <ModelBody sessionId={s.activeSession} />
+        </Sheet>
+      )}
+
+      {s.sheet === "sessions" && (
+        <Sheet title="Sessions" onClose={closeSheet}>
+          <div className="sb-sheet">
+            <SidebarBody
+              onView={(view) => {
+                // A view needs the full layout: the window expands, then opens it.
+                closeSheet();
+                showFromSidebar(view);
+                onExpand?.();
+              }}
+            />
+          </div>
         </Sheet>
       )}
 

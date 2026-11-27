@@ -1,4 +1,4 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41)."""
+"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41) and test-sidebar-web.py (S42)."""
 import asyncio, base64, json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
@@ -22,6 +22,10 @@ MODELS = [model("anthropic", "Anthropic", "claude-opus-4-6", ["low", "medium", "
 CFG = {}
 CALLS = []
 SESSIONS = {}
+# The folders of the mock file system and the projects `GET /api/projects` lists (S42; set with `reset`).
+DIRS = set()
+PROJECTS = []
+OPENED = []  # the sessions the window read (`GET /api/sessions/:id`), in order
 
 
 def reset(**kw):
@@ -29,15 +33,30 @@ def reset(**kw):
     CFG.update(valid=True, default="gemini::models/gemini-3.8-flash", models=MODELS)
     CFG.update(kw)
     CALLS.clear()
+    OPENED.clear()
     SESSIONS.clear()
+    DIRS.clear()
+    DIRS.update(kw.get("dirs", ()))
+    PROJECTS[:] = kw.get("projects", [])
     SESSIONS["s1"] = meta("s1", kw.get("session", {}))
+    for sid, extra in (kw.get("sessions") or {}).items():
+        SESSIONS[sid] = meta(sid, extra)
 
 
 def meta(sid, extra=None):
     m = {"id": sid, "title": "Chat " + sid, "createdAt": "2026-11-27T08:00:00Z", "updatedAt": "2026-11-27T08:00:00Z", "messageCount": 0, "origin": "chat",
-         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None}
+         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False}
     m.update(extra or {})
     return m
+
+
+def folder_refusal(path):
+    """The 400 message of the daemon for a folder it would refuse (sidebar.md section 3)."""
+    if not (path.startswith("/") or path.startswith("~/")):
+        return "path must be absolute, or start with ~/"
+    if path not in DIRS:
+        return f"not a directory: {path}"
+    return None
 
 
 def daemon(method, path, body=None):
@@ -48,6 +67,11 @@ def daemon(method, path, body=None):
             return r.status, r.read(), r.headers.get("Content-Type", "application/json")
     except urllib.error.HTTPError as e:
         return e.code, e.read(), e.headers.get("Content-Type", "application/json")
+
+
+class Quiet(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        pass  # a reset connection of a page that went away
 
 
 class Mock(BaseHTTPRequestHandler):
@@ -62,7 +86,10 @@ class Mock(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the page navigated away
 
     def handle_any(self, method):
         path = self.path.split("?")[0]
@@ -74,12 +101,16 @@ class Mock(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/__calls":
             return self.send(200, {"calls": CALLS})
+        if path == "/__opened":
+            return self.send(200, {"opened": OPENED})
         if path == "/api/state":
             status, data, _ = daemon("GET", "/api/state")
             state = json.loads(data)
             state["chatModelValid"] = CFG["valid"]
             state["settings"]["chatModel"] = CFG["default"]
             state["settings"]["liveModel"] = "gemini::live"
+            state["running"] = CFG.get("running", [])
+            state["alertsOpen"] = CFG.get("alerts", 0)
             return self.send(200, state)
         if path == "/api/models":
             return self.send(200, {"chat": CFG["models"], "fast": CFG["models"], "vision": [], "live": []})
@@ -93,17 +124,44 @@ class Mock(BaseHTTPRequestHandler):
                 providers.append({"id": pid, "name": pname, "templateId": pid, "enabled": True, "api": {"type": "openai-chat-completions", "baseUrl": "https://x.example/v1", "headers": {}},
                                   "apiKeyMasked": "sk-...abcd", "hasKey": True, "models": rows, "modelsFetchedAt": None, "lastError": ""})
             return self.send(200, {"providers": providers})
+        if path == "/api/projects" and method == "GET":
+            return self.send(200, {"roots": ["/home/me/code"], "projects": PROJECTS})
         if path == "/api/sessions" and method == "GET":
             return self.send(200, {"sessions": list(SESSIONS.values())})
         if path == "/api/sessions" and method == "POST":
             CALLS.append(f"POST {path} {json.dumps(body)}")
-            m = meta(f"s{len(SESSIONS) + 1}", {k: v for k, v in (body or {}).items() if k in ("model", "reasoningLevel")})
+            extra = {k: v for k, v in (body or {}).items() if k in ("model", "reasoningLevel")}
+            if (body or {}).get("project"):
+                refusal = folder_refusal(body["project"])
+                if refusal:
+                    return self.send(400, {"error": {"code": "invalid_input", "message": refusal}})
+                extra["project"] = body["project"]
+            nxt = max(int(k[1:]) for k in SESSIONS if k[1:].isdigit()) + 1 if SESSIONS else 1
+            m = meta(f"s{nxt}", {**extra, "title": (body or {}).get("title", "")})
+            m["updatedAt"] = m["createdAt"] = CFG.get("now", m["createdAt"])
             SESSIONS[m["id"]] = m
             return self.send(201, m)
-        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model)?", path)
+        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model|/project|/pin)?", path)
         if mm and mm.group(1) in SESSIONS:
             m = SESSIONS[mm.group(1)]
-            if mm.group(2) and method == "PUT":
+            if method == "DELETE" and not mm.group(2):
+                CALLS.append(f"DELETE {path}")
+                del SESSIONS[m["id"]]
+                return self.send(204, b"", "application/json")
+            if mm.group(2) == "/project" and method == "PUT":
+                CALLS.append(f"PUT {path} {json.dumps(body)}")
+                value = (body or {}).get("path")
+                if value:
+                    refusal = folder_refusal(value)
+                    if refusal:
+                        return self.send(400, {"error": {"code": "invalid_input", "message": refusal}})
+                m["project"] = value or None
+                return self.send(200, m)
+            if mm.group(2) == "/pin" and method == "PUT":
+                CALLS.append(f"PUT {path} {json.dumps(body)}")
+                m["pinned"] = bool(body["pinned"])
+                return self.send(200, m)
+            if mm.group(2) == "/model" and method == "PUT":
                 CALLS.append(f"PUT {path} {json.dumps(body)}")
                 for key in ("model", "reasoningLevel"):
                     if key in body:
@@ -114,6 +172,7 @@ class Mock(BaseHTTPRequestHandler):
                         m["reasoningLevel"] = None
                 return self.send(200, m)
             if method == "GET":
+                OPENED.append(m["id"])
                 return self.send(200, {"meta": m, "messages": []})
         if path.startswith("/api/"):
             status, data, ctype = daemon(method, path, body)
@@ -184,6 +243,10 @@ class Page:
         await self.send("Input.dispatchKeyEvent", type="keyUp", **base)
         await asyncio.sleep(0.12)
 
+    async def click(self, sel):
+        await self.js(f"document.querySelector({json.dumps(sel)}).click()")
+        await asyncio.sleep(0.15)
+
     async def ctrl_m(self):
         await self.key("m", "KeyM", 77, 2)
 
@@ -199,7 +262,79 @@ def calls():
     return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__calls").read())["calls"]
 
 
+def opened():
+    return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__opened").read())["opened"]
+
+
 def configure(**kw):
     urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__cfg", data=json.dumps(kw).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
 
 
+
+
+class Env:
+    """A real kagentd on a temporary KAGENT_HOME behind the mock, and a headless Chrome page (S42: the start of test-picker-web.py as one helper)."""
+
+    def __init__(self, prefix, shots):
+        global SHOTS
+        SHOTS = shots
+        os.makedirs(SHOTS, exist_ok=True)
+        for f in os.listdir(SHOTS):
+            os.remove(f"{SHOTS}/{f}")
+        self.prefix, self.home, self.proc, self.chrome, self.page, self.reader = prefix, None, None, None, None, None
+
+    async def __aenter__(self):
+        reset()
+        self.home = tempfile.mkdtemp(prefix=f"{self.prefix}-web-")
+        env = dict(os.environ, KAGENT_HOME=self.home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1")
+        self.proc = subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{self.home}/daemon.log", "wb"))
+        for _ in range(100):
+            if os.path.exists(f"{self.home}/config/token"):
+                TOKEN["v"] = open(f"{self.home}/config/token").read().strip()
+                try:
+                    if daemon("GET", "/api/state")[0] == 200:
+                        break
+                except Exception:
+                    pass
+            time.sleep(0.2)
+        server = Quiet(("127.0.0.1", PORT), Mock)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        profile = tempfile.mkdtemp(prefix=f"{self.prefix}-chrome-")
+        self.chrome = subprocess.Popen(["google-chrome", "--headless=new", f"--remote-debugging-port={CDP}", f"--user-data-dir={profile}", "--use-fake-device-for-media-stream",
+                                        "--use-fake-ui-for-media-stream", "--no-first-run", "--disable-gpu", "--hide-scrollbars", "--window-size=1200,820", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tabs = []
+        for _ in range(100):
+            try:
+                tabs = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{CDP}/json").read())
+                if any(t["type"] == "page" for t in tabs):
+                    break
+            except Exception:
+                time.sleep(0.2)
+        tab = next(t for t in tabs if t["type"] == "page")
+        self.ws = await websockets.connect(tab["webSocketDebuggerUrl"], max_size=2**26)
+        self.page = Page(self.ws)
+        self.reader = asyncio.create_task(self.page.reader())
+        for domain in ("Page", "Runtime", "Log"):
+            await self.page.send(f"{domain}.enable")
+        return self
+
+    async def size(self, w, h):
+        await self.page.send("Emulation.setDeviceMetricsOverride", width=w, height=h, deviceScaleFactor=1, mobile=False)
+
+    async def __aexit__(self, *exc):
+        if self.reader:
+            self.reader.cancel()
+        await self.ws.close()
+        for p in (self.chrome, self.proc):
+            if p:
+                p.terminate()
+        shutil.rmtree(self.home, ignore_errors=True)
+
+
+def report(results):
+    """Print every check and the summary line; the exit code of the script."""
+    bad = [k for k, v in results.items() if not v]
+    for k, v in results.items():
+        print("PASS" if v else "FAIL", k)
+    print(f"WEB {'OK' if not bad else 'FAILED'}: {len(results) - len(bad)}/{len(results)} checks")
+    return 0 if not bad else 1

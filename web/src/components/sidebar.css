@@ -1,0 +1,393 @@
+/* The left sidebar (Sidebar.tsx, sidebar.md section 5.9). The tokens are those of index.css. */
+.shell {
+  flex: 1;
+  display: flex;
+  position: relative;
+  min-height: 0;
+}
+.shell > main {
+  flex: 1;
+  min-width: 0;
+}
+
+aside.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--rim);
+}
+aside.sidebar.inline {
+  flex: 0 0 240px;
+  width: 240px;
+}
+aside.sidebar.inline.rail {
+  flex-basis: 48px;
+  width: 48px;
+}
+aside.sidebar.drawer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(280px, 85vw);
+  z-index: 15;
+  box-shadow: 0 0 40px -8px rgba(0, 0, 0, 0.6);
+}
+.sidebar-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  background: rgba(5, 8, 18, 0.5);
+}
+
+/* the top: New session, the search and the switch */
+.sb-top {
+  padding: 10px 10px 6px;
+}
+.sb-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+.sb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--dim);
+}
+.sb-icon-btn:hover {
+  color: var(--ink);
+  background: rgba(127, 127, 127, 0.1);
+}
+.sb-search {
+  position: relative;
+  padding: 0 10px;
+}
+.sb-search svg {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--dim);
+  pointer-events: none;
+}
+.sb-search input {
+  width: 100%;
+  padding-left: 30px;
+  font-size: 13px;
+}
+.sb-switch {
+  display: flex;
+  margin: 8px 10px 4px;
+  padding: 2px;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-s);
+}
+.sb-switch button {
+  flex: 1;
+  padding: 3px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+}
+.sb-switch button[aria-pressed="true"] {
+  background: rgba(124, 196, 255, 0.14);
+  color: var(--ink);
+}
+
+/* the list scrolls, the rest of the sidebar does not */
+.sb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+}
+.sb-fill {
+  flex: 1;
+}
+.sb-empty {
+  padding: 14px 10px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 6px;
+}
+.sb-section {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+}
+button.sb-section:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+.sb-section.plain {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.sb-section svg {
+  flex: 0 0 auto;
+  color: var(--dim);
+}
+.sb-section-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-section-count {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font-weight: 400;
+}
+.sb-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  transition: transform 0.15s;
+}
+.sb-chevron.closed {
+  transform: rotate(-90deg);
+}
+.sb-add,
+.sb-more {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  opacity: 0;
+}
+.sb-add:hover,
+.sb-more:hover {
+  color: var(--ink);
+  background: rgba(127, 127, 127, 0.14);
+}
+.sb-head:hover .sb-add,
+.sb-add:focus-visible,
+.sb-item:hover .sb-more,
+.sb-item:focus-within .sb-more,
+.sb-item.active .sb-more,
+.sb-more[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* a row: 32 px */
+.sb-item {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border-radius: var(--radius-s);
+  transition: background 0.15s;
+}
+.sb-item:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+.sb-item.active {
+  background: rgba(124, 196, 255, 0.1);
+  box-shadow: inset 2px 0 0 var(--ice);
+}
+.sb-row-main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  text-align: left;
+}
+.sb-item:hover .sb-row-main,
+.sb-item.active .sb-row-main {
+  color: var(--ink);
+}
+.sb-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-folder-word {
+  flex: 0 1 auto;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.sb-pin {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--ice);
+}
+.sb-count {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.sb-run {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ice);
+  animation: sb-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sb-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.sb-list :focus-visible,
+.sb-nav :focus-visible {
+  outline-offset: -2px;
+}
+
+/* the views at the bottom (the element is a <nav>: index.css styles those, so this undoes it) */
+aside.sidebar nav.sb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: none;
+  padding: 8px;
+  border: none;
+  border-top: 1px solid var(--rim);
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.sb-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  text-align: left;
+}
+.sb-nav-item:hover {
+  color: var(--ink);
+  background: rgba(127, 127, 127, 0.08);
+}
+.sb-nav-item.active {
+  color: var(--ink);
+  background: rgba(124, 196, 255, 0.14);
+}
+.sb-nav-label {
+  flex: 1;
+}
+.sb-badge {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--signal);
+  color: #1a1200;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+aside.sidebar.rail .sb-top {
+  padding: 8px 6px 4px;
+  display: flex;
+  justify-content: center;
+}
+aside.sidebar.rail nav.sb-nav {
+  align-items: center;
+  padding: 8px 6px;
+}
+aside.sidebar.rail .sb-nav-item {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+aside.sidebar.rail .sb-badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  min-width: 14px;
+  padding: 0 3px;
+  font-size: 9.5px;
+  line-height: 14px;
+}
+
+/* in the widget's sheet: the whole body scrolls, and the views come after the list */
+.sb-sheet {
+  display: flex;
+  flex-direction: column;
+}
+.sb-sheet .sb-list {
+  flex: none;
+  overflow: visible;
+}
+.sheet .sb-top {
+  padding-top: 4px;
+}
+html .sheet .sb-search input {
+  background: var(--glass-2);
+  color: var(--ink);
+  border-color: var(--rim-strong);
+  user-select: text;
+}
+
+/* a short window: the views get tighter and the sidebar scrolls before the list shrinks away */
+@media (max-height: 620px) {
+  aside.sidebar {
+    overflow-y: auto;
+  }
+  aside.sidebar .sb-list {
+    flex: 1 0 140px;
+  }
+  aside.sidebar nav.sb-nav {
+    gap: 0;
+    padding: 4px 8px;
+  }
+  .sb-nav-item {
+    height: 28px;
+  }
+}

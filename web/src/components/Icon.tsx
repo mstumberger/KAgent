@@ -30,6 +30,14 @@ const P: Record<string, string> = {
   // The drag handle of a row (`grip` is the resize corner of the window).
   handle: "M8 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0z M8 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0z M8 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0z M14 5a1 1 0 1 0 2 0 1 1 0 1 0-2 0z M14 12a1 1 0 1 0 2 0 1 1 0 1 0-2 0z M14 19a1 1 0 1 0 2 0 1 1 0 1 0-2 0z",
   trash: "M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6",
+  // The sidebar (sidebar.md): its toggle, the folder of a project, a pinned session, a row's menu, the search, the theme.
+  sidebar: "M3 5h18v14H3z M9 5v14",
+  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  pin: "M12 17v5 M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.7l-1.8-.9A2 2 0 0 1 15 10.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",
+  more: "M5 12h.01 M12 12h.01 M19 12h.01",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M21 21l-4.3-4.3",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
+  moon: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z",
 };
 
 export default function Icon({ name, size = 16 }: { name: keyof typeof P | string; size?: number }) {

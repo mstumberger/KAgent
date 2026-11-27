@@ -9,7 +9,7 @@ import AgentsCard, { AgentNote } from "../components/AgentsCard";
 import { agentCards, placeAgents } from "../components/agents";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "../api";
-import { cancelSession, deleteSession, getStore, newSession, openSession, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
+import { cancelSession, getStore, openSession, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
 import Icon from "../components/Icon";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
@@ -136,37 +136,6 @@ export default function Chat() {
 
   return (
     <div className="chat-layout">
-      <aside className="sessions">
-        <button className="primary" onClick={() => void newSession()}>
-          + New session
-        </button>
-        {s.sessions.map((sess) => (
-          <div
-            key={sess.id}
-            className={`session-item ${sess.id === s.activeSession ? "active" : ""}`}
-            onClick={() => void openSession(sess.id)}
-          >
-            <span className="session-title">{sess.title || "New session"}</span>
-            {sess.agents ? (
-              <span className="session-agents" data-count={sess.agents}>
-                {sess.agents} agent{sess.agents === 1 ? "" : "s"}
-              </span>
-            ) : null}
-            <button
-              className="icon"
-              title="Delete session"
-              aria-label="Delete session"
-              onClick={(e) => {
-                e.stopPropagation();
-                void deleteSession(sess.id);
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </aside>
-
       <section className="chat-main">
         <Approvals />
 
