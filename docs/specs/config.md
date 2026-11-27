@@ -42,7 +42,7 @@ All writes of JSON config are atomic (tmp + rename) and keep mode 0600.
   "maxIterations": 40,
   "approvalTimeoutSec": 600,
   "options": {"reasoningLevel": null, "maxOutputTokens": null, "temperature": null},
-  "persona": {"name": "KAgent", "address": "Marko", "language": "auto"},
+  "persona": {"name": "KAgent", "address": "", "language": "auto"},
   "startup": {"autostart": true, "greeting": {"enabled": true, "text": ""}},
   "voice": {"hotkey": "Meta+Space", "orbTheme": "orb", "pauseMedia": true},
   "desktop": {"editor": "", "projectRoots": []},

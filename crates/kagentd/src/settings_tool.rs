@@ -89,6 +89,12 @@ fn check_changes<'a>(input: &'a Value, view: &Value) -> Result<&'a Map<String, V
             let near = nearest(key, &known, 3);
             return Err(format!("unknown setting '{key}'; the nearest are: {}", near.join(", ")));
         }
+        // One setting per key, never a group: `{"startup": {"autostart": false}}` would
+        // carry a protected setting past the check above.
+        if !known.iter().any(|k| k == key) {
+            let below: Vec<&str> = known.iter().filter(|k| k.starts_with(&format!("{key}."))).map(String::as_str).take(4).collect();
+            return Err(format!("'{key}' is a group of settings; name one of them: {}", below.join(", ")));
+        }
     }
     Ok(changes)
 }

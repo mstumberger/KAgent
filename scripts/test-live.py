@@ -387,7 +387,9 @@ async def main():
         state["token"] = open(f"{home}/config/token").read().strip()
         # One provider: its models answer text turns on the fake's /v1, and its live models are the fake's websocket.
         api("POST", "/api/providers", {"templateId": "gemini", "apiKey": "fake-gemini-key-123456", "baseUrl": f"http://127.0.0.1:{CHAT_PORT}/v1"})
-        api("PUT", "/api/settings", {"liveModel": "gemini::gemini-3.8-live", "liveVoice": "Puck", "chatModel": "gemini::gemini-3.8-flash"})
+        # The owner's name is set here: a new install has none, and it must reach the vocabulary.
+        api("PUT", "/api/settings", {"liveModel": "gemini::gemini-3.8-live", "liveVoice": "Puck", "chatModel": "gemini::gemini-3.8-flash",
+                                     "persona": {"name": "KAgent", "address": "Ana", "language": "auto"}})
 
         # ---------------------------------------------------------------- live mode
         api("PUT", "/api/settings", {"voice": {"brain": "live"}})
@@ -453,7 +455,7 @@ async def main():
             # voice.md section 10, check 1
             "routed: only think is declared, no history, no context": declared(setup) == ["think"] and "historyConfig" not in setup
                 and all("clientContent" not in m or is_say(m) for m in state["recv"]),
-            "routed: the vocabulary is in the setup": "Marko" in setup["inputAudioTranscription"]["customVocabulary"] and len(setup["inputAudioTranscription"]["customVocabulary"]) <= 100,
+            "routed: the vocabulary is in the setup": "Ana" in setup["inputAudioTranscription"]["customVocabulary"] and len(setup["inputAudioTranscription"]["customVocabulary"]) <= 100,
             "routed: a think call gets status ok and the fixed answer": answers.get("k1") == {"reply": SPOKEN, "status": "ok"},
             "routed: the session holds the turn (via voice)": ("user", "what is my cpu temperature", "voice", None) in stored and ("assistant", FIXED, "voice", None) in stored,
             "routed: the think events say thinking": said[:2] == [("k1", "started"), ("k1", "ok")],

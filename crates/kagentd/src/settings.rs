@@ -88,7 +88,7 @@ fn default_approval_timeout() -> u64 {
     600
 }
 fn default_persona() -> Persona {
-    Persona { name: "KAgent".into(), address: "Marko".into(), language: "auto".into() }
+    Persona { name: "KAgent".into(), address: String::new(), language: "auto".into() }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
