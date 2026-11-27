@@ -41,7 +41,8 @@ const MARGIN = 8;
 export default function Menu({ items, anchor, placement = "below", label, onPick, onClose }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
-  const [cursor, setCursor] = useState(0);
+  // The cursor starts on the current choice (the checked item), else on the first.
+  const [cursor, setCursor] = useState(() => Math.max(0, items.findIndex((i) => i.checked)));
   const [pos, setPos] = useState<CSSProperties>({ left: anchor.left, top: anchor.bottom + 4, opacity: 0 });
   const typed = useRef({ text: "", timer: 0 });
   // The focus that comes back to a button scrolls the list a moment later: a scroll that early is not the owner's.
@@ -63,6 +64,8 @@ export default function Menu({ items, anchor, placement = "below", label, onPick
 
   useEffect(() => {
     const outside = (e: Event) => {
+      // A press on the button that opened the menu is its own click: that click closes the menu.
+      if ((e.target as Element).closest?.('[aria-haspopup="menu"][aria-expanded="true"]')) return;
       if (!box.current?.contains(e.target as Node)) onClose(false);
     };
     const away = (e: Event) => {

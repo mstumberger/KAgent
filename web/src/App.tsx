@@ -10,7 +10,6 @@ import { startDrag, startResize, toggleMaximize } from "./frame";
 import Icon from "./components/Icon";
 import ResizeEdges from "./components/ResizeEdges";
 import ErrorBoundary from "./components/ErrorBoundary";
-import PermissionPicker from "./components/PermissionPicker";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
 import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
@@ -146,16 +145,12 @@ export default function App() {
         <span className="logo">KAgent</span>
         {s.notice && <span className="notice">{s.notice}</span>}
         <span className="spacer" />
-        <VoiceChip />
-        <PermissionPicker />
         {(s.state?.running?.length ?? 0) > 0 && (
           <button className="tab danger" title="Kill switch: cancel every running turn and tool" onClick={() => void api.post("/api/stop-all", {})}>
-            stop all
+            Stop all
           </button>
         )}
-        <button className="tab icon-tab" title={theme === "dark" ? "Light theme" : "Dark theme"} aria-label="Switch theme" onClick={() => setPref(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? "☀" : "☾"}
-        </button>
+        <VoiceChip />
         {isApp && (
           <div className="win-controls" role="group" aria-label="Window">
             <button className="win-btn" title="Shrink to the small always-on-top widget" aria-label="Shrink to widget" onClick={() => switchLayout("compact")}>

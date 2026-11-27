@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import type { SectionProps } from "../registry";
 import { GroupCard, Row, SectionPage } from "../ui";
-import { isPref, type ThemePref } from "../../theme";
+import { readApplied, requestPref, subscribeApplied, type ThemePref } from "../../theme";
 
 const CHOICES: { pref: ThemePref; label: string }[] = [
   { pref: "auto", label: "Auto" },
@@ -11,27 +11,13 @@ const CHOICES: { pref: ThemePref; label: string }[] = [
   { pref: "light", label: "Light" },
 ];
 
-const readPref = (): ThemePref => {
-  const v = document.documentElement.dataset.themePref;
-  return isPref(v) ? v : "auto";
-};
-
-// App owns the theme: it writes `data-theme` and `data-theme-pref` when its state changes.
-// The header button, the `ui` tool and this page all go through its `kagent-theme` event.
-function subscribeTheme(notify: () => void) {
-  const observer = new MutationObserver(() => notify());
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-theme-pref"] });
-  return () => {
-    observer.disconnect();
-  };
-}
-
 export default function Appearance({ title, description }: SectionProps) {
-  const pref = useSyncExternalStore(subscribeTheme, readPref, readPref);
-  const pick = (p: ThemePref) => window.dispatchEvent(new CustomEvent("kagent-theme", { detail: p }));
+  // App owns the theme: the sidebar's switch, the `ui` tool and this page go through its `kagent-theme` event.
+  const pref = useSyncExternalStore(subscribeApplied, readApplied, readApplied);
+  const pick = requestPref;
   return (
     <SectionPage title={title} description={description}>
-      <GroupCard title="Theme" description="The colours of every KAgent window. The button in the header switches between dark and light.">
+      <GroupCard title="Theme" description="The colours of every KAgent window. The button at the foot of the sidebar goes through light, dark and auto.">
         <Row label="Theme" hint="Auto follows the light or dark setting of your system. Dark for low light, light for bright rooms.">
           <div className="row" role="group" aria-label="Theme">
             {CHOICES.map((c) => (

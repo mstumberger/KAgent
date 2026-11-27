@@ -45,3 +45,23 @@ export function subscribeSystemTheme(notify: () => void) {
 }
 
 export const themeOf = (pref: ThemePref, system: Theme): Theme => (pref === "auto" ? system : pref);
+
+/**
+ * The choice as App applied it (`data-theme-pref` on the page), for a control that is not App:
+ * the switch of the sidebar and the Appearance page. They change it with a `kagent-theme` event.
+ */
+export function readApplied(): ThemePref {
+  const v = document.documentElement.dataset.themePref;
+  return isPref(v) ? v : "auto";
+}
+
+export function subscribeApplied(notify: () => void) {
+  const observer = new MutationObserver(() => notify());
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-theme-pref"] });
+  return () => {
+    observer.disconnect();
+  };
+}
+
+/** Ask App for another choice. */
+export const requestPref = (pref: ThemePref) => window.dispatchEvent(new CustomEvent("kagent-theme", { detail: pref }));

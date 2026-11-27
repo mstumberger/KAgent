@@ -8,7 +8,7 @@ Dark and light at 1200x820, then 700x500 (the drawer) and 340x460 (the widget); 
 import asyncio, json, sys
 from datetime import datetime, timedelta, timezone
 import picker_web_lib as lib
-from picker_web_lib import Env, calls, opened, report, reset
+from picker_web_lib import Env, calls, daemon, opened, report, reset
 
 NOW = datetime.now(timezone.utc)
 ago = lambda **kw: (NOW - timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -28,6 +28,12 @@ SESSIONS = {
 }
 CFG = dict(sessions=SESSIONS, dirs=[KA, OT, EX], alerts=3, running=["s2"],
            projects=[{"path": KA, "name": "KAgent", "agentsMd": True}, {"path": OT, "name": "other", "agentsMd": False}])
+
+# The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
+FAKE_LIVE = """(() => { const Real = window.WebSocket; window.WebSocket = function (url, ...rest) { if (String(url).includes('/live?')) { const fake = { readyState: 1, send() {}, close() {}, onopen: null }; setTimeout(() => { fake.onopen && fake.onopen(); fake.onmessage && fake.onmessage({ data: JSON.stringify({ type: 'status', status: 'connecting' }) }); }, 20); return fake; } return new Real(url, ...rest); }; window.WebSocket.OPEN = 1; window.WebSocket.CONNECTING = 0; window.WebSocket.CLOSED = 3; window.WebSocket.CLOSING = 2; })();"""
+MODE = lambda: json.loads(daemon("GET", "/api/state")[1])["settings"]["permissionMode"]
+THINGS = "(() => [...document.querySelector('header').children].map(c => c.id === 'sidebar-toggle' ? 'toggle' : c.classList.contains('logo') ? 'logo:' + c.textContent.trim() : c.classList.contains('spacer') ? 'spacer' : c.classList.contains('notice') ? 'notice' : c.classList.contains('voice-chip') ? 'voice' : c.classList.contains('win-controls') ? 'window' : c.textContent.trim()))()"
+DESCRIBE = "(() => { const a = document.activeElement; return a.id === 'sidebar-toggle' ? 'toggle' : a.closest('.voice-chip') ? 'voice:' + a.textContent.trim() : a.closest('.win-controls') ? 'window:' + a.getAttribute('aria-label') : a.classList.contains('sb-new') ? 'new' : a.textContent.trim() || a.getAttribute('aria-label'); })()"
 
 VIEWS = ["Voice", "Tasks", "Alerts", "Changes", "Security", "System", "Settings"]
 HEADINGS = "[...document.querySelectorAll('.sb-list .sb-section .sb-section-name')].map(e => e.textContent)"
@@ -53,7 +59,7 @@ async def main():
                 await page.send("Page.removeScriptToEvaluateOnNewDocument", identifier=init["id"])
             init["n"] += 1
             mem = f"localStorage.setItem('kagent.sidebar', {json.dumps(json.dumps(prefs))});" if prefs else "localStorage.removeItem('kagent.sidebar');"
-            added = await page.send("Page.addScriptToEvaluateOnNewDocument", source=f"try {{ if (sessionStorage.getItem('s42') !== '{init['n']}') {{ sessionStorage.setItem('s42', '{init['n']}'); localStorage.setItem('kagent.theme','{theme}'); localStorage.removeItem('kagent.picker'); {mem} }} }} catch (e) {{}}")
+            added = await page.send("Page.addScriptToEvaluateOnNewDocument", source=f"try {{ if (sessionStorage.getItem('s42') !== '{init['n']}') {{ sessionStorage.setItem('s42', '{init['n']}'); localStorage.setItem('kagent.theme','{theme}'); localStorage.removeItem('kagent.picker'); {mem} }} }} catch (e) {{}} {FAKE_LIVE}")
             init["id"] = added["identifier"]
             await page.send("Page.navigate", url=f"http://127.0.0.1:{lib.PORT}/{query}#token=abc123")
             ready = ".widget-status" if "overlay" in query else ".sb-list, .sidebar-toggle-ready, #sidebar-toggle"
@@ -306,12 +312,99 @@ async def main():
         await asyncio.sleep(0.4)
         results["700x500 to 1200x820: the drawer closes and the remembered rail applies again"] = await page.js("!!document.querySelector('aside.sidebar.inline.rail') && !document.querySelector('.drawer') && !document.querySelector('.sidebar-scrim')")
 
+
+        # ================================================================ the title bar and the foot of the sidebar (amendment of 2026-11-27)
+        await env.size(1200, 820)
+        for theme in ("dark", "light"):
+            t = f"1200x820 {theme}"
+            await open_page(theme, query="?app")
+            await page.click(".mic-btn")
+            await page.until("!!document.querySelector('.voice-chip')", "the voice chip")
+            await page.shot(f"titlebar-{theme}")
+            results[f"{t}: the title bar is 36 px high and drags the window"] = await page.js("Math.round(document.querySelector('header').getBoundingClientRect().height) === 36 && document.querySelector('header').classList.contains('app-titlebar')")
+            results[f"{t}: the header holds exactly the toggle, KAgent, Stop all, the voice chip and the window controls"] = await page.js(THINGS) == ["toggle", "logo:KAgent", "spacer", "Stop all", "voice", "window"]
+            results[f"{t}: the header has no select, no nav, no theme button and no permission picker"] = await page.js("(() => { const h = document.querySelector('header'); return !h.querySelector('select, nav, .perm, [aria-label*=theme i], [aria-label*=permission i]'); })()")
+            results[f"{t}: every control of the header has a name"] = await page.js("[...document.querySelectorAll('header button')].every(b => b.textContent.trim() || b.getAttribute('aria-label'))")
+            await page.js("document.querySelector('#sidebar-toggle').focus()")
+            seen = [await page.js(DESCRIBE)]
+            for _ in range(12):
+                await page.key("Tab", "Tab", 9)
+                seen.append(await page.js(DESCRIBE))
+                if seen[-1] == "new":
+                    break
+            results[f"{t}: the keyboard order is the toggle, Stop all, the voice chip, the window controls, then the sidebar"] = seen == ["toggle", "Stop all", "voice:connecting", "voice:mute", "voice:end", "window:Shrink to widget", "window:Hide to tray", "window:Maximize", "new"]
+            # the foot
+            results[f"{t}: the foot is above Settings, the last view, below System"] = await page.js("(() => { const kids = [...document.querySelector('.sb-nav').children]; const foot = kids.findIndex(k => k.classList.contains('sb-foot')); return foot === kids.length - 2 && kids[kids.length - 1].textContent.trim() === 'Settings' && kids[foot - 1].textContent.trim() === 'System'; })()")
+            results[f"{t}: the permission row is full width with its dot and the name of the mode"] = await page.js("(() => { const b = document.querySelector('.sb-perm'), f = document.querySelector('.sb-foot'); return b.querySelector('.perm-dot') && b.textContent.trim() === 'Ask' && b.getAttribute('aria-label') === 'Permission level: Ask' && b.getBoundingClientRect().width > f.getBoundingClientRect().width - 60; })()")
+            await page.click(".sb-perm")
+            await page.until("!!document.querySelector('.menu')", "the permission menu")
+            results[f"{t}: its menu has the four modes and a check on the current one"] = await menu_items() == ["Read-only", "Ask", "Trusted", "Full control"] and await page.js("[...document.querySelectorAll('.menu [role=menuitem]')].map(e => !!e.querySelector('.pop-check')).join()") == "false,true,false,false"
+            await page.shot(f"permission-menu-{theme}")
+            results[f"{t}: the menu opens above the row and stays in the window"] = await page.js("(() => { const m = document.querySelector('.menu').getBoundingClientRect(), b = document.querySelector('.sb-perm').getBoundingClientRect(); return m.bottom <= b.top && m.top >= 0 && m.left >= 0; })()")
+            await pick("Full control")
+            await page.until("document.querySelector('.sb-perm').textContent.trim() === 'Full control'", "the mode changed")
+            results[f"{t}: a pick sets the mode in the daemon (PUT /api/settings) and the row follows"] = MODE() == "full" and await page.js("document.querySelector('.sb-perm').classList.contains('perm-full')")
+            await page.click(".sb-perm")
+            await page.key("ArrowUp", "ArrowUp", 38)
+            await page.key("ArrowUp", "ArrowUp", 38)
+            await page.key("Enter", "Enter", 13, 0, "\r")
+            await page.until("document.querySelector('.sb-perm').textContent.trim() === 'Ask'", "the keyboard pick")
+            results[f"{t}: the menu works from the keyboard and Escape gives the focus back to the row"] = MODE() == "ask" and await page.js(f"{ACTIVE} === document.querySelector('.sb-perm')")
+            await page.click(".sb-perm")
+            await page.key("Escape", "Escape", 27)
+            results[f"{t}: Escape closes the permission menu"] = await page.js(f"!document.querySelector('.menu') && {ACTIVE} === document.querySelector('.sb-perm')")
+            # the theme
+            cycle = []
+            for _ in range(4):
+                cycle.append(await page.js("document.documentElement.dataset.themePref"))
+                await page.click(".sb-theme")
+            results[f"{t}: the theme button goes through light, dark and auto (from {theme})"] = cycle == ([theme, "auto", "light", "dark"] if theme == "dark" else [theme, "dark", "auto", "light"])
+            results[f"{t}: the theme in use follows the choice and is stored"] = await page.js("document.documentElement.dataset.theme === document.documentElement.dataset.themePref || document.documentElement.dataset.themePref === 'auto'") and await page.js("localStorage.getItem('kagent.theme') === document.documentElement.dataset.themePref")
+            results[f"{t}: the theme button names the choice and the next one"] = await page.js("(() => { const b = document.querySelector('.sb-theme'), p = document.documentElement.dataset.themePref; return b.getAttribute('aria-label').startsWith('Theme: ' + p + '. Switch to ') && b.title.startsWith('Theme: ' + p); })()")
+        # the foot in the rail
+        for theme in ("dark", "light"):
+            t = f"1200x820 rail {theme}"
+            await open_page(theme, prefs={"view": "projects", "collapsed": True, "closed": []})
+            results[f"{t}: the rail keeps the permission dot and the theme icon above Settings"] = await page.js("(() => { const kids = [...document.querySelector('.sb-nav').children]; const foot = kids.findIndex(k => k.classList.contains('sb-foot')); const p = document.querySelector('.sb-foot .sb-perm'); return foot === kids.length - 2 && p.classList.contains('rail') && p.title === 'Ask' && p.getAttribute('aria-label') === 'Permission level: Ask' && !!document.querySelector('.sb-foot .sb-theme') && !p.textContent.trim(); })()")
+            await page.click(".sb-perm")
+            await page.until("!!document.querySelector('.menu')", "the menu of the rail")
+            results[f"{t}: a click on the dot opens the menu to its right"] = await page.js("(() => { const m = document.querySelector('.menu').getBoundingClientRect(), b = document.querySelector('.sb-perm').getBoundingClientRect(); return m.left >= b.right && m.bottom <= innerHeight && m.top >= 0; })()")
+            await page.shot(f"rail-permission-{theme}")
+            await pick("Trusted")
+            await page.until("document.querySelector('.sb-perm').classList.contains('perm-trusted')", "the dot follows")
+            results[f"{t}: the permission mode changes from the collapsed sidebar"] = MODE() == "trusted" and await page.js("document.querySelector('.sb-perm').title === 'Trusted'")
+            await page.click(".sb-perm")
+            await pick("Ask")
+            await page.until("document.querySelector('.sb-perm').classList.contains('perm-ask')", "back to ask")
+            before = await page.js("document.documentElement.dataset.themePref")
+            await page.click(".sb-theme")
+            results[f"{t}: the theme icon works in the rail"] = await page.js("document.documentElement.dataset.themePref") != before
+            await page.shot(f"rail-foot-{theme}")
+        # the narrow window: the title bar still holds its things, and the drawer has the foot
+        await env.size(700, 500)
+        await open_page("dark")
+        results["700x500: the title bar is 36 px high"] = await page.js("Math.round(document.querySelector('header').getBoundingClientRect().height) === 36")
+        await page.click("#sidebar-toggle")
+        await page.until("!!document.querySelector('aside.drawer')", "the drawer")
+        results["700x500: the drawer has the permission row and the theme button above Settings"] = await page.js("!!document.querySelector('aside.drawer .sb-foot .sb-perm') && !!document.querySelector('aside.drawer .sb-foot .sb-theme')")
+        await page.click(".sb-perm")
+        await page.until("!!document.querySelector('.menu')", "the menu in the drawer")
+        await pick("Trusted")
+        await asyncio.sleep(0.3)
+        results["700x500: the mode changes from the drawer"] = MODE() == "trusted"
+        await page.click(".sb-perm")
+        await pick("Ask")
+        await asyncio.sleep(0.3)
+        await page.shot("drawer-foot")
+        results["700x500: the mode is back to Ask"] = MODE() == "ask"
+
         # ================================================================ the widget
         await env.size(340, 460)
         for theme in ("dark", "light"):
             t = f"widget {theme}"
             await open_page(theme, query="?overlay")
             results[f"{t}: no header and no sidebar"] = await page.js("!document.querySelector('header') && !document.querySelector('aside.sidebar')")
+            results[f"{t}: the permission picker stays in the widget, as a select"] = await page.js("!!document.querySelector('.widget-top select[aria-label=\"Permission level\"]') && !document.querySelector('.sb-foot')")
             results[f"{t}: a Sessions button in the top, before the hide button"] = await page.js("(() => { const b = [...document.querySelectorAll('.widget-top button')].map(x => x.getAttribute('aria-label')); return b.indexOf('Sessions') >= 0 && b.indexOf('Sessions') < b.indexOf('Hide to tray'); })()") or await page.js("!!document.querySelector('.widget-top [aria-label=Sessions]')")
             await page.shot(f"widget-{theme}")
             await page.js("document.querySelector('.widget-top [aria-label=Sessions]').click()")
