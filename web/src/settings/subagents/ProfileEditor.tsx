@@ -5,6 +5,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { ProfileBody } from "./api";
 import { MAX_ITERATIONS, MAX_PROMPT, bodyOf, draftErrors, emptyDraft, type Draft, type ModelRef } from "./draft";
+import { groupAbout, groupLabel } from "../groups";
 
 interface Props {
   initial: Draft;
@@ -82,8 +83,8 @@ export default function ProfileEditor({ initial, editing = false, taken, models,
         <span className="ui-field-label">Tool groups</span>
         <div className="chips" role="group" aria-label="Tool groups">
           {groups.map((g) => (
-            <label key={g} className={`chip${draft.groups.includes(g) ? " on" : ""}`}>
-              <input type="checkbox" checked={draft.groups.includes(g)} onChange={() => toggle(g)} /> {g}
+            <label key={g} className={`chip${draft.groups.includes(g) ? " on" : ""}`} title={groupAbout(g)}>
+              <input type="checkbox" checked={draft.groups.includes(g)} onChange={() => toggle(g)} /> {groupLabel(g)}
             </label>
           ))}
         </div>

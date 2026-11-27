@@ -7,6 +7,7 @@ import { useStore } from "../../store";
 import type { SectionProps } from "../registry";
 import { GroupCard, Row, SectionPage, Toggle } from "../ui";
 import { useSettingPatch } from "../useSettingPatch";
+import { groupAbout, groupLabel } from "../groups";
 
 const ORB = "kagent.orb";
 /** The live model that thinks longer before it speaks (voice.md section 8). */
@@ -110,8 +111,8 @@ export default function VoiceSection({ title, description }: SectionProps) {
         <Row label="Tools for the live model" hint="The groups the live model may call itself in the other two modes. A group that is off for chat is off here too; none picked means no tools." stacked>
           <div className="chips">
             {groups.map((g) => (
-              <label key={g} className={`chip${liveGroups.includes(g) ? " on" : ""}`} title={open(g) ? undefined : "Switch the group on for chat first (Tools page)"}>
-                <input type="checkbox" checked={liveGroups.includes(g)} disabled={!open(g)} onChange={() => toggle(g)} /> {g}
+              <label key={g} className={`chip${liveGroups.includes(g) ? " on" : ""}`} title={open(g) ? groupAbout(g) : "Switch the group on for chat first (Tools page)"}>
+                <input type="checkbox" checked={liveGroups.includes(g)} disabled={!open(g)} onChange={() => toggle(g)} /> {groupLabel(g)}
                 {!open(g) && " (off for chat)"}
               </label>
             ))}

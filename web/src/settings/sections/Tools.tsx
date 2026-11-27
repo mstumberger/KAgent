@@ -9,6 +9,7 @@ import { Field, GroupCard, Row, SectionPage } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import ToolContracts from "./ToolContracts";
+import { groupAbout, groupLabel } from "../groups";
 
 const MODES = ["read-only", "ask", "trusted", "full"];
 const LIMITS = { maxIterations: 40, approvalTimeoutSec: 600 };
@@ -66,8 +67,8 @@ export default function Tools({ title, description }: SectionProps) {
   const chips = (list: string[], key: string) => (
     <div className="chips">
       {groups.map((g) => (
-        <label key={g} className={`chip${list.includes(g) ? " on" : ""}`}>
-          <input type="checkbox" checked={list.includes(g)} onChange={() => saveGroups(key, toggle(list, g))} /> {g}
+        <label key={g} className={`chip${list.includes(g) ? " on" : ""}`} title={groupAbout(g)}>
+          <input type="checkbox" checked={list.includes(g)} onChange={() => saveGroups(key, toggle(list, g))} /> {groupLabel(g)}
         </label>
       ))}
     </div>
