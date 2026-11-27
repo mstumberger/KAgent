@@ -3,6 +3,7 @@
 // Linux, also in the dark theme; this one carries the colours of the page. The focus
 // stays on the trigger while the list is open; the cursor is its `aria-activedescendant`.
 import { useEffect, useId, useLayoutEffect, isValidElement, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import "../components/popup.css";
 import "./dropdown.css";
 
 export interface DropdownOption {
@@ -203,7 +204,7 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
-          className={`dd-list${above ? " above" : ""}${alignRight ? " right" : ""}`}
+          className={`pop dd-list${above ? " above" : ""}${alignRight ? " right" : ""}`}
           style={{ "--dd-space": `${Math.max(space, ROW * 2)}px` } as CSSProperties}
           // A press on a row must not take the focus from the trigger.
           onMouseDown={(e) => e.preventDefault()}
@@ -215,7 +216,7 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
               role="option"
               aria-selected={o.value === value}
               aria-disabled={o.disabled || undefined}
-              className={`dd-option${i === cursor ? " cursor" : ""}${o.disabled ? " off" : ""}`}
+              className={`pop-item dd-option${i === cursor ? " cursor" : ""}${o.disabled ? " off" : ""}`}
               onMouseEnter={() => {
                 if (!o.disabled) setCursor(i);
               }}
@@ -223,10 +224,10 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
             >
               <span className="dd-option-text">
                 {o.label}
-                {o.hint !== undefined && <span className="dd-hint">{o.hint}</span>}
+                {o.hint !== undefined && <span className="pop-hint dd-hint">{o.hint}</span>}
               </span>
               {o.value === value && (
-                <svg className="dd-check" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg className="pop-check dd-check" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               )}

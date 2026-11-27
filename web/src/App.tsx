@@ -129,14 +129,6 @@ export default function App() {
     <div className="app">
       <header className={isApp ? "app-titlebar" : ""} onPointerDown={startDrag} onDoubleClick={toggleMaximize}>
         <span className="logo">KAgent</span>
-        {s.state && (
-          <span
-            className={`dot ${s.state.chatModelValid ? "ok" : "bad"}`}
-            title={s.state.settings.chatModel || "no chat model"}
-          >
-            {(s.state.settings.chatModel || "").split("::").pop() || "No chat model"}
-          </span>
-        )}
         {s.notice && <span className="notice">{s.notice}</span>}
         <span className="spacer" />
         <VoiceChip />

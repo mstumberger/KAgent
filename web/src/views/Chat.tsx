@@ -1,5 +1,7 @@
 import Approvals from "../components/Approvals";
 import CommandInput from "../components/CommandInput";
+import ModelMenu from "../components/ModelMenu";
+import { useChoice } from "../components/useChoice";
 import Markdown from "../components/Markdown";
 import TodoPanel from "../components/TodoPanel";
 import { PlanChip } from "../components/PlanCard";
@@ -81,6 +83,11 @@ export default function Chat() {
   // the session plans (the chip above the composer says so, with Cancel plan).
   const [planNext, setPlanNext] = useState<{ session: string | null; on: boolean }>({ session: null, on: false });
   const [planBusy, setPlanBusy] = useState(false);
+  // The model menu above the composer is open: the slash picker stays shut.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const choice = useChoice(s.activeSession);
+  // Something can answer: the default model, or the conversation's own choice (picker.md section 5.1).
+  const canAnswer = !choice.none;
   const endRef = useRef<HTMLDivElement>(null);
   // One shared empty list: a fresh `[]` per render would defeat the memo of the cards.
   const messages = s.activeSession ? (s.messages[s.activeSession] ?? NO_MESSAGES) : NO_MESSAGES;
@@ -219,42 +226,48 @@ export default function Chat() {
             setPlanNext({ session: null, on: false });
           }}
         >
-          <button
-            type="button"
-            className={`mic-btn${talking ? " on" : ""}${talking && v.muted ? " muted" : ""}`}
-            title={talking ? "Stop talking" : "Talk in this chat"}
-            aria-label={talking ? "Stop talking" : "Talk in this chat"}
-            disabled={!s.activeSession || !s.state?.settings.liveModel}
-            onClick={() => talkHere(s.activeSession)}
-          >
-            <Icon name={talking ? "stop" : "mic"} size={16} />
-          </button>
           <CommandInput
             value={text}
             skills={s.skills}
+            suspend={menuOpen}
             onChange={setText}
             onPick={setText}
-            placeholder={talking ? "Listening... you can also type" : s.state?.chatModelValid ? "Ask about this machine... ( / for skills )" : "Pick a chat model in Providers first"}
+            placeholder={talking ? "Listening... you can also type" : canAnswer ? "Ask about this machine... ( / for skills )" : "Pick a model in the menu below first"}
           />
-          <button
-            type="button"
-            className={`plan-toggle${planning || armed ? " on" : ""}`}
-            aria-pressed={planning || armed}
-            title={planning ? "Plan mode is on: click to cancel the plan" : armed ? "The next message starts in plan mode" : "Plan first: the agent researches and shows a plan before anything changes"}
-            disabled={planBusy || !s.activeSession}
-            onClick={() => void togglePlan()}
-          >
-            Plan
-          </button>
-          {running ? (
-            <button type="button" className="danger" onClick={() => void cancelSession()}>
-              Stop
-            </button>
-          ) : (
-            <button className="primary" disabled={!text.trim() || !s.state?.chatModelValid}>
-              Send
-            </button>
-          )}
+          <div className="composer-bar">
+            <ModelMenu sessionId={s.activeSession} onOpenChange={setMenuOpen} />
+            <div className="composer-tools">
+              <button
+                type="button"
+                className={`mic-btn${talking ? " on" : ""}${talking && v.muted ? " muted" : ""}`}
+                title={talking ? "Stop talking" : "Talk in this chat"}
+                aria-label={talking ? "Stop talking" : "Talk in this chat"}
+                disabled={!s.activeSession || !s.state?.settings.liveModel}
+                onClick={() => talkHere(s.activeSession)}
+              >
+                <Icon name={talking ? "stop" : "mic"} size={16} />
+              </button>
+              <button
+                type="button"
+                className={`plan-toggle${planning || armed ? " on" : ""}`}
+                aria-pressed={planning || armed}
+                title={planning ? "Plan mode is on: click to cancel the plan" : armed ? "The next message starts in plan mode" : "Plan first: the agent researches and shows a plan before anything changes"}
+                disabled={planBusy || !s.activeSession}
+                onClick={() => void togglePlan()}
+              >
+                Plan
+              </button>
+              {running ? (
+                <button type="button" className="danger" onClick={() => void cancelSession()}>
+                  Stop
+                </button>
+              ) : (
+                <button className="primary" disabled={!text.trim() || !canAnswer}>
+                  Send
+                </button>
+              )}
+            </div>
+          </div>
         </form>
         )}
       </section>

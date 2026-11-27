@@ -1,5 +1,5 @@
 /* ---- the dropdown (Dropdown.tsx, models.md section 7.8): the size, border, background and
-   focus ring of the other controls; the list is the panel of the composer's picker */
+   focus ring of the other controls; the list's look is popup.css (picker.md section 5.8) */
 .dd {
   position: relative;
   min-width: 0;
@@ -68,7 +68,7 @@
   transform: rotate(180deg);
 }
 
-/* As wide as the trigger at least, 420 px at most; it scrolls from 280 px */
+/* The place and size of the list: as wide as the trigger at least, 420 px at most; it scrolls from 280 px */
 .dd-list {
   position: absolute;
   top: calc(100% + 6px);
@@ -81,12 +81,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   margin: 0;
-  padding: 4px;
   list-style: none;
-  background: var(--glass);
-  border: 1px solid var(--rim-strong);
-  border-radius: var(--radius-m);
-  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 
 .dd-list.above {
@@ -99,30 +94,6 @@
   right: 0;
 }
 
-.dd-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-/* Hover and the cursor of the keyboard */
-.dd-option:hover,
-.dd-option.cursor {
-  background: rgba(124, 196, 255, 0.12);
-}
-
-.dd-option.off,
-.dd-option.off:hover {
-  color: var(--dim);
-  background: transparent;
-  cursor: default;
-}
-
 .dd-option-text {
   flex: 1 1 auto;
   display: flex;
@@ -130,14 +101,4 @@
   gap: 1px;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.dd-hint {
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.dd-check {
-  flex: 0 0 auto;
-  color: var(--ice);
 }

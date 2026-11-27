@@ -22,6 +22,8 @@ export type AgentEvent =
   | { type: "skillsChanged"; count: number }
   | { type: "todoUpdated"; sessionId: string; items: import("./api").TodoItem[] }
   | { type: "planUpdated"; sessionId: string; active: boolean }
+  /** The whole meta of a session whose model or effort changed (picker.md section 3). */
+  | { type: "sessionMetaChanged"; sessionId: string; meta: import("./api").SessionMeta }
   | { type: "memoryChanged"; name: string; removed: boolean }
   | { type: "tasksChanged" }
   | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
