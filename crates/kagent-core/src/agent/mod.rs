@@ -25,6 +25,7 @@ pub mod hooks;
 pub mod title;
 pub(crate) mod state;
 mod picker;
+pub mod project;
 mod spawn;
 mod turn;
 
@@ -183,6 +184,8 @@ impl Agent {
         self.apply_job(session_id, &mut config);
         // A conversation's own model and effort (picker.md section 4.2).
         self.apply_choice(session_id, state, &mut config).await;
+        // The folder attached to the conversation, and its AGENTS.md (sidebar.md section 4.3).
+        config.system_prompt.push_str(&self.project_block(state).await);
         if let Some(block) = &input.system_suffix {
             config.system_prompt.push_str(block);
         }

@@ -126,7 +126,12 @@ impl Agent {
         }
         let state = self.state(&req.parent).await?;
         let digest = if state.messages.lock().await.is_empty() { String::new() } else { self.store.digest(&req.parent, DIGEST_CHARS).await.unwrap_or_default() };
-        let meta = self.store.create_with(description, SessionOrigin::Subagent, Some(req.parent.clone())).await?;
+        let mut meta = self.store.create_with(description, SessionOrigin::Subagent, Some(req.parent.clone())).await?;
+        // The child works in the folder of its parent (sidebar.md section 4.2), before its first turn.
+        if parent.project.is_some() {
+            meta.project = parent.project.clone();
+            self.store.save_meta(&meta).await?;
+        }
         let id = meta.id;
         // The child of a planning session gets the plan restriction (plan-todo.md section 2):
         // the engine's flag for its own session id, without the prompt block of plan mode.

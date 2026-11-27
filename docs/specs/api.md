@@ -281,7 +281,11 @@ their rows. Spec of S41: `picker.md`.
 | Method path | Request | Response |
 |---|---|---|
 | PUT `/api/sessions/:id/model` | `{model?: string\|null, reasoningLevel?: string\|null}` | `SessionMeta` |
-| POST `/api/sessions` | `{title?, model?, reasoningLevel?}` | `SessionMeta` (201) |
+| POST `/api/sessions` | `{title?, model?, reasoningLevel?, project?}` (`project` from S42) | `SessionMeta` (201) |
+| PUT `/api/sessions/:id/project` | `{path: string\|null}` (S42) | `SessionMeta` |
+| PUT `/api/sessions/:id/pin` | `{pinned: boolean}` (S42) | `SessionMeta` |
+| GET `/api/sessions?project=<path>` | (S42) | the top-level sessions of that folder, newest first, as the plain list |
+| GET `/api/projects` | (S42) | `{roots: string[], projects: [{path, name, agentsMd: boolean}]}` |
 | GET `/api/models` | | as `models.md` section 4; each model of every list also has `providerId` and `providerName` |
 
 The two writes are checked by one function, before anything is written:
@@ -303,6 +307,26 @@ The two writes are checked by one function, before anything is written:
 - When `model` is given and `reasoningLevel` is not, a stored level the new model does not
   offer is cleared.
 - Nothing changes and no event goes out when the meta would be the same.
+
+The folder and the pin (S42, `sidebar.md` section 3):
+
+- `PUT .../project`: `{path: null}` or `{path: ""}` detaches. A path that starts with `~/` is
+  expanded and `canonicalize` gives what is stored. 400 `invalid_input`: no `path` key or a
+  value that is neither a string nor null ("expected {path: a folder, or null to detach}"); a
+  path neither absolute nor `~/...` ("path must be absolute, or start with ~/"); not a
+  directory ("not a directory: <path as given>"); KAgent's own `<config>` or `<data>`, or
+  inside them ("<path> is KAgent's own folder (<config> or <data>): a conversation cannot be
+  attached to it"). 404 "session <id> not found". 409 `conflict` "the session of a subagent
+  cannot be changed: it has the folder of the session that started it". The same path again
+  changes nothing and sends no event; `updated_at` stays.
+- `PUT .../pin`: 400 "expected {pinned: true or false}"; 404; 409 "the session of a subagent
+  is not in the list: it cannot be pinned".
+- `POST /api/sessions` with `project`: the checks of the PUT run first; a refused create makes
+  no session.
+- `GET /api/sessions?project=` with `parent` too: 400 "give parent or project, not both".
+- `GET /api/projects`: the projects of `coders.md` section 3 (the roots of
+  `settings.desktop.projectRoots`, empty: the built-in ones); `agentsMd` is true when
+  `<path>/AGENTS.md` is a regular file.
 
 ### Events
 

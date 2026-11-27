@@ -61,7 +61,8 @@ copied from Omnius (it has no license); the code here is written fresh.
   limits of the description and the prompt, a parent that exists and is not a subagent
   (the depth limit: a subagent cannot start a coder either), the digest of the parent
   before the job, and a child session with origin `subagent` and the description as its
-  title. The run takes a slot of the same queue and limit (`subagents.maxConcurrent`):
+  title. (From S42, `sidebar.md` section 4.2: the child session gets the `project` of its
+  parent in its meta, saved before the first turn; `pinned` stays false.) The run takes a slot of the same queue and limit (`subagents.maxConcurrent`):
   it starts at once with one, else it waits as `queued`.
 - **The launcher.** The core never starts a process. The daemon registers a
   `CoderLauncher` (`start`, `stop`) with the agent, as the profiles reach the tools
@@ -195,6 +196,11 @@ A profile has a `tool` and a `mode`; the built-in of a tool and a mode is named
 `agent_wait`, `agent_stop` and `agent_list` work on coder runs unchanged (tools.md
 section 23). `coder_run` is among the tools a subagent does not have (`ORCHESTRATION`).
 
+- Default `project` (from S42, `sidebar.md` section 4.5; S35 builds it): a call that names
+  no `project` takes the folder of the calling session when that folder is a known project
+  (the same folder as one of `xdg::projects`, compared after `canonicalize` on both sides),
+  asked through `Agent::project(&ctx.session_id)`. Otherwise `project` stays a name from the
+  list, never a path.
 - Input: `{description, prompt, project, profile?, background?}` (S37 adds `resume`,
   S38 `worktree`). `prompt` is one text or its lines (the S20 trap: the schema says
   `anyOf`), at most 16 000 characters.

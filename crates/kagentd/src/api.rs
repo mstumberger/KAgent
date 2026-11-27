@@ -101,7 +101,9 @@ pub async fn list_sessions(
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> ApiResult<Response> {
     let parent = q.get("parent").map(String::as_str).filter(|p| !p.is_empty());
-    let mut listed = crate::subagents::listed(st.agent.store().list().await.map_err(internal)?, parent);
+    let project = q.get("project").map(String::as_str).filter(|p| !p.is_empty());
+    crate::project_api::list_filters(parent, project)?;
+    let mut listed = crate::subagents::listed(st.agent.store().list().await.map_err(internal)?, parent, project);
     for (m, _) in &mut listed {
         m.message_count = st.agent.store().load_messages(&m.id).await.map(|v| v.len()).unwrap_or(0);
     }
@@ -112,7 +114,12 @@ pub async fn list_sessions(
 
 pub async fn create_session(State(st): State<Arc<AppState>>, Json(body): Json<Value>) -> ApiResult<Response> {
     let default_model = st.settings.read().unwrap().chat_model.clone();
-    let meta = crate::model_api::create(st.agent.store(), &st.providers, &default_model, &body).await?;
+    // The folder is checked first: a refused create makes no session.
+    let (body, folder) = crate::project_api::split_create(&body).await?;
+    let mut meta = crate::model_api::create(st.agent.store(), &st.providers, &default_model, &body).await?;
+    if let Some(folder) = folder {
+        meta = crate::project_api::create_in(st.agent.store(), meta, folder).await?;
+    }
     Ok((StatusCode::CREATED, Json(meta)).into_response())
 }
 

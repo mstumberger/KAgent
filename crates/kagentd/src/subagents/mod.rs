@@ -138,8 +138,14 @@ impl ProfileHub {
 
 /// The sessions a listing shows (`GET /api/sessions`), each with how many subagents it
 /// started (agents.md section 6: the row of a parent says "3 agents").
-pub fn listed(all: Vec<SessionMeta>, parent: Option<&str>) -> Vec<(SessionMeta, usize)> {
-    SessionStore::visible(all.clone(), parent)
+/// `project` keeps the sessions of that folder (sidebar.md section 3).
+pub fn listed(all: Vec<SessionMeta>, parent: Option<&str>, project: Option<&str>) -> Vec<(SessionMeta, usize)> {
+    let visible = SessionStore::visible(all.clone(), parent);
+    let visible = match project {
+        Some(path) => crate::project_api::in_project(visible, path),
+        None => visible,
+    };
+    visible
         .into_iter()
         .map(|meta| {
             let agents = all.iter().filter(|m| m.parent.as_deref() == Some(meta.id.as_str())).count();
@@ -217,7 +223,7 @@ mod tests {
             store.create_with("job", kagent_core::session::SessionOrigin::Subagent, Some(a.id.clone())).await.unwrap();
         }
         let all = store.list().await.unwrap();
-        let mut listed = listed(all, None);
+        let mut listed = listed(all, None, None);
         listed.sort_by(|a, b| a.0.title.cmp(&b.0.title));
         assert_eq!(listed.iter().map(|(m, n)| (m.title.as_str(), *n)).collect::<Vec<_>>(), [("a", 3), ("b", 0)], "children are not listed; their parent counts them");
         let value = with_agents(&listed[0].0, listed[0].1);

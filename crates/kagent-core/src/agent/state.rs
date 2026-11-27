@@ -334,6 +334,8 @@ mod tests {
                 approved_plan: None,
                 model: None,
                 reasoning_level: None,
+                project: None,
+                pinned: false,
             },
             vec![],
         )
