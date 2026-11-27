@@ -14,7 +14,7 @@ use crate::protocol::{Message, ToolCall, TurnStatus, Via};
 use crate::tool::CallAssessment;
 use crate::util::{normalize_input, truncate_str, validate_schema};
 
-pub(crate) mod protect;
+pub mod protect;
 
 /// Context hooks may add to one turn, in characters (hooks.md section 3).
 pub const CONTEXT_CHARS_PER_TURN: usize = 4_000;

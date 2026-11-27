@@ -160,3 +160,21 @@ async fn a_child_of_a_session_with_a_choice_keeps_the_model_of_its_job() {
     let kid = children(&r).remove(0);
     assert_eq!(r.store.meta(&kid.id).await.unwrap().model, None, "a child session has no choice");
 }
+
+#[tokio::test]
+async fn a_child_has_the_folder_of_its_parent_and_the_block_in_its_prompt() {
+    // sidebar.md section 4.2: the child works in the folder of the session that started it.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("AGENTS.md"), "Rule: always say pong.").unwrap();
+    let folder = dir.path().to_string_lossy().to_string();
+    let r = rig(&[("parent", vec![run("job"), say("started")]), ("job", vec![say("done")])], PermissionMode::Ask).await;
+    r.agent.set_project(&r.session, Some(folder.clone())).await.unwrap();
+    turn(&r, "go").await;
+    let kid = kids(&r, 1).await.remove(0);
+    wait_status(&r, &kid.id, ChildStatus::Done).await;
+    let meta = r.store.meta(&kid.id).await.unwrap();
+    assert_eq!((meta.project.as_deref(), meta.pinned), (Some(folder.as_str()), false), "the folder of the parent, never pinned");
+    let job = r.model.of("job");
+    assert!(job[0].system.contains(&format!("Project: {folder}")) && job[0].system.contains("Rule: always say pong."), "{}", job[0].system);
+    assert!(job[0].system.find("You are a subagent.").unwrap() < job[0].system.find("Project: ").unwrap(), "after the block of its job");
+}

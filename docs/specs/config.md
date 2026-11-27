@@ -371,6 +371,8 @@ so a meta file from before loads.
 |---|---|
 | `model` | a model ref `<providerId>::<modelId>` the conversation chose, or `null`: the default chat model answers |
 | `reasoningLevel` | one of the levels the answering model offers (`effective.reasoningLevels`), or `null`: nothing is sent and the provider's own default applies |
+| `project` | (S42) the folder attached to the conversation: an absolute canonical path, or `null` |
+| `pinned` | (S42) the session stands in the section "Pinned" of the sidebar; default `false` |
 
 - The session of a subagent never has either: the route refuses it and the child is made
   with none. Voice, tasks, alerts and Telegram keep the default unless the session has a choice.
@@ -379,3 +381,6 @@ so a meta file from before loads.
 - The last choice of the owner is in the browser, not in a file: localStorage `kagent.picker` =
   `{"model": "<ref> or null", "reasoningLevel": "<level> or null"}`; a new conversation
   starts with it.
+- S42: a subagent has the `project` of its parent and is never pinned. The browser
+  remembers the sidebar, not the daemon: localStorage `kagent.sidebar` =
+  `{"view": "projects" | "recent", "collapsed": boolean, "closed": ["<path>", ...]}`.

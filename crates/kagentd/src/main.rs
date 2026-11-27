@@ -26,6 +26,7 @@ mod notify;
 mod paths;
 mod model_api;
 mod plan_api;
+mod project_api;
 mod prompt;
 mod secrets;
 mod sections;

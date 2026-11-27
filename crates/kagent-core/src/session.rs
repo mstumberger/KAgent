@@ -68,6 +68,13 @@ pub struct SessionMeta {
     /// provider's own default.
     #[serde(default)]
     pub reasoning_level: Option<String>,
+    /// The folder attached to the conversation (sidebar.md section 2): an absolute canonical
+    /// path, or `None`. A child has the folder of its parent.
+    #[serde(default)]
+    pub project: Option<String>,
+    /// The session stands in the section "Pinned" of the sidebar; never a child.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Clone)]
@@ -111,6 +118,8 @@ impl SessionStore {
             approved_plan: None,
             model: None,
             reasoning_level: None,
+            project: None,
+            pinned: false,
         };
         self.save_meta(&meta).await?;
         tokio::fs::write(self.log_path(&meta.id), b"").await?;
@@ -250,6 +259,20 @@ mod tests {
         old.as_object_mut().unwrap().remove("reasoningLevel");
         let old: SessionMeta = serde_json::from_value(old).unwrap();
         assert!(old.model.is_none() && old.reasoning_level.is_none());
+        // The sidebar fields (sidebar.md section 2) round trip, under their JSON names.
+        assert!(meta.project.is_none() && !meta.pinned, "a new session has no folder and is not pinned");
+        meta.project = Some("/home/me/code/app".into());
+        meta.pinned = true;
+        store.save_meta(&meta).await.unwrap();
+        assert_eq!(store.meta(&meta.id).await.unwrap(), meta);
+        let raw: serde_json::Value = serde_json::from_slice(&tokio::fs::read(dir.path().join(format!("{}.meta.json", meta.id))).await.unwrap()).unwrap();
+        assert_eq!((raw["project"].clone(), raw["pinned"].clone()), (serde_json::json!("/home/me/code/app"), serde_json::json!(true)));
+        // A meta file from before S42 has neither key and loads with `None` and `false`.
+        let mut old = raw.clone();
+        old.as_object_mut().unwrap().remove("project");
+        old.as_object_mut().unwrap().remove("pinned");
+        let old: SessionMeta = serde_json::from_value(old).unwrap();
+        assert!(old.project.is_none() && !old.pinned);
         store.append(&meta.id, &[Message::user("hi"), Message::assistant("yo", vec![])]).await.unwrap();
         let msgs = store.load_messages(&meta.id).await.unwrap();
         assert_eq!(msgs.len(), 2);
