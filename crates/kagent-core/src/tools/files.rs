@@ -285,18 +285,40 @@ impl Tool for SearchFiles {
             Ok(r) => r,
             Err(e) => return Ok(ToolOutput::error(format!("error: {e:#}"))),
         };
-        if !r.success() && r.stdout.trim().is_empty() {
-            return Ok(ToolOutput::error(format!("no matches for /{pattern}/ (exit {})", r.code.unwrap_or(1))));
-        }
-        // Rows from one of KAgent's credential files are left out (token-guard.md).
-        let lines: Vec<&str> = r.stdout.lines().filter(|l| !credential_line(l)).take(max).collect();
-        let mut out = format!("{} matches for /{pattern}/ in {}\n", lines.len(), path);
-        for l in lines {
-            out.push_str(crate::util::truncate_str(l, 400));
-            out.push('\n');
-        }
-        Ok(ToolOutput::ok(out))
+        Ok(search_output(pattern, &path, &r, max))
     }
+}
+
+/// What `search_files` answers for the search's result. rg and grep both exit 1 for "no
+/// matches" and 2 for an error (an unreadable folder, a bad pattern): an error is said
+/// as one, with the matches found before it.
+fn search_output(pattern: &str, path: &str, r: &super::exec::ExecResult, max: usize) -> ToolOutput {
+    // Rows from one of KAgent's credential files are left out (token-guard.md).
+    let lines: Vec<&str> = r.stdout.lines().filter(|l| !l.trim().is_empty() && !credential_line(l)).take(max).collect();
+    let failed = r.timed_out || !matches!(r.code, Some(0) | Some(1));
+    let problem = || {
+        let errors: Vec<&str> = r.stderr.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        let shown: Vec<&str> = errors.iter().take(3).map(|l| crate::util::truncate_str(l, 200)).collect();
+        let more = if errors.len() > 3 { format!(" (and {} more)", errors.len() - 3) } else { String::new() };
+        let why = if r.timed_out { "timed out".to_string() } else { format!("exit {}", r.code.map_or("?".into(), |c| c.to_string())) };
+        if shown.is_empty() { why } else { format!("{why}: {}{more}", shown.join("; ")) }
+    };
+    if lines.is_empty() {
+        return if failed {
+            ToolOutput::error(format!("the search for /{pattern}/ in {path} failed ({}); this is not \"no matches\"", problem()))
+        } else {
+            ToolOutput::error(format!("no matches for /{pattern}/ in {path}"))
+        };
+    }
+    let mut out = format!("{} matches for /{pattern}/ in {path}\n", lines.len());
+    for l in lines {
+        out.push_str(crate::util::truncate_str(l, 400));
+        out.push('\n');
+    }
+    if failed {
+        out.push_str(&format!("The search did not finish cleanly ({}): there may be more matches in what it could not read.\n", problem()));
+    }
+    ToolOutput::ok(out)
 }
 
 /// Whether a `file:line:match` row of `search_files` comes from one of KAgent's credential files.
@@ -307,6 +329,25 @@ fn credential_line(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn result(code: i32, stdout: &str, stderr: &str) -> super::super::exec::ExecResult {
+        super::super::exec::ExecResult { code: Some(code), stdout: stdout.into(), stderr: stderr.into(), timed_out: false }
+    }
+
+    /// v0.0.2 section 7: exit 2 is an error of the search, not "no matches".
+    #[test]
+    fn search_exit_codes() {
+        let none = search_output("x", "/h", &result(1, "", ""), 100);
+        assert!(none.is_error && none.content == "no matches for /x/ in /h", "{}", none.content);
+        let denied = "rg: /h/.cache/priv: Permission denied (os error 13)";
+        let failed = search_output("x", "/h", &result(2, "", denied), 100);
+        assert!(failed.is_error && failed.content.contains("failed (exit 2: rg: /h/.cache/priv: Permission denied") && failed.content.contains("not \"no matches\""), "{}", failed.content);
+        let partial = search_output("x", "/h", &result(2, "/h/a:1:x\n", &format!("{denied}\n{denied}\n{denied}\n{denied}")), 100);
+        assert!(!partial.is_error && partial.content.starts_with("1 matches for /x/ in /h\n/h/a:1:x\n"), "{}", partial.content);
+        assert!(partial.content.contains("did not finish cleanly (exit 2: ") && partial.content.contains("(and 1 more)"), "{}", partial.content);
+        let ok = search_output("x", "/h", &result(0, "/h/a:1:x\n/h/b:2:x\n", ""), 1);
+        assert_eq!((ok.is_error, ok.content.as_str()), (false, "1 matches for /x/ in /h\n/h/a:1:x\n"), "max_results");
+    }
 
     #[tokio::test]
     async fn read_file_refuses_a_credential_file() {
