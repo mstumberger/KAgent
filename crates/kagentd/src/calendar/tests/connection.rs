@@ -202,6 +202,9 @@ async fn a_restart_reads_the_connection_back() {
         data_dir: r.dir.path().join("data"),
         maps: crate::secrets::TokenStore::File(r.dir.path().join("maps.secret")),
         web: None,
+        notifier: None,
+        paired: std::sync::Arc::new(|| false),
+        tasks: std::sync::Arc::new(|_| Vec::new()),
     })
     .await;
     assert_eq!(again.state(), ConnState::Connected);

@@ -83,7 +83,8 @@ const THINK: &str = concat!(
     "your own tools you answer yourself."
 );
 
-/// A reply that could not be delivered as the result of `think` (voice.md section 2).
+/// A reply that could not be delivered as the result of `think` (voice.md section 2), and the
+/// morning report (calendar.md section 6): what follows is read aloud as it stands.
 const SAY: &str = "A message that starts with [SAY] is your own answer: read what follows word for word, adding nothing.";
 
 /// How the routed model speaks for itself: a greeting, or the phrase before `think`.
@@ -117,12 +118,12 @@ pub fn live(chat_prompt: &str, address: &str) -> String {
     // The Brain, `settings` and name lines (voice-control.md): this model has the tool whatever the chat
     // prompt was built with, and a line the chat prompt already holds is not said twice.
     let rules: String = prompt::owner_rules(true, address).lines().filter(|l| !chat_prompt.contains(l)).map(|l| format!("{l}\n")).collect();
-    format!("{chat_prompt}\n\n{rules}{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
+    format!("{chat_prompt}\n\n{rules}{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{SAY}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
 }
 
 /// `auto` (voice.md section 1): the instruction of `live`, and when to call `think`.
 pub fn auto(chat_prompt: &str, address: &str) -> String {
-    format!("{}\n{THINK}\n{SAY}", live(chat_prompt, address))
+    format!("{}\n{THINK}", live(chat_prompt, address))
 }
 
 /// The instruction of a session in `mode`, read once when it connects.
@@ -163,6 +164,10 @@ mod tests {
             assert!(text.contains("status `needs_confirmation` means nothing was done yet") && text.contains("call the same tool again with exactly the same arguments"), "{text}");
         }
         assert!(!routed.contains("needs_confirmation"), "routed has no tools of its own");
+        // calendar.md section 6: the morning report reaches a `live` session as a [SAY] text turn.
+        for text in [&routed, &live, &auto] {
+            assert_eq!(text.matches("A message that starts with [SAY] is your own answer: read what follows word for word, adding nothing.").count(), 1, "{text}");
+        }
     }
 
     /// voice-control.md sections 3 and 5 in the live instructions.

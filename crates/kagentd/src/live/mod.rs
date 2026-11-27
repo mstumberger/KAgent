@@ -314,6 +314,15 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                         continue 'conn;
                                     }
                                 }
+                                // The morning report waits for the first session after its time (calendar.md section 6):
+                                // a [SAY] text turn, read as it stands, once.
+                                if first {
+                                    if let Some(report) = st.calendar.take_spoken() {
+                                        if !send_up(&mut up_tx, UpMsg::Text(protocol::say_frame(&report).to_string().into())).await {
+                                            continue 'conn;
+                                        }
+                                    }
+                                }
                                 status(&out, &st, &session, "live", detail);
                             }
                             ServerEvent::Audio { data, rate } => {
@@ -322,6 +331,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             }
                             ServerEvent::UserTranscript(t) => {
                                 user_buf.push_str(&t);
+                                st.calendar.hear(&t);
                                 voice_cards.hear(&st, &session, &t, &out);
                                 if let Some(answer) = voice_confirm.hear(&t) {
                                     let said = if answer == approve::Answer::Yes { "confirmed by voice" } else { "refused by voice" };

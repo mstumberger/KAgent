@@ -378,7 +378,7 @@ async fn run() -> anyhow::Result<()> {
 
     let notifier = notify::Notifier::new();
     let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
-    let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone(), web.clone()).await;
+    let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone(), web.clone(), notifier.clone(), bots.clone(), task_store.clone()).await;
     let _ = calendar_cell.set(calendar.clone());
     calendar::change::register_undo(&calendar, &services);
     let state = Arc::new(AppState {
@@ -419,6 +419,7 @@ async fn run() -> anyhow::Result<()> {
     tracing::info!("platform: {}", kagent_core::platform::summary());
     tasks::start(state.clone());
     state.bots.start(state.notifier.clone(), state.alerts.clone());
+    state.calendar.start();
     rounded::watch(state.windows.clone(), 14);
     {
         // Name old sessions that still have a placeholder title.

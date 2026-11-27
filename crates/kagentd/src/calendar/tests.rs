@@ -5,9 +5,11 @@ mod change;
 mod connection;
 mod google;
 mod places;
+mod report;
+mod secrets;
 
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::{DateTime, Duration, Utc};
 use tokio::sync::broadcast;
@@ -26,6 +28,21 @@ pub struct Rig {
     pub settings: Arc<RwLock<Settings>>,
     pub events: broadcast::Receiver<AgentEvent>,
     skew: Arc<AtomicI64>,
+    /// What went to the Telegram channel of the notifier.
+    pub sent: Arc<Mutex<Vec<crate::notify::Notification>>>,
+    /// Whether a chat is paired.
+    pub paired: Arc<AtomicBool>,
+    /// The reminders and tasks due today.
+    pub tasks: Arc<Mutex<Vec<super::report::TaskLine>>>,
+}
+
+struct Recorder(Arc<Mutex<Vec<crate::notify::Notification>>>);
+
+#[async_trait::async_trait]
+impl crate::notify::TelegramSink for Recorder {
+    async fn notify(&self, notification: crate::notify::Notification) {
+        self.0.lock().unwrap().push(notification);
+    }
 }
 
 impl Rig {
@@ -103,6 +120,13 @@ pub async fn rig_with(web: Option<Arc<crate::web::Web>>) -> Rig {
     let start: DateTime<Utc> = "2026-11-27T08:00:00Z".parse().unwrap();
     let skew = Arc::new(AtomicI64::new(0));
     let clock_skew = skew.clone();
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let notifier = crate::notify::Notifier::new();
+    notifier.set_telegram_sink(Arc::new(Recorder(sent.clone())));
+    let paired = Arc::new(AtomicBool::new(true));
+    let paired_flag = paired.clone();
+    let tasks = Arc::new(Mutex::new(Vec::new()));
+    let tasks_today = tasks.clone();
     let cal = Calendar::new(Parts {
         settings: settings.clone(),
         settings_path: dir.path().join("settings.json"),
@@ -115,7 +139,10 @@ pub async fn rig_with(web: Option<Arc<crate::web::Web>>) -> Rig {
         data_dir: dir.path().join("data"),
         maps: TokenStore::File(dir.path().join("maps.secret")),
         web,
+        notifier: Some(notifier.clone()),
+        paired: Arc::new(move || paired_flag.load(Ordering::SeqCst)),
+        tasks: Arc::new(move |_| tasks_today.lock().unwrap().clone()),
     })
     .await;
-    Rig { cal, fake, dir, settings, events, skew }
+    Rig { cal, fake, dir, settings, events, skew, sent, paired, tasks }
 }

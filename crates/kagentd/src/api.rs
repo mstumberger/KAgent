@@ -151,6 +151,7 @@ pub async fn post_message(
     if text.trim().is_empty() {
         return Err(bad_request("text required"));
     }
+    st.calendar.hear(&text);
     let meta = st.agent.store().meta(&id).await.map_err(|e| not_found(format!("{e:#}")))?;
     if meta.origin == kagent_core::session::SessionOrigin::Subagent {
         return Err(HttpError(StatusCode::CONFLICT, "conflict", "the session of a subagent is read-only: talk to the session that started it".into()));

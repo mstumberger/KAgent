@@ -12,6 +12,34 @@ pub struct Saved {
     /// The `home` text the coordinates belong to.
     pub home_for: String,
     pub home_lat_lng: Option<[f64; 2]>,
+    /// `sl` or `en`: the language of the last thing the owner wrote (`persona.language: auto`).
+    pub last_language: String,
+    /// The last report made for delivery.
+    pub last_report: Option<LastReport>,
+    /// The day (`2026-11-27`) whose report was delivered or given up: once per day.
+    pub report_day: String,
+    /// The owner was told once that the report is skipped (not connected).
+    pub told_skip: bool,
+    /// A report that waits for the first live voice session.
+    pub spoken: Option<Spoken>,
+}
+
+/// What the page shows of the last report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastReport {
+    /// RFC 3339.
+    pub at: String,
+    pub text: String,
+    /// `telegram`, `spoken`.
+    pub sent: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Spoken {
+    pub day: String,
+    pub text: String,
 }
 
 pub fn path(data_dir: &Path) -> PathBuf {

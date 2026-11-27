@@ -51,7 +51,7 @@ fn real_id(cal: &str) -> String {
     if cal == "primary" { OWNER.to_string() } else { cal.to_string() }
 }
 
-/// When an event starts, as a number that sorts (a date counts from its midnight, UTC).
+/// When an event starts, as a number that sorts (a date counts from its midnight, UTC+01:00).
 fn start_key(e: &Value) -> i64 {
     instant(&e["start"]).unwrap_or(0)
 }
@@ -59,7 +59,8 @@ fn start_key(e: &Value) -> i64 {
 fn instant(v: &Value) -> Option<i64> {
     match v.get("dateTime").and_then(Value::as_str) {
         Some(t) => DateTime::parse_from_rfc3339(t).ok().map(|t| t.timestamp()),
-        None => v.get("date").and_then(Value::as_str).and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()).map(|d| d.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp()),
+        None => v.get("date").and_then(Value::as_str).and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())// The fake's calendars are on UTC+01:00: a date is midnight there.
+        .map(|d| d.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() - 3600),
     }
 }
 
