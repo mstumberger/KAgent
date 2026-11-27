@@ -2757,6 +2757,48 @@ workspace tests (658 before), the gated Ollama round trip passes, `tsc` and lint
   `always_ask` call is confirmed in every mode; a repeated changing call within 20 s
   is refused), after the live model typed into the owner's terminal 25 times.
 
+### Session 2026-11-27, night (S44: settings by voice, v0.0.2 item 2)
+
+`specs/voice-control.md` built in seven commits on `v0.0.2`. 692 workspace tests (674
+before), `tsc` clean, `scripts/test-live.py` 36/36, the gated Ollama round trip passes.
+Decisions the spec did not settle:
+
+- `settings_apply::apply(st, patch)` has no `via` parameter (nothing used it); its core,
+  `patch_and_save`, takes the settings, the providers and the path, so the tool is tested
+  without a daemon (`SettingsHost`). A patch that cannot be saved is undone in memory.
+- `PROTECTED_KEYS` holds the spec's list and, stricter: `browser`, `mikrotik`, `sentinel`,
+  `search.searxUrl`, `tasks.onApproval`, `startup.autostart`, `watchers.enabled`,
+  `watchers.disabled`, `schemaVersion`, `knownToolGroups`. The walking test also lists the
+  free keys. `get` masks by key name (token, secret, password, apikey) and
+  `calendar.clientId`; settings.json holds no other secret today.
+- A `set` refused for its keys (protected, unknown, 0 or over 8 keys) assesses as
+  read-only: it says why with no card. A valid `set` is `always_ask` (risk medium).
+- `PermissionEngine::evaluate` keeps its signature (chat); `evaluate_from(.., Origin)` is
+  the one with the origin. A call is voice when its turn id is `live` or its turn was sent
+  with `Via::Voice` (`execute_calls_from`). A Brain turn of `routed` and `auto` therefore
+  raises a card for `always_ask` in `full`.
+- The voice roll is checked at each `turnComplete` against `settings.liveVoice` (not by
+  listening to `settingsChanged`); a connection made by a roll that ends before its setup
+  completes drops the handle and connects fresh. The fresh path is a pure rule
+  (`voice_roll::refused`) with a unit test; the fake Gemini of `test-live.py` does not
+  refuse, so only the roll with the new voice and the handle is end to end.
+- Volume: the playback gain is the page's own volume (localStorage, as before) times
+  `voice.volume / 100`; the slider saves on release. The page reads it from every
+  `settingsChanged` and from `GET /api/state`.
+- Think durations are a process-wide ring of 5 (`live/think_times.rs`); a cancelled turn
+  is not recorded. `GET /api/state` has `voice.thinkMedianMs`.
+- The Brain, `settings` and name lines are in `prompt.rs` (the first two while the tool is
+  offered, the name line while `persona.address` is empty) and in `instruction::live`
+  and `auto`, once each, whatever the chat prompt held. `routed` has no tools: no lines.
+  An empty address reads "the owner's Linux machine" and no "Address the user as".
+- Not changed: `persona.address` still defaults to "Marko" for a new settings file; so the
+  name question appears only when the owner (or a new default) empties it. Open question
+  for the owner. The stale task `t56cca8ba` is not touched.
+- Headless Chrome (production build, a daemon under a temporary home): live is selected by
+  default, `routed` shows "Every request waits for the Brain (...)", the slider saves
+  `voice.volume` once. The over-4 s warning is checked by reading the code only (no brain
+  turn was slow enough to run).
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2806,6 +2848,9 @@ Phase 5 (planned 2026-11-27, not started; the order is the dependency order)
 - [ ] S37 history, resume and the terminal
 - [ ] S38 worktree, review and notifications
 - [ ] S39 automation: scheduled coder runs
+
+v0.0.2
+- [x] S44 settings by voice and the voice rules (`specs/voice-control.md`; section E, 2026-11-27 night)
 
 Phase 6 (planned 2026-11-27, not started; S40 first)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)

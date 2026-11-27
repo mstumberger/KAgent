@@ -36,7 +36,7 @@ type AuditRecord = /* config.md section 6 */;
 
 | Method path | Request | Response |
 |---|---|---|
-| GET `/api/state` | | `{version, settings, pendingApprovals: ApprovalRequest[], running: string[] /*session ids*/, chatModelValid: boolean, privHelper: "installed"\|"missing", alertsOpen: number}` |
+| GET `/api/state` | | `{version, settings, pendingApprovals: ApprovalRequest[], running: string[] /*session ids*/, chatModelValid: boolean, privHelper: "installed"\|"missing", alertsOpen: number, voice: {thinkMedianMs: number\|null}}` (`voice.thinkMedianMs`: the median of the last 5 brain turns of a voice session, in ms, kept in memory; `null` until one ran; Settings -> Voice warns over 4000) |
 | PUT `/api/settings` | partial settings | full settings. Changing `permissionMode`/`rules` applies immediately to the engine |
 | GET `/api/providers/templates` | | `Template[]` |
 | GET `/api/providers` | | `ProviderView[]` in `order` |
