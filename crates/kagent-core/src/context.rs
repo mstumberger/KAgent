@@ -143,7 +143,7 @@ pub fn request_history(stored: &[Message], summary: Option<HistorySummary<'_>>, 
 
 /// Tool groups in the order they are kept when the window is small: diagnosis first,
 /// then changes, then the rest.
-pub const GROUP_PRIORITY: [&str; 17] = ["system", "kernel", "services", "hardware", "skills", "tasks", "agent", "memory", "files", "web", "security", "change", "desktop", "shell", "trace", "router", "other"];
+pub const GROUP_PRIORITY: [&str; 18] = ["system", "kernel", "services", "hardware", "skills", "tasks", "agent", "memory", "files", "web", "calendar", "security", "change", "desktop", "shell", "trace", "router", "other"];
 
 pub fn spec_chars(t: &crate::tool::ToolSpec) -> usize {
     t.name.len() + t.description.len() + t.input_schema.to_string().len() + 40

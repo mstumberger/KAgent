@@ -40,10 +40,6 @@ fn attrs(id: &str) -> HashMap<&str, &str> {
     HashMap::from([("app", APP), ("kind", KIND), ("id", id)])
 }
 
-fn telegram_attrs() -> HashMap<&'static str, &'static str> {
-    HashMap::from([("app", APP), ("kind", TELEGRAM_KIND), ("id", TELEGRAM_ID)])
-}
-
 async fn put<'a>(ss: &SecretService<'_>, label: &str, attrs: HashMap<&'a str, &'a str>, key: &str) -> anyhow::Result<()> {
     let col = ss.get_default_collection().await?;
     col.unlock().await?;
@@ -128,11 +124,28 @@ pub async fn attach(store: Arc<ProviderStore>) -> bool {
     true
 }
 
-/// Where the Telegram bot token is kept (bots.md section 1, config.md section 11).
+/// Where one secret lives in the keyring and in the fallback file: the Telegram bot
+/// token, the calendar's OAuth record and the Maps key are three of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Slot {
+    /// `kind` and `id` of the Secret Service item (`app=kagent`).
+    pub kind: &'static str,
+    pub id: &'static str,
+    /// The label the keyring shows.
+    pub label: &'static str,
+    /// The 0600 file under `<config>` that holds it without a keyring.
+    pub file: &'static str,
+}
+
+pub const TELEGRAM: Slot = Slot { kind: TELEGRAM_KIND, id: TELEGRAM_ID, label: "KAgent Telegram bot", file: TELEGRAM_SECRET };
+/// The calendar's OAuth record (calendar.md section 1): client secret and refresh token, one JSON text.
+pub const CALENDAR: Slot = Slot { kind: "calendar", id: "oauth", label: "KAgent Google Calendar", file: "calendar.json" };
+
+/// Where a secret is kept (bots.md section 1, calendar.md section 1, config.md section 11).
 pub enum TokenStore {
-    /// The Secret Service, as `app=kagent, kind=telegram, id=bot`.
-    Keyring,
-    /// `<config>/telegram.secret` (0600).
+    /// The Secret Service, as `app=kagent, kind=<kind>, id=<id>`; the slot's file when none answers.
+    Keyring(Slot),
+    /// A file (0600).
     File(PathBuf),
 }
 
@@ -140,10 +153,15 @@ impl TokenStore {
     /// The store of this daemon: the file under `KAGENT_HOME` (unless `KAGENT_KEYRING`
     /// is set, the rule of `attach`), else the keyring.
     pub fn telegram(config_dir: &Path) -> Self {
+        Self::slot(config_dir, TELEGRAM)
+    }
+
+    /// The store of a slot, by the same rule.
+    pub fn slot(config_dir: &Path, slot: Slot) -> Self {
         if std::env::var_os("KAGENT_HOME").is_some() && std::env::var_os("KAGENT_KEYRING").is_none() {
-            Self::File(config_dir.join(TELEGRAM_SECRET))
+            Self::File(config_dir.join(slot.file))
         } else {
-            Self::Keyring
+            Self::Keyring(slot)
         }
     }
 
@@ -152,11 +170,11 @@ impl TokenStore {
     pub async fn get(&self) -> anyhow::Result<Option<String>> {
         match self {
             Self::File(path) => Ok(read_secret(path)),
-            Self::Keyring => match connect().await {
-                Some(ss) => Ok(get(&ss, telegram_attrs()).await?.or_else(|| read_secret(&secret_file()))),
+            Self::Keyring(slot) => match connect().await {
+                Some(ss) => Ok(get(&ss, attrs_of(slot)).await?.or_else(|| read_secret(&secret_file(slot)))),
                 None => {
-                    tracing::warn!("no Secret Service for the Telegram token; {} is read instead", secret_file().display());
-                    Ok(read_secret(&secret_file()))
+                    tracing::warn!("no Secret Service for the {} secret; {} is read instead", slot.kind, secret_file(slot).display());
+                    Ok(read_secret(&secret_file(slot)))
                 }
             },
         }
@@ -166,14 +184,14 @@ impl TokenStore {
     pub async fn set(&self, token: &str) -> anyhow::Result<()> {
         match self {
             Self::File(path) => write_secret(path, token),
-            Self::Keyring => match connect().await {
+            Self::Keyring(slot) => match connect().await {
                 Some(ss) => {
-                    delete(&ss, telegram_attrs()).await?;
-                    put(&ss, "KAgent Telegram bot", telegram_attrs(), token).await
+                    delete(&ss, attrs_of(slot)).await?;
+                    put(&ss, slot.label, attrs_of(slot), token).await
                 }
                 None => {
-                    tracing::warn!("no Secret Service for the Telegram token; it is kept in {} (0600) instead", secret_file().display());
-                    write_secret(&secret_file(), token)
+                    tracing::warn!("no Secret Service for the {} secret; it is kept in {} (0600) instead", slot.kind, secret_file(slot).display());
+                    write_secret(&secret_file(slot), token)
                 }
             },
         }
@@ -182,22 +200,29 @@ impl TokenStore {
     /// Forget the token; forgetting none is not an error. The fallback file goes too.
     pub async fn clear(&self) -> anyhow::Result<()> {
         let keyring = match self {
-            Self::File(path) => remove_secret(path),
-            Self::Keyring => match connect().await {
-                Some(ss) => delete(&ss, telegram_attrs()).await,
+            Self::File(path) => return remove_secret(path),
+            Self::Keyring(slot) => match connect().await {
+                Some(ss) => delete(&ss, attrs_of(slot)).await,
                 None => {
-                    tracing::warn!("no Secret Service: the Telegram token may still be in the keyring");
+                    tracing::warn!("no Secret Service: the {} secret may still be in the keyring", slot.kind);
                     Ok(())
                 }
             },
         };
-        keyring.and_then(|_| remove_secret(&secret_file()))
+        match self {
+            Self::Keyring(slot) => keyring.and_then(|_| remove_secret(&secret_file(slot))),
+            Self::File(_) => keyring,
+        }
     }
 }
 
+fn attrs_of(slot: &Slot) -> HashMap<&'static str, &'static str> {
+    HashMap::from([("app", APP), ("kind", slot.kind), ("id", slot.id)])
+}
+
 /// The file a daemon without a keyring falls back to.
-fn secret_file() -> PathBuf {
-    crate::paths::Paths::resolve().config.join(TELEGRAM_SECRET)
+fn secret_file(slot: &Slot) -> PathBuf {
+    crate::paths::Paths::resolve().config.join(slot.file)
 }
 
 fn read_secret(path: &Path) -> Option<String> {

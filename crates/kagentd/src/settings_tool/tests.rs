@@ -53,7 +53,7 @@ fn first_chat_model(h: &TestHost) -> String {
 #[tokio::test]
 async fn get_masks_every_secret_and_shows_the_rest() {
     let h = host();
-    h.settings.write().unwrap().patch(json!({"calendar": {"clientId": "abc.apps.example", "other": "x"}, "foo": {"apiToken": "t-123", "emptyToken": ""}})).unwrap();
+    h.settings.write().unwrap().patch(json!({"calendar": {"clientId": "abc.apps.example", "home": "Glavni trg 1"}, "foo": {"apiToken": "t-123", "emptyToken": ""}})).unwrap();
     let t = tool(&h);
     let all = run(&t, json!({"action": "get"})).await;
     assert!(!all.is_error);
@@ -61,7 +61,7 @@ async fn get_masks_every_secret_and_shows_the_rest() {
     assert_eq!(v["calendar"]["clientId"], "<set>");
     assert_eq!(v["foo"]["apiToken"], "<set>");
     assert_eq!(v["foo"]["emptyToken"], "<empty>");
-    assert_eq!(v["calendar"]["other"], "x", "what is not a secret is shown");
+    assert_eq!(v["calendar"]["home"], "Glavni trg 1", "what is not a secret is shown");
     assert_eq!(v["voice"]["brain"], "live", "a missing section shows its defaults");
     assert!(!all.content.contains("abc.apps.example") && !all.content.contains("t-123"));
     let one = run(&t, json!({"action": "get", "key": "calendar.clientId"})).await;
@@ -149,6 +149,7 @@ async fn every_protected_key_is_refused_with_the_reason() {
 const FREE_KEYS: &[&str] = &[
     "chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel", "liveVoice", "maxIterations", "options", "persona", "startWidget", "startup.greeting", "voice",
     "desktop", "watchers.quietHours", "watchers.spoken", "tasks.deliver", "tasks.timeoutMin", "tasks.maxConcurrent", "skills", "compaction", "memory", "search.engine", "subagents",
+    "calendar.calendars", "calendar.defaultCalendar", "calendar.defaultDurationMin", "calendar.home", "calendar.travelMarginMin", "calendar.report",
 ];
 
 #[test]
@@ -165,7 +166,7 @@ fn every_key_is_protected_or_free() {
     }
     assert!(unclassified.is_empty(), "put each key in PROTECTED_KEYS or FREE_KEYS, not both: {unclassified:?}");
     // The keys the tool is told about exist in the view (a typo in a list protects nothing).
-    for p in PROTECTED_KEYS.iter().filter(|p| !["calendar.clientId"].contains(p)) {
+    for p in PROTECTED_KEYS {
         assert!(keys::leaves(&view).iter().any(|k| under(k, p)), "{p} names no setting");
     }
     for p in FREE_KEYS {
