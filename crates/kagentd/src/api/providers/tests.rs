@@ -157,6 +157,7 @@ fn the_model_lists_follow_the_roles() {
     assert!(lists["live"].as_array().unwrap().is_empty());
     assert_eq!(lists["chat"][0]["ref"], format!("nvidia::{}", lists["chat"][0]["id"].as_str().unwrap()));
     assert!(lists["chat"][0]["config"].get("contextWindow").is_some(), "the resolved config, as before");
+    assert_eq!((lists["chat"][0]["providerId"].as_str(), lists["chat"][0]["providerName"].as_str()), (Some("nvidia"), Some("NVIDIA")), "the picker groups by provider (picker.md section 3)");
 
     with_provider(&s, "gemini");
     let lists = model_lists(&s);

@@ -103,6 +103,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/compact", post(crate::compact_api::compact_session))
         .route("/sessions/{id}/todo", put(crate::todo_api::put_todo))
         .route("/sessions/{id}/plan", post(crate::plan_api::post_plan))
+        .route("/sessions/{id}/model", put(crate::model_api::put_model))
         .route("/approvals/{id}", post(api::resolve_approval))
         .route("/stop-all", post(api::stop_all))
         .route("/system", get(api::get_system))

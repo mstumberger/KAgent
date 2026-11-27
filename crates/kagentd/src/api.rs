@@ -111,8 +111,8 @@ pub async fn list_sessions(
 }
 
 pub async fn create_session(State(st): State<Arc<AppState>>, Json(body): Json<Value>) -> ApiResult<Response> {
-    let title = body.get("title").and_then(Value::as_str).unwrap_or("");
-    let meta = st.agent.store().create(title).await.map_err(internal)?;
+    let default_model = st.settings.read().unwrap().chat_model.clone();
+    let meta = crate::model_api::create(st.agent.store(), &st.providers, &default_model, &body).await?;
     Ok((StatusCode::CREATED, Json(meta)).into_response())
 }
 

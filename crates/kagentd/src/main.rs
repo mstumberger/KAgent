@@ -24,6 +24,7 @@ mod memory;
 mod net;
 mod notify;
 mod paths;
+mod model_api;
 mod plan_api;
 mod prompt;
 mod secrets;
