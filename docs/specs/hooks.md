@@ -70,8 +70,11 @@ spawned and the call path is unchanged.
   `async fn event(&self, HookEvent) -> Option<String>` (the context). The loop calls
   it before the first turn of a session (`SessionStart`: its history is still empty),
   before the first model request of a turn (`UserPromptSubmit`) and after
-  `TurnFinished` (`Stop`, awaited, up to its deadline: a hung Stop hook keeps
-  `wait_idle` waiting that long). The daemon calls the runner itself where an alert is
+  `TurnFinished` (`Stop`, not awaited since 2026-11-27: it runs in a task of its own
+  with a limit of 90 s for all the Stop hooks of a turn, `STOP_HOOKS_LIMIT`, past which
+  it is dropped with a warning in the log; each hook keeps its own `timeoutMs`. The
+  turn, `wait_idle` and a queued next turn do not wait for it; its context reaches the
+  first model request after it is added). The daemon calls the runner itself where an alert is
   raised (`AlertRaised`, `watch/mod.rs`).
 - `execute_call` calls `pre` between validation and `authorize`.
 - A hook that fails or is missing acts as Allow with the unchanged input.

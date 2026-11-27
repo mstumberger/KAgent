@@ -139,3 +139,45 @@ async fn contexts_are_kept_apart_by_session() {
     agent.add_hook_context(&session, [("Stop", "late".to_string())]);
     assert!(agent.hook_messages(&session, &mut budget).is_empty());
 }
+
+/// A `Stop` hook that waits until the test lets it go.
+struct SlowStop(Arc<tokio::sync::Notify>);
+
+#[async_trait]
+impl AgentHooks for SlowStop {
+    async fn event(&self, event: HookEvent<'_>) -> Option<String> {
+        if !matches!(event, HookEvent::Stop { .. }) {
+            return None;
+        }
+        self.0.notified().await;
+        Some("late news".into())
+    }
+}
+
+/// Decision of 2026-11-27 (hooks.md section 4): the turn does not wait for its `Stop` hooks.
+#[tokio::test]
+async fn a_slow_stop_hook_does_not_hold_the_turn_and_its_context_comes_later() {
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let (agent, session, _dir) = agent(Some(Arc::new(SlowStop(gate.clone())))).await;
+    let outcome = agent.send(&session, "hi".into(), crate::protocol::Via::Text).await.unwrap();
+    let crate::agent::SendOutcome::Started { handle, .. } = outcome else { panic!("a turn starts") };
+    // The model of this rig fails at once; the turn ends while the hook still waits.
+    let result = tokio::time::timeout(Duration::from_secs(2), handle.wait()).await.expect("the turn ended without its Stop hook");
+    assert_eq!(result.status, TurnStatus::Failed);
+    let mut budget = CONTEXT_CHARS_PER_TURN;
+    assert!(agent.hook_messages(&session, &mut budget).is_empty(), "nothing yet");
+    gate.notify_one();
+    let added = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let got = agent.hook_messages(&session, &mut budget);
+            if !got.is_empty() {
+                return got;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the hook's context arrives");
+    assert_eq!(texts(&added), ["[hook Stop] late news"]);
+    assert!(STOP_HOOKS_LIMIT >= Duration::from_secs(60), "room for the longest single hook");
+}

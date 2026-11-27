@@ -121,7 +121,7 @@ fn answering(r: &Rig, decision: ApprovalDecision, n: usize) -> tokio::task::Join
         let mut cards = Vec::new();
         for _ in 0..n {
             let request = next_card(&mut events).await;
-            assert!(broker.resolve(&request.request_id, decision.clone()));
+            assert!(broker.resolve(&request.request_id, decision.clone(), kagent_core::permission::ApprovalVia::Click));
             cards.push(request);
         }
         cards
@@ -153,7 +153,7 @@ async fn a_planning_turn_refuses_what_is_not_research_and_the_approved_plan_is_i
     let broker = r.broker.clone();
     let side = tokio::spawn(async move {
         let request = next_card(&mut events).await;
-        assert!(broker.resolve(&request.request_id, ApprovalDecision::AllowOnce));
+        assert!(broker.resolve(&request.request_id, ApprovalDecision::AllowOnce, kagent_core::permission::ApprovalVia::Click));
         request
     });
     let (result, emitted) = turn(&r, "plan how to free disk space", TurnOpts { plan: true, ..Default::default() }).await;
@@ -196,7 +196,9 @@ async fn a_planning_turn_refuses_what_is_not_research_and_the_approved_plan_is_i
     let path = r.plans.join(format!("{}-1.md", r.session));
     assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
     let meta = r.store.meta(&r.session).await.unwrap();
-    assert_eq!(meta.approved_plan, Some(kagent_core::plan::ApprovedPlan { path: path.display().to_string(), text }));
+    let saved = meta.approved_plan.expect("approved");
+    assert_eq!((saved.path, saved.text), (path.display().to_string(), text));
+    assert!(saved.approved_at.is_some_and(|t| (chrono::Utc::now() - t).num_seconds() < 60), "stamped at the approval");
 }
 
 #[tokio::test]
@@ -274,7 +276,7 @@ async fn a_plan_denied_without_a_reason_says_so() {
     let broker = r.broker.clone();
     let side = tokio::spawn(async move {
         let request = next_card(&mut events).await;
-        assert!(broker.resolve(&request.request_id, ApprovalDecision::Deny { reason: None }));
+        assert!(broker.resolve(&request.request_id, ApprovalDecision::Deny { reason: None }, kagent_core::permission::ApprovalVia::Click));
     });
     let (result, _) = turn(&r, "plan it", TurnOpts { plan: true, ..Default::default() }).await;
     side.await.unwrap();
@@ -316,7 +318,7 @@ async fn the_approved_plan_is_in_the_prompt_after_a_compaction() {
     let broker = r.broker.clone();
     let side = tokio::spawn(async move {
         let request = next_card(&mut events).await;
-        assert!(broker.resolve(&request.request_id, ApprovalDecision::AllowOnce));
+        assert!(broker.resolve(&request.request_id, ApprovalDecision::AllowOnce, kagent_core::permission::ApprovalVia::Click));
     });
     let _ = turn(&r, "plan it", TurnOpts { plan: true, ..Default::default() }).await;
     side.await.unwrap();

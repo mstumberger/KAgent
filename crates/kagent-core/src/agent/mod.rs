@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::model::{ModelClient, ModelDelta, ModelRequest};
 use crate::permission::{PermissionBroker, PermissionEngine};
-use crate::protocol::{AgentEvent, Message, ToolCall, TurnStatus, Usage, Via};
+use crate::protocol::{AgentEvent, Message, ToolCall, Usage, Via};
 use crate::session::SessionStore;
 use crate::tool::ToolRegistry;
 mod calls;
@@ -24,21 +24,26 @@ mod config;
 pub mod hooks;
 pub mod title;
 pub(crate) mod state;
+mod spawn;
 mod turn;
 
 pub use crate::context::sanitize_history;
 use crate::compact::Step;
 use crate::context::history_budget_tokens;
 use state::{SessionState, Taken, TurnInput};
-use turn::TurnCell;
 pub use config::{AgentConfig, AgentDeps, CompactionSource, ConfigSource, RuleSink, SendOutcome, TurnContext, TurnOpts};
 pub use hooks::{AgentHooks, HookEvent, HookInput, HookVerdict, ToolHooks};
 pub use turn::{TurnHandle, TurnResult};
 pub use crate::compact::is_capacity_error;
 pub const DEFAULT_TITLE: &str = "New session";
+/// The sessions in memory, by id; shared with the background title task (`title.rs`).
+pub(crate) type Sessions = Arc<Mutex<std::collections::HashMap<String, Arc<SessionState>>>>;
 
 /// Error of a turn whose loop panicked; the panic itself goes to the log.
 const INTERNAL_ERROR: &str = "internal error (see log)";
+/// How a turn ends when the model answered with neither text nor a tool call twice
+/// (Ollama drops a call it cannot parse): failed, so the owner sees it.
+pub const NO_ANSWER: &str = "the model gave no answer (asked twice): try again, or choose another chat model";
 
 pub struct Agent {
     pub(crate) audit: Option<Arc<crate::audit::AuditLog>>,
@@ -50,7 +55,7 @@ pub struct Agent {
     pub(crate) events: broadcast::Sender<AgentEvent>,
     config: ConfigSource,
     on_rules_changed: Option<RuleSink>,
-    sessions: Mutex<std::collections::HashMap<String, Arc<SessionState>>>,
+    sessions: Sessions,
     /// Session titles refined in the background (see `title.rs`).
     refined: title::Refined,
     tool_groups: Mutex<Option<Vec<String>>>,
@@ -74,7 +79,7 @@ impl Agent {
             events: deps.events,
             config: deps.config,
             on_rules_changed: deps.on_rules_changed,
-            sessions: Mutex::new(std::collections::HashMap::new()),
+            sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             refined: Default::default(),
             tool_groups: Mutex::new(None),
             services: deps.services,
@@ -159,90 +164,6 @@ impl Agent {
         }
     }
 
-    /// Run a turn that `SessionState::take` started, in its own task. The task ends the
-    /// turn (the handle resolves, the session may go idle) and starts the turn that
-    /// takes over input queued in the meantime.
-    fn spawn_turn(
-        self: &Arc<Self>,
-        session_id: &str,
-        turn_id: String,
-        input: TurnInput,
-        state: Arc<SessionState>,
-        cancel: CancellationToken,
-    ) -> TurnHandle {
-        let (handle, done, cell) = TurnHandle::new();
-        let (this, sid) = (self.clone(), session_id.to_string());
-        tokio::spawn(async move {
-            let result = this.run_turn(&sid, &turn_id, input, &state, &cancel, &cell).await;
-            // Settle the session before the handle resolves: a caller that awaited the
-            // turn finds it no longer running.
-            if let Some((input, cancel)) = state.settle(result.clone()) {
-                let turn_id = uuid::Uuid::new_v4().to_string();
-                this.spawn_turn(&sid, turn_id, input, state, cancel);
-            }
-            *cell.result.lock().unwrap() = Some(result);
-            let _ = done.send(());
-        });
-        handle
-    }
-
-    /// Run one turn and return how it ended. The loop runs under a panic guard: a panic
-    /// (a tool, a provider) ends the turn as failed instead of leaving the session
-    /// stuck with a turn that never clears.
-    async fn run_turn(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-        input: TurnInput,
-        state: &SessionState,
-        cancel: &CancellationToken,
-        cell: &TurnCell,
-    ) -> TurnResult {
-        let _ = self.events.send(AgentEvent::TurnStarted {
-            session_id: session_id.into(),
-            turn_id: turn_id.into(),
-            input: input.text.clone(),
-            via: input.via,
-        });
-        let mut usage = Usage::default();
-        let via = input.via;
-        let run = futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(
-            self.turn_loop(session_id, turn_id, input, state, cancel, &mut usage, cell.text.clone()),
-        ));
-        let (status, error) = match run.await {
-            Ok(Ok(())) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
-            Ok(Ok(())) => (TurnStatus::Completed, None),
-            Ok(Err(_)) if cancel.is_cancelled() => (TurnStatus::Cancelled, None),
-            Ok(Err(e)) => {
-                let error = format!("{e:#}");
-                tracing::warn!(session_id, turn_id, "turn failed: {error}");
-                (TurnStatus::Failed, Some(error))
-            }
-            Err(payload) => {
-                let panic = if let Some(s) = payload.downcast_ref::<&str>() {
-                    (*s).to_string()
-                } else if let Some(s) = payload.downcast_ref::<String>() {
-                    s.clone()
-                } else {
-                    "unknown panic payload".to_string()
-                };
-                tracing::error!(session_id, turn_id, "turn panicked: {panic}");
-                (TurnStatus::Failed, Some(INTERNAL_ERROR.into()))
-            }
-        };
-        let text = std::mem::take(&mut *cell.text.lock().unwrap());
-        let _ = self.events.send(AgentEvent::TurnFinished {
-            session_id: session_id.into(),
-            turn_id: turn_id.into(),
-            status,
-            error: error.clone(),
-            usage: usage.clone(),
-        });
-        // Hooks (hooks.md section 4): `Stop` after `TurnFinished`; what it adds waits for the next turn.
-        self.stop_hooks(session_id, turn_id, via, status, error.as_deref()).await;
-        TurnResult { status, error, text, usage }
-    }
-
     #[allow(clippy::too_many_arguments)]
     async fn turn_loop(
         &self,
@@ -262,7 +183,7 @@ impl Agent {
         if let Some(block) = &input.system_suffix {
             config.system_prompt.push_str(block);
         }
-        let (mut fell_back, mut recompacted) = (false, false);
+        let (mut fell_back, mut recompacted, mut asked_again) = (false, false, false);
         if config.model_ref.trim().is_empty() {
             anyhow::bail!("no chat model selected - pick one in Settings -> Providers");
         }
@@ -312,10 +233,7 @@ impl Agent {
             // Plan mode (plan-todo.md section 2), read before every request: the session
             // enters and leaves it while a turn runs. Both blocks are built here and never
             // kept in `config`, so a compaction or a fallback cannot lose them.
-            let (planning, approved_plan) = {
-                let meta = state.meta.lock().await;
-                (meta.planning, meta.approved_plan.clone())
-            };
+            let (planning, approved_plan) = self.current_plan(state).await;
             let mut system = config.system_prompt.clone();
             if planning {
                 system.push_str(crate::plan::PLAN_PROMPT);
@@ -392,6 +310,14 @@ impl Agent {
                     c
                 })
                 .collect();
+            // Neither text nor a call: asked once more, then the turn fails with NO_ANSWER.
+            if calls.is_empty() && response.text.trim().is_empty() && !cancel.is_cancelled() {
+                tracing::warn!(session_id, turn_id, retry = !asked_again, "the model gave no answer");
+                anyhow::ensure!(!asked_again, NO_ANSWER);
+                asked_again = true;
+                iteration -= 1;
+                continue;
+            }
             let mut assistant = Message::assistant(response.text, calls.clone()).with_via(input.via);
             assistant.provider_state = response.provider_state;
             self.push_messages(session_id, state, vec![assistant]).await?;

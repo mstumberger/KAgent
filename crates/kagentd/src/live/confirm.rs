@@ -47,6 +47,31 @@ pub struct VoiceConfirm {
     pending: Mutex<Option<Pending>>,
 }
 
+/// Within this time the same changing call (tool and arguments) is not run twice: a
+/// live model that loops on one action is stopped after the first.
+pub const REPEAT_WINDOW: Duration = Duration::from_secs(20);
+
+/// The changing calls a live session ran a moment ago.
+#[derive(Default)]
+pub struct Repeats {
+    ran: Mutex<Vec<(String, Instant)>>,
+}
+
+impl Repeats {
+    /// Record that the call runs now; false when the same call ran within
+    /// `REPEAT_WINDOW` (it must not run again).
+    pub fn first(&self, tool: &str, args: &Value, now: Instant) -> bool {
+        let key = key(tool, args);
+        let mut ran = self.ran.lock().unwrap();
+        ran.retain(|(_, at)| now.duration_since(*at) <= REPEAT_WINDOW);
+        if ran.iter().any(|(k, _)| *k == key) {
+            return false;
+        }
+        ran.push((key, now));
+        true
+    }
+}
+
 /// A call's identity: the tool and its exact arguments.
 pub fn key(tool: &str, args: &Value) -> String {
     format!("{tool} {args}")
@@ -165,6 +190,21 @@ mod tests {
         assert_eq!(status(&c.step("system_power", &args, &a, t0)), "needs_confirmation", "one confirmation runs one call");
         c.hear("no, don't");
         assert_eq!(status(&c.step("system_power", &args, &a, t0)), "denied");
+    }
+
+    /// The session of 2026-11-27, 22:03: the live model sent the same `terminal send`
+    /// 25 times in 15 seconds, into the owner's only terminal.
+    #[test]
+    fn the_same_changing_call_runs_once_in_the_window() {
+        let r = Repeats::default();
+        let args = json!({"action": "send", "target": "konsole", "text": "systemctl --failed"});
+        let t0 = Instant::now();
+        assert!(r.first("terminal", &args, t0));
+        for i in 1..25 {
+            assert!(!r.first("terminal", &args, t0 + Duration::from_millis(600 * i)), "repeat {i} is refused");
+        }
+        assert!(r.first("terminal", &json!({"action": "send", "target": "konsole", "text": "uptime"}), t0), "another text is another call");
+        assert!(r.first("terminal", &args, t0 + REPEAT_WINDOW + Duration::from_secs(1)), "later it may run again");
     }
 
     #[test]

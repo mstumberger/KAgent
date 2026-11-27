@@ -12,14 +12,14 @@ use tokio_util::sync::CancellationToken;
 use kagent_core::protocol::{Message, ToolCall, Via};
 
 use super::approve::{self, Answer};
-use super::confirm::{Step, VoiceConfirm};
+use super::confirm::{Repeats, Step, VoiceConfirm};
 use super::{brain, protocol};
 use crate::AppState;
 
 /// A tool call of the live model, off the audio loop: an approval can take a minute.
 /// `own` is the call's token (registered under `id` by the audio loop): the server can cancel this one call.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::FunctionCall, id: String, own: CancellationToken, out: mpsc::UnboundedSender<Value>, tool_tx: mpsc::UnboundedSender<Value>, cancel: CancellationToken, calls: Arc<brain::Calls>, confirm: Arc<VoiceConfirm>) {
+pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::FunctionCall, id: String, own: CancellationToken, out: mpsc::UnboundedSender<Value>, tool_tx: mpsc::UnboundedSender<Value>, cancel: CancellationToken, calls: Arc<brain::Calls>, confirm: Arc<VoiceConfirm>, repeats: Arc<Repeats>) {
     tokio::spawn(async move {
         let _ = out.send(json!({"type": "tool", "callId": id, "name": c.name, "state": "started"}));
         // Enforced, not only hidden: a tool not declared to this live model does not run.
@@ -32,18 +32,26 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
         }
         let call = ToolCall { id, name: c.name.clone(), input: c.args.clone() };
         // Spoken confirmation first (voice.md section 12): a call the engine would ask
-        // about runs only after the owner's own "yes" / "confirm", and its card is then
-        // answered by that voice, not by a click.
-        if let Some(assessment) = st.agent.approval_needed(&session, &call) {
-            match confirm.step(&c.name, &c.args, &assessment, Instant::now()) {
-                Step::Run => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
-                Step::Ask(response) | Step::Refused(response) => {
-                    calls.finish(&call.id);
-                    let state = if response["status"] == "denied" { "denied" } else { "awaiting voice confirmation" };
-                    let _ = out.send(json!({"type": "tool", "callId": call.id, "name": c.name, "state": state}));
-                    let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, response)]));
-                    return;
+        // about, and every `always_ask` call (typing into a terminal, changing a
+        // setting), runs only after the owner's own "yes" / "confirm"; its card, if it
+        // has one, is then answered by that voice, not by a click.
+        if let Some((assessment, ask)) = st.agent.voice_gate(&session, &call) {
+            let refuse = |state: &str, response: Value| {
+                calls.finish(&call.id);
+                let _ = out.send(json!({"type": "tool", "callId": call.id, "name": c.name, "state": state}));
+                let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, response)]));
+            };
+            if ask {
+                match confirm.step(&c.name, &c.args, &assessment, Instant::now()) {
+                    Step::Run => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
+                    Step::Ask(response) => return refuse("awaiting voice confirmation", response),
+                    Step::Refused(response) => return refuse("denied", response),
                 }
+            }
+            // A live model that repeats one changing action is stopped after the first.
+            if !assessment.read_only && !repeats.first(&c.name, &c.args, Instant::now()) {
+                let output = "not executed: you ran exactly this a moment ago and it is done. Do not repeat it; tell the owner the result, or do something else.";
+                return refuse("duplicate", json!({"status": "duplicate", "output": output}));
             }
         }
         let privilege = st.settings.read().unwrap().privilege_method();

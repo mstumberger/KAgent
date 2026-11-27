@@ -19,6 +19,9 @@ use crate::todo::TodoAccess;
 use crate::tool::{PrivilegeMethod, Tool};
 use crate::tools::builtin_registry;
 
+mod audit;
+mod expiry;
+
 /// Never asked: no test here runs a turn.
 struct NoModel;
 
@@ -65,7 +68,7 @@ async fn rig(mode: PermissionMode, rules: Vec<AllowRule>) -> Rig {
     let agent = Agent::new(AgentDeps {
         services: None,
         hooks: None,
-        audit: None,
+        audit: Some(Arc::new(crate::audit::AuditLog::open(&dir.path().join("data/audit.jsonl")).unwrap())),
         model: Arc::new(NoModel),
         tools: Arc::new(registry),
         permissions: Arc::new(PermissionEngine::new(mode, rules)),
@@ -122,7 +125,7 @@ async fn answered(r: &Rig, input: Value, decision: ApprovalDecision) -> (Approva
     let broker = r.agent.broker().clone();
     let side = tokio::spawn(async move {
         let request = next_card(&mut rx).await;
-        assert!(broker.resolve(&request.request_id, decision));
+        assert!(broker.resolve(&request.request_id, decision, crate::permission::ApprovalVia::Click));
         request
     });
     let out = call(&r.agent, &r.session, "c1", "plan_exit", input).await;
@@ -230,7 +233,9 @@ async fn an_approved_plan_ends_plan_mode_and_is_saved_and_kept_in_the_meta() {
     assert!(!r.agent.permissions().is_planning(&r.session), "the engine follows");
     let path = r.plans.join(format!("{}-1.md", r.session));
     assert_eq!(std::fs::read_to_string(&path).unwrap(), plan);
-    assert_eq!(r.agent.store().meta(&r.session).await.unwrap().approved_plan, Some(ApprovedPlan { path: path.display().to_string(), text: plan.clone() }));
+    let saved = r.agent.store().meta(&r.session).await.unwrap().approved_plan.expect("approved");
+    assert_eq!((saved.path.as_str(), saved.text.as_str()), (path.display().to_string().as_str(), plan.as_str()));
+    assert!(saved.approved_at.is_some(), "stamped at the approval");
     assert_eq!(planning_events(&drained(&mut rx).await), [false], "one event for the change");
 
     // A second plan, one text with space around it: the next number, and it replaces the
@@ -336,7 +341,7 @@ fn the_plan_step_refuses_only_what_is_neither_read_only_nor_allowed() {
     mutation.needs_approval = true;
     assert_eq!(plan_denial(false, "shell", &mutation), None, "not planning");
     assert_eq!(plan_denial(true, "read_file", &research), None, "research");
-    for tool in ["shell", "package", "write_file", "skill_save", "agent_run"] {
+    for tool in ["shell", "package", "write_file", "skill_save"] {
         assert_eq!(plan_denial(true, tool, &mutation), Some(PLAN_DENIED), "{tool}");
     }
     for tool in PLAN_ALLOWED {
@@ -344,7 +349,7 @@ fn the_plan_step_refuses_only_what_is_neither_read_only_nor_allowed() {
     }
     assert_eq!(approved_prompt("1. a\n2. b"), "\nApproved plan, follow it:\n1. a\n2. b\n");
     assert!(PLAN_PROMPT.starts_with('\n') && PLAN_PROMPT.ends_with('\n') && PLAN_PROMPT.contains("plan_exit"), "a block for the system prompt");
-    assert_eq!(serde_json::to_value(ApprovedPlan { path: "/data/plans/s-1.md".into(), text: "1.".into() }).unwrap(), json!({ "path": "/data/plans/s-1.md", "text": "1." }));
+    assert_eq!(serde_json::to_value(ApprovedPlan { path: "/data/plans/s-1.md".into(), text: "1.".into(), approved_at: None }).unwrap(), json!({ "path": "/data/plans/s-1.md", "text": "1." }));
 }
 
 #[test]

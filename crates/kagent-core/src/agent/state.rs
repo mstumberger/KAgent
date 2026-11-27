@@ -189,8 +189,13 @@ impl Agent {
         let state = self.state(session_id).await?;
         let mut meta = state.meta.lock().await;
         let before = std::mem::replace(&mut meta.todo, items.clone());
+        // A list that is all done ends the approved plan (plan-todo.md section 2).
+        let plan = if crate::plan::todo_done(&items) { meta.approved_plan.take() } else { None };
         if let Err(e) = self.store.save_meta(&meta).await {
             meta.todo = before;
+            if plan.is_some() {
+                meta.approved_plan = plan;
+            }
             return Err(e);
         }
         // Sent under the lock that stored the list, so the events reach the UI in the
@@ -228,7 +233,7 @@ impl Agent {
         if !active {
             for request in self.broker.pending() {
                 if request.kind == ApprovalKind::Plan && request.session_id == session_id {
-                    self.broker.resolve(&request.request_id, ApprovalDecision::Deny { reason: Some(why.to_string()) });
+                    self.broker.resolve(&request.request_id, ApprovalDecision::Deny { reason: Some(why.to_string()) }, crate::permission::ApprovalVia::Click);
                 }
             }
         }
@@ -243,7 +248,7 @@ impl Agent {
     pub async fn approve_plan(&self, session_id: &str, plans_dir: &Path, text: &str) -> anyhow::Result<crate::plan::ApprovedPlan> {
         self.change_planning(session_id, false, crate::plan::PLAN_SUPERSEDED).await?;
         let path = crate::plan::save(plans_dir, session_id, text).await?;
-        let plan = crate::plan::ApprovedPlan { path: path.display().to_string(), text: text.to_string() };
+        let plan = crate::plan::ApprovedPlan { path: path.display().to_string(), text: text.to_string(), approved_at: Some(chrono::Utc::now()) };
         let state = self.state(session_id).await?;
         let mut meta = state.meta.lock().await;
         let before = meta.approved_plan.replace(plan.clone());
@@ -252,6 +257,27 @@ impl Agent {
             return Err(e);
         }
         Ok(plan)
+    }
+
+    /// The approved plan the next request carries, read under the meta's lock: one that is
+    /// 24 h old is dropped from the meta here (plan-todo.md section 2).
+    pub(super) async fn current_plan(&self, state: &SessionState) -> (bool, Option<crate::plan::ApprovedPlan>) {
+        let mut meta = state.meta.lock().await;
+        if meta.approved_plan.as_ref().is_some_and(|p| p.expired_at(chrono::Utc::now())) {
+            let before = meta.approved_plan.take();
+            if let Err(e) = self.store.save_meta(&meta).await {
+                tracing::warn!(session_id = %meta.id, "the expired plan could not be dropped: {e:#}");
+                meta.approved_plan = before;
+                return (meta.planning, None);
+            }
+        }
+        (meta.planning, meta.approved_plan.clone())
+    }
+
+    /// The approved plan of `session_id` as the next request would carry it.
+    pub async fn approved_plan(&self, session_id: &str) -> anyhow::Result<Option<crate::plan::ApprovedPlan>> {
+        let state = self.state(session_id).await?;
+        Ok(self.current_plan(&state).await.1)
     }
 
     /// Add messages to the session: the file first, then memory, the meta (count,

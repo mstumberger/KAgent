@@ -126,7 +126,7 @@ async fn an_approval_card_of_a_subagent_carries_the_name_of_its_job() {
     assert_eq!(card.summary, format!("subagent \"job-card\": {plain}"), "named after the subagent, then the call");
     // The same call by a session that is not a subagent keeps its summary.
     assert!(!plain.starts_with("subagent"), "{plain}");
-    r.agent.broker().resolve(&card.request_id, kagent_core::permission::ApprovalDecision::Deny { reason: None });
+    r.agent.broker().resolve(&card.request_id, kagent_core::permission::ApprovalDecision::Deny { reason: None }, kagent_core::permission::ApprovalVia::Click);
     assert_eq!(handle.wait().await.status, TurnStatus::Completed);
     wait_status(&r, &child.id, ChildStatus::Done).await;
     assert!(results(&r, &child.id, "probe_c").await[0].is_error, "the denied call did not run");

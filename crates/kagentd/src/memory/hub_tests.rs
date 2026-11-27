@@ -89,7 +89,7 @@ fn recall_count_and_recall_chars_decide_what_the_prompt_gets() {
     assert_eq!(hub.core_text(9), "Marko. Sh", "cut to what the caller may send");
 }
 
-/// A model that answers nothing and keeps the system prompt of each request.
+/// A model that answers "ok" and keeps the system prompt of each request.
 struct Capturing {
     systems: Arc<Mutex<Vec<String>>>,
 }
@@ -98,7 +98,7 @@ struct Capturing {
 impl ModelClient for Capturing {
     async fn complete(&self, request: ModelRequest, _deltas: mpsc::UnboundedSender<ModelDelta>, _cancel: CancellationToken) -> anyhow::Result<ModelResponse> {
         self.systems.lock().unwrap().push(request.system.clone());
-        Ok(ModelResponse::default())
+        Ok(ModelResponse { text: "ok".into(), ..Default::default() })
     }
 }
 

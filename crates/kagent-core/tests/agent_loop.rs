@@ -31,7 +31,7 @@ async fn parallel_reads_then_denied_mutation() {
     tokio::spawn(async move {
         let ev = wait_event(&mut erx, 30, |e| matches!(e, AgentEvent::ApprovalRequested(_))).await;
         if let AgentEvent::ApprovalRequested(req) = ev {
-            broker.resolve(&req.request_id, ApprovalDecision::Deny { reason: None });
+            broker.resolve(&req.request_id, ApprovalDecision::Deny { reason: None }, kagent_core::permission::ApprovalVia::Click);
         }
     });
 
@@ -238,7 +238,7 @@ fn notices(events: &[AgentEvent]) -> Vec<String> {
 
 #[tokio::test]
 async fn a_capacity_error_switches_to_the_fallback_as_before() {
-    let (result, events, model) = fallback_turn(vec![Err("503 Service Unavailable".into()), Ok(ModelResponse::default())], true).await;
+    let (result, events, model) = fallback_turn(vec![Err("503 Service Unavailable".into()), Ok(ModelResponse { text: "ok".into(), ..Default::default() })], true).await;
     assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
     let seen = model.model_refs.lock().unwrap().clone();
     assert_eq!(seen, [("fake::test".to_string(), None), ("fake::backup".to_string(), Some(999))], "the rest of the turn goes to the fallback, with its output limit");
@@ -271,9 +271,31 @@ async fn the_notice_of_a_switch_says_why_the_model_was_left() {
         ("503 Service Unavailable", "is busy"),
         ("The model is overloaded", "is busy"),
     ] {
-        let (result, events, model) = fallback_turn(vec![Err(error.into()), Ok(ModelResponse::default())], true).await;
+        let (result, events, model) = fallback_turn(vec![Err(error.into()), Ok(ModelResponse { text: "ok".into(), ..Default::default() })], true).await;
         assert_eq!(result.status, TurnStatus::Completed, "{error}: {:?}", result.error);
         assert_eq!(model.model_refs.lock().unwrap().len(), 2, "{error}: the fallback answers");
         assert_eq!(notices(&events), [format!("fake::test {why}{backup}")], "{error}");
     }
+}
+
+/// v0.0.2 section 4: a model that answers with neither text nor a tool call is asked once
+/// more; twice empty, the turn fails with a notice instead of "completed" with nothing.
+#[tokio::test]
+async fn an_empty_answer_is_asked_again_once_then_the_turn_fails_with_a_notice() {
+    let empty = ModelResponse::default();
+    // Empty, then an answer: the retry is invisible and the turn completes.
+    let r = rig(vec![empty.clone(), ModelResponse { text: "here it is".into(), ..Default::default() }], Arc::new(Mutex::new(Spans::default()))).await;
+    let SendOutcome::Started { handle, .. } = r.agent.send(&r.session, "go".into(), Default::default()).await.unwrap() else { panic!("a turn starts") };
+    let result = handle.wait().await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    assert_eq!(r.model.requests.lock().unwrap().len(), 2, "asked twice");
+    let stored = r.store.load_messages(&r.session).await.unwrap();
+    assert_eq!(stored.iter().filter(|m| m.role == Role::Assistant).map(|m| m.content.as_str()).collect::<Vec<_>>(), ["here it is"], "the empty answer is not stored");
+
+    // Empty twice: failed, with the reason, and no third request.
+    let r = rig(vec![empty.clone(), empty.clone(), empty], Arc::new(Mutex::new(Spans::default()))).await;
+    let SendOutcome::Started { handle, .. } = r.agent.send(&r.session, "go".into(), Default::default()).await.unwrap() else { panic!("a turn starts") };
+    let result = handle.wait().await;
+    assert_eq!((result.status, result.error.as_deref()), (TurnStatus::Failed, Some(kagent_core::agent::NO_ANSWER)));
+    assert_eq!(r.model.requests.lock().unwrap().len(), 2);
 }

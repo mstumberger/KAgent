@@ -20,6 +20,9 @@ pub(crate) mod protect;
 pub const CONTEXT_CHARS_PER_TURN: usize = 4_000;
 /// How much of a tool's output a `PostToolUse` hook sees.
 const TOOL_OUTPUT_CHARS: usize = 4_000;
+/// The `Stop` hooks of one turn run in a task of their own for at most this long
+/// (hooks.md section 4); the longest single hook may take 60 s.
+pub const STOP_HOOKS_LIMIT: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// A point of the agent's life that is not about one tool call (hooks.md section 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,11 +143,26 @@ impl Agent {
         self.add_hook_context(session_id, added);
     }
 
-    /// `Stop`, after `TurnFinished`. What it adds waits for the next turn.
+    /// `Stop`, after `TurnFinished`, in a task of its own that nobody awaits, for at most
+    /// `STOP_HOOKS_LIMIT`: a slow or hung hook never holds the turn, `wait_idle` or the
+    /// next turn. What it adds waits for a later turn.
+    pub(crate) fn spawn_stop_hooks(self: &Arc<Self>, session_id: &str, turn_id: &str, via: Via, status: TurnStatus, error: Option<String>) {
+        if self.hooks.daemon.is_none() {
+            return;
+        }
+        let (this, session_id, turn_id) = (self.clone(), session_id.to_string(), turn_id.to_string());
+        tokio::spawn(async move {
+            if tokio::time::timeout(STOP_HOOKS_LIMIT, this.stop_hooks(&session_id, &turn_id, via, status, error.as_deref())).await.is_err() {
+                tracing::warn!(session_id, turn_id, "the Stop hooks took longer than {} s and were dropped", STOP_HOOKS_LIMIT.as_secs());
+            }
+        });
+    }
+
+    /// The `Stop` hooks of one turn, awaited (`spawn_stop_hooks` runs them).
     pub(crate) async fn stop_hooks(&self, session_id: &str, turn_id: &str, via: Via, status: TurnStatus, error: Option<&str>) {
         let Some(hooks) = self.hooks.daemon.clone() else { return };
         let event = HookEvent::Stop { session_id, via, turn_id, status, error };
-        // A panicking hook must not leave the session with a turn that never ends.
+        // A panicking hook must not take the task down without a word.
         let run = futures::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(hooks.event(event)));
         let added = match run.await {
             Ok(text) => text.map(|text| ("Stop", text)),

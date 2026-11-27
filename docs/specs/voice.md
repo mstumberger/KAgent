@@ -79,7 +79,8 @@ replies.
 
 - The live setup declares the tools of `voice.toolGroups` (default `desktop`, `tasks`,
   `system`), in registry order, instead of every tool.
-- `voice.toolGroups: []` is no tools. A group that is off for chat gives none (its chip
+- `voice.toolGroups: []` is no tools (decided 2026-11-27: unlike chat, where an empty
+  list is every group, a voice session with no groups chosen gets none). A group that is off for chat gives none (its chip
   says so in Settings). Unknown group names are refused with 400 on `PUT` and on load.
 - A call to a tool that was not declared to the live model is refused: "not available
   in this voice session".
@@ -227,3 +228,24 @@ told what will happen and to confirm by voice, in every permission mode.
   of section 10 no longer has a case in `live` (a live call never waits on a card now)
   and is replaced by two checks: the first call is asked out loud with no card, and
   after a spoken yes the same call runs with its card answered by voice. Still 34.
+
+### Amendment 2026-11-27, evening: `always_ask` and repeats
+
+Why: at 22:03 the live model, in `full` mode, called `terminal send` 25 times in 15
+seconds into the owner's only terminal (a running Claude Code session). `full` lets
+`always_ask` through, so nothing was asked, and nothing stopped the repeats.
+
+- `Agent::voice_gate(session, call)` replaces `approval_needed`: it answers the
+  assessment and whether the call must be confirmed. That is when the engine would ask,
+  and for every `always_ask` call that is not read-only, in every permission mode.
+  This supersedes the last "`full` still lets `always_ask` through" bullet above for
+  calls of the live model. (`voice-control.md` section 4 extends the same rule to the
+  Brain turns of `routed` and `auto`.)
+- Repeats (`confirm::Repeats`): a call that is not read-only and equals one this
+  session ran in the last 20 seconds (tool and exact arguments) does not run: the
+  model gets `{"status": "duplicate", "output": "not executed: you ran exactly this a
+  moment ago..."}`. Read-only calls are not limited.
+- Tests: `confirm.rs` (25 repeats, one run; another text runs; after the window it
+  runs again), `kagent-core` `todo/tests.rs` (`voice_gate`: `terminal send` asks in
+  `full`, `terminal list` does not).
+

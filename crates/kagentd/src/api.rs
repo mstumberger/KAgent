@@ -215,7 +215,7 @@ pub async fn resolve_approval(
         "deny" => ApprovalDecision::Deny { reason: body.get("reason").and_then(Value::as_str).map(str::to_string) },
         other => return Err(bad_request(format!("unknown decision '{other}'"))),
     };
-    if st.agent.broker().resolve(&id, d) {
+    if st.agent.broker().resolve(&id, d, kagent_core::permission::ApprovalVia::Click) {
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
         Err(not_found("approval already resolved or expired"))

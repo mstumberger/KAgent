@@ -264,7 +264,9 @@ lists under "Tests".
    the result lists all items; `todoUpdated` is emitted.
 2. **[auto]** After a daemon restart the list is still in the meta.
 3. Ask for a five-step diagnosis: the panel appears above the composer, items turn done
-   as the work proceeds, a click toggles one item, Clear empties the list.
+   as the work proceeds, a click toggles one item, Clear empties the list. Run it with a
+   cloud chat model (Gemini): the local `qwen2.5:7b-instruct` often skips the status
+   updates, which is accepted (decision of 2026-11-27, section E).
 4. The widget shows "2/5".
 
 ## S24 plan mode
@@ -275,8 +277,9 @@ lists under "Tests".
    the plan block.
 3. **[auto]** Deny with a reason: still planning; the tool result carries the reason.
 4. `/plan free 20 GB of disk`: the agent researches read-only and shows the plan card;
-   Approve: the steps run under the normal permission mode. (With qwen2.5:7b-instruct,
-   in process, the card came in 4 of 15 runs: section E.)
+   Approve: the steps run under the normal permission mode. Run it with a cloud chat
+   model (Gemini). With the local `qwen2.5:7b-instruct` the card came in 4 of 15 runs;
+   that is accepted, the loop does not nudge (decision of 2026-11-27, section E).
 5. Voice: "yes" to a plan card approves it (an ordinary card).
 
 ## S25 memory

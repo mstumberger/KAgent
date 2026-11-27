@@ -67,15 +67,19 @@ impl Agent {
 
     /// Execute one call through validation, permission and the tool itself. Always
     /// returns a tool-result message. Also used by the live voice bridge.
-    /// The assessment of `call` when the permission engine would ask before running it
-    /// (a card), else `None`. Nothing runs. Hooks are not consulted: a hook that asks
-    /// still raises its card when the call runs. Used by the live voice session to ask
-    /// out loud first (voice.md section 12).
-    pub fn approval_needed(&self, session_id: &str, call: &ToolCall) -> Option<CallAssessment> {
+    /// How a call that comes from voice is judged, without running anything: its
+    /// assessment, and whether it must be confirmed first. That is when the permission
+    /// engine would ask (a card), and also when the tool is `always_ask`: `full` lets
+    /// those through in chat, but a voice model must never type into a terminal or
+    /// change a setting on its own word (voice.md section 12). Hooks are not
+    /// consulted: a hook that asks still raises its card when the call runs.
+    pub fn voice_gate(&self, session_id: &str, call: &ToolCall) -> Option<(CallAssessment, bool)> {
         let tool = self.tools.get(&call.name)?;
         let input = normalize_input(&tool.contract().input_schema, call.input.clone());
         let assessment = self.named(session_id, tool.assess(&input));
-        matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }).then_some(assessment)
+        let engine_asks = matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. });
+        let ask = engine_asks || (assessment.always_ask && !assessment.read_only);
+        Some((assessment, ask))
     }
 
     pub async fn execute_call(
@@ -238,13 +242,14 @@ impl Agent {
         };
         let can_remember = request.can_remember;
         let (request_id, request_summary) = (request.request_id.clone(), request.summary.clone());
-        let decision = self.broker.request(request, cancel).await;
+        let (decision, via) = self.broker.request_via(request, cancel).await;
         if let Some(audit) = &self.audit {
             let data = serde_json::json!({
                 "requestId": request_id,
                 "tool": call.name,
                 "summary": request_summary,
                 "decision": decision.label(),
+                "via": via.label(),
             });
             if let Err(e) = audit.append(crate::audit::AuditKind::Approval, session_id, data) {
                 tracing::warn!("audit append failed: {e:#}");

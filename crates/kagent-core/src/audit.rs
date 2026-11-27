@@ -91,9 +91,17 @@ fn sorted(v: &Value) -> Value {
     }
 }
 
+/// The file and the hash of its last record, under one lock: two records written at once
+/// can never name the same `prev`.
+struct Tail {
+    file: std::fs::File,
+    last_hash: String,
+}
+
 pub struct AuditLog {
-    file: Mutex<std::fs::File>,
-    last_hash: Mutex<String>,
+    tail: Mutex<Tail>,
+    /// Asks the sync thread for an `fsync` of the file; dropped with the log, which ends it.
+    sync: Mutex<std::sync::mpsc::Sender<()>>,
 }
 
 impl AuditLog {
@@ -108,11 +116,22 @@ impl AuditLog {
             .and_then(|v| v.get("hash").and_then(Value::as_str).map(str::to_string))
             .unwrap_or_else(|| GENESIS.to_string());
         let file = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
-        Ok(Self { file: Mutex::new(file), last_hash: Mutex::new(last) })
+        let synced = file.try_clone()?;
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        // The `fsync` runs on a thread of its own, never on an async worker: an append only
+        // writes its line. Requests that queued up meanwhile share one `fsync`.
+        std::thread::Builder::new().name("audit-sync".into()).spawn(move || {
+            while rx.recv().is_ok() {
+                while rx.try_recv().is_ok() {}
+                synced.sync_data().ok();
+            }
+        })?;
+        Ok(Self { tail: Mutex::new(Tail { file, last_hash: last }), sync: Mutex::new(tx) })
     }
 
     pub fn append(&self, kind: AuditKind, session_id: &str, data: Value) -> anyhow::Result<String> {
-        let prev = self.last_hash.lock().unwrap().clone();
+        let mut tail = self.tail.lock().unwrap();
+        let prev = tail.last_hash.clone();
         let record = json!({
             "ts": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             "kind": kind.as_str(),
@@ -129,10 +148,11 @@ impl AuditLog {
         };
         let mut line = record;
         line["hash"] = json!(hash);
-        let mut f = self.file.lock().unwrap();
-        writeln!(f, "{}", line)?;
-        f.sync_all().ok();
-        *self.last_hash.lock().unwrap() = hash.clone();
+        // One write of the whole line: a record is never split by another one.
+        tail.file.write_all(format!("{line}\n").as_bytes())?;
+        tail.last_hash = hash.clone();
+        drop(tail);
+        let _ = self.sync.lock().unwrap().send(());
         Ok(hash)
     }
 
@@ -203,6 +223,33 @@ mod tests {
             Err((line, _)) => assert_eq!(line, 3),
             Ok(n) => panic!("tamper not detected ({n} records)"),
         }
+    }
+
+    /// v0.0.2 section 4: appends from many threads at once still make one chain, and the
+    /// sync thread keeps up without being waited for.
+    #[test]
+    fn appends_from_many_threads_make_one_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let log = std::sync::Arc::new(AuditLog::open(&path).unwrap());
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let log = log.clone();
+                std::thread::spawn(move || {
+                    for i in 0..25 {
+                        log.append(AuditKind::ToolCall, "s", json!({"t": t, "i": i})).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(verify(&path).unwrap(), 200);
+        // A log opened again goes on from the last hash.
+        drop(log);
+        AuditLog::open(&path).unwrap().append_start("0.2").unwrap();
+        assert_eq!(verify(&path).unwrap(), 201);
     }
 
     #[test]

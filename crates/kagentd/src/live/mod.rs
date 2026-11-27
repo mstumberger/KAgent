@@ -141,6 +141,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     let voice_cards = Arc::new(approve::VoiceCards::new());
     // Calls the engine would ask about are asked out loud first (voice.md section 12).
     let voice_confirm = Arc::new(confirm::VoiceConfirm::default());
+    let repeats = Arc::new(confirm::Repeats::default());
     let mut voice = st.settings.read().unwrap().live_voice.clone();
     let mut handle: Option<String> = None;
     let (mut user_buf, mut asst_buf) = (String::new(), String::new());
@@ -331,7 +332,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                     } else {
                                         let own = cancel.child_token();
                                         calls.start_tool(id.clone(), own.clone());
-                                        tool_call::spawn_tool(st.clone(), session.clone(), c, id, own, out.clone(), tool_tx.clone(), cancel.clone(), calls.clone(), voice_confirm.clone());
+                                        tool_call::spawn_tool(st.clone(), session.clone(), c, id, own, out.clone(), tool_tx.clone(), cancel.clone(), calls.clone(), voice_confirm.clone(), repeats.clone());
                                     }
                                 }
                             }

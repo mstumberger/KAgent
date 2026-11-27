@@ -113,6 +113,8 @@ struct View {
     last_error: Option<String>,
     /// The pairing code still waiting: `{code, expiresAt}`.
     pending_code: Option<Value>,
+    /// Until when no pairing code is checked, after too many wrong ones.
+    pairing_locked_until: Option<String>,
 }
 
 /// The keys `PUT /api/telegram` takes (config.md section 11).
@@ -262,6 +264,7 @@ impl Bots {
             paired_at: pairing.map(|p| p.paired_at),
             last_error: known.last_error,
             pending_code: self.bot.code(SystemTime::now()).map(|code| code.view()),
+            pairing_locked_until: self.bot.pairing_locked_until(SystemTime::now()).map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()),
         })
         .unwrap_or(Value::Null)
     }

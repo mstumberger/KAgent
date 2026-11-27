@@ -63,9 +63,14 @@ prompt: |
   `POST /api/sessions/:id/subagents/:child/stop` (the session's `cancel` cannot reach
   it).
 - Depth: a subagent cannot start subagents (`agent_run` is not among its tools).
-- Plan mode: a child of a planning session gets the plan restriction
-  (`plan-todo.md` section 2). `agent_run` is a mutating tool, so a planning session
-  cannot start a subagent at all; whether it may is an open question for the owner.
+- Plan mode (decision of 2026-11-27): a planning session may start read-only subagents
+  only (`explore`, or a profile that is read-only). `agent_run` and `agent_stop` are in
+  `PLAN_ALLOWED`, and `start_child` refuses any other profile with "plan mode: only a
+  read-only subagent (profile explore) may run until the plan is approved". The child
+  also gets the plan restriction (`plan-todo.md` section 2).
+- The system prompt has one working rule about subagents while `agent_run` is offered
+  (`kagentd/src/prompt.rs`, `SUBAGENT_RULE`): delegate long research or several
+  independent jobs, `explore` for read-only research, only `explore` in plan mode.
 
 ## 3. Results
 
@@ -75,7 +80,8 @@ prompt: |
   `[Agent "<description>" <done|failed|cancelled> in 42 s]` and the output (at most
   4000 chars).
   - Parent idle, and a chat or a voice session: a new turn starts with it, at most 5
-    in a row without a message of the owner (`MAX_AUTO_TURNS`), so the main agent
+    in a row without a message of the owner (`MAX_AUTO_TURNS`; kept at 5 by the decision
+    of 2026-11-27), so the main agent
     reacts without being asked.
   - Parent running: it is queued as steering.
   - In the session of a task, an alert investigation or a Telegram chat it is stored

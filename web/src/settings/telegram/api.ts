@@ -28,6 +28,8 @@ export interface TelegramStatus {
   /** The last error of the poll, kept after the bot recovered; null when there was none. */
   lastError: string | null;
   pendingCode: PairingCode | null;
+  /** RFC 3339: no code is checked before then, after five wrong ones. Absent from an older daemon. */
+  pairingLockedUntil?: string | null;
 }
 
 export const telegramApi = {

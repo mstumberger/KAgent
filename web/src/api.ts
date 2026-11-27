@@ -88,7 +88,7 @@ export interface SessionMeta {
   todo?: TodoItem[];
   /** Plan mode (plan-todo.md section 2): on while the session plans; `approvedPlan` is the plan the owner approved last. */
   planning?: boolean;
-  approvedPlan?: { path: string; text: string } | null;
+  approvedPlan?: { path: string; text: string; approvedAt?: string } | null;
 }
 
 /** One item of a session's todo list (api.md section 6). */

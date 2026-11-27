@@ -18,6 +18,11 @@
   replace it with a fast-model suggestion (single call, evidence only, 15 s timeout,
   static template on failure). The model never acts from a watcher; actions happen
   only in a session the owner starts (`/alerts/:id/investigate`).
+- That session (origin `alert`) starts with one message, the starting task
+  (`watch/investigate.rs`): it begins with `[Starting task of this alert session]`, holds
+  the alert, and ends by saying that a later request of the owner wins. The system
+  prompt has the matching rule: the owner's newest message replaces an earlier task,
+  also the starting task; the agent goes back to the alert only when asked (v0.0.2).
 - Notification: desktop notification for `review` (normal urgency) and `high`
   (critical urgency); `info` only in the UI. Quiet hours suppress `info`/`review`
   notifications (stored, shown later), never `high`. Spoken only if

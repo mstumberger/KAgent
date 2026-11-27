@@ -39,7 +39,10 @@ plan for a single approval before it changes anything.
   and the destructive step: `planning && !read_only && tool not in PLAN_ALLOWED` ->
   Deny "plan mode: research only until the plan is approved".
   `PLAN_ALLOWED` = `todo_write`, `todo_read`, `plan_enter`, `plan_exit`, `load_skill`,
-  `memory_search`, `memory_get`, `session_search`.
+  `memory_search`, `memory_get`, `session_search`, `agent_run`, `agent_stop`. A planning
+  session may start read-only subagents only (profile `explore`, or any profile that is
+  read-only); any other is refused when the call runs with "plan mode: only a read-only
+  subagent (profile explore) may run until the plan is approved" (`agents.md` section 2).
   - It sits in the engine, so rules, overrides, hooks, `trusted` and `full` cannot
     bypass it.
   - A subagent started from a planning session gets the same restriction
@@ -47,10 +50,14 @@ plan for a single approval before it changes anything.
 - Exit: `plan_exit {plan}` raises an `ApprovalRequest` with `kind: "plan"`, tool
   `plan`, summary "Approve plan", `preview` = the plan text, `can_remember: false`.
   - Approved: `planning` is cleared. The plan is saved to
-    `<data>/plans/<sessionId>-<n>.md` and `SessionMeta.approvedPlan` holds its path
-    and text (at most 12 KB). The tool result asks the model to carry the plan out step
+    `<data>/plans/<sessionId>-<n>.md` and `SessionMeta.approvedPlan` holds its path,
+    text (at most 12 KB) and `approvedAt`. The tool result asks the model to carry the plan out step
     by step with the normal permissions.
   - Denied with a reason: still planning; the result carries the reason.
+- Expiry (decision of 2026-11-27): an approved plan ends, and `approvedPlan` is cleared,
+  when a todo list with items that are all `completed` is stored for the session, or 24 h
+  after `approvedAt`, checked before every model request. A plan stored without
+  `approvedAt` (before this rule) counts as expired.
 - Cancel: "Cancel plan" in the chat header area (`POST /api/sessions/:id/plan
   {active: false}`) clears `planning` and denies the plan card that waits for an
   answer; the rest of a running turn follows the normal mode.
