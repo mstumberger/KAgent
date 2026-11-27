@@ -25,19 +25,22 @@ interface Draft {
   deliver: string[] | null;
   onApproval: "deny" | "wait" | null;
   session: "new" | "reuse";
+  /** Minutes, as typed; null while untouched (settings.tasks gives it). */
+  timeoutMin: string | null;
 }
 
 /** settings.tasks: the value a policy field has until the owner chooses one here. */
-function defaultsOf(settings: unknown): { deliver: string[]; onApproval: "deny" | "wait" } {
+function defaultsOf(settings: unknown): { deliver: string[]; onApproval: "deny" | "wait"; timeoutMin: number } {
   const section = (settings as { tasks?: Record<string, unknown> } | null | undefined)?.tasks;
   const deliver = Array.isArray(section?.deliver) ? section.deliver.filter((c): c is string => typeof c === "string") : [];
-  return { deliver: deliver.length > 0 ? deliver : ["desktop", "session"], onApproval: section?.onApproval === "wait" ? "wait" : "deny" };
+  const timeoutMin = typeof section?.timeoutMin === "number" ? section.timeoutMin : 30;
+  return { deliver: deliver.length > 0 ? deliver : ["desktop", "session"], onApproval: section?.onApproval === "wait" ? "wait" : "deny", timeoutMin };
 }
 
 export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]) => void; onError: (message: string) => void }) {
   // Read from the store on each render: the settings may arrive after the form mounts.
   const defaults = defaultsOf(useStore().state?.settings);
-  const [form, setForm] = useState<Draft>({ kind: "agent", what: "", title: "", schedule: "", deliver: null, onApproval: null, session: "new" });
+  const [form, setForm] = useState<Draft>({ kind: "agent", what: "", title: "", schedule: "", deliver: null, onApproval: null, session: "new", timeoutMin: null });
   const [busy, setBusy] = useState(false);
   // What the daemon makes of a schedule text: `for` is the text it is about.
   const [preview, setPreview] = useState<{ for: string; ok: boolean; text: string; next: string | null }>({ for: "", ok: true, text: "", next: null });
@@ -45,6 +48,8 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setForm((f) => ({ ...f, [key]: value }));
   const deliver = form.deliver ?? defaults.deliver;
   const onApproval = form.onApproval ?? defaults.onApproval;
+  const timeoutText = form.timeoutMin ?? String(defaults.timeoutMin);
+  const timeoutOk = /^\d+$/.test(timeoutText.trim()) && Number(timeoutText) >= 1 && Number(timeoutText) <= 1440;
 
   // Asked after a pause in typing; the answer to older text is dropped.
   const schedule = form.schedule.trim();
@@ -69,7 +74,7 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || !form.what.trim()) return;
+    if (busy || !form.what.trim() || (form.kind === "agent" && !timeoutOk)) return;
     setBusy(true);
     try {
       const input: TaskInput = { what: form.what, kind: form.kind };
@@ -81,6 +86,7 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
       if (form.kind === "agent") {
         if (form.onApproval !== null) input.onApproval = form.onApproval;
         input.session = form.session;
+        if (form.timeoutMin !== null) input.timeoutMin = Number(form.timeoutMin);
       }
       onAdded((await tasksApi.add(input)).tasks);
       setForm((f) => ({ ...f, what: "", title: "", schedule: "" }));
@@ -131,7 +137,7 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
           value={form.schedule}
           onChange={(e) => set("schedule", e.target.value)}
         />
-        <button className="primary" disabled={busy || !form.what.trim()}>
+        <button className="primary" disabled={busy || !form.what.trim() || (agent && !timeoutOk)}>
           Add task
         </button>
       </div>
@@ -190,6 +196,24 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
               <option value="reuse">One session for the task</option>
             </select>
           </label>
+          <label title="A run that takes longer is cancelled with the status timeout">
+            Time limit
+            <span className="task-timeout-row">
+              <input
+                type="number"
+                className="task-timeout"
+                aria-label="Time limit in minutes"
+                min={1}
+                max={1440}
+                step={1}
+                value={timeoutText}
+                aria-invalid={!timeoutOk}
+                onChange={(e) => set("timeoutMin", e.target.value)}
+              />
+              min
+            </span>
+          </label>
+          {!timeoutOk && <span className="bad-text">1 to 1440 minutes.</span>}
         </div>
       )}
     </form>

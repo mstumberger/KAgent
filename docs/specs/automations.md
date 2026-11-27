@@ -139,8 +139,12 @@ template, paused).
 - Form: schedule presets as chips (In ..., Every ..., Daily, Weekdays, Weekly, Custom),
   a free-text field for words or cron, and a "Runs: <scheduleText>" preview from the
   daemon's parse (`GET /api/tasks/preview`, so it cannot disagree with what is
-  stored); delivery checkboxes; approval policy; session policy. A policy field the
-  owner does not touch is left out of the POST, and the daemon takes `settings.tasks`.
+  stored); delivery checkboxes; approval policy; session policy; the time limit of a
+  run in minutes (`timeoutMin`, 1..1440, shown with the default of `settings.tasks`). A
+  policy field the owner does not touch is left out of the POST, and the daemon takes
+  `settings.tasks`.
+- Settings: the defaults of `settings.tasks` have the page Automations (`tasks`,
+  `ui-settings.md` section 3).
 - Row detail: history of the last 10 runs (time, status, duration, result, open
   session) and Cancel while a run is active.
 - Status pills: running, ok, failed, missed, timeout, cancelled.
