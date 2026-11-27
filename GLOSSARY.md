@@ -75,3 +75,25 @@ its own provider.
 **Voice provider**:
 A service or local engine that does speech-to-speech, speech-to-text or text-to-speech
 for KAgent.
+
+## Time
+
+**Activity**:
+One recorded fact about what the owner did at a moment: a focused window, a commit, a
+call, a chat, a prompt to an agent.
+_Avoid_: event, log entry
+
+**Block**:
+A stretch of the day attributed to one ticket, or to a break, private time or
+"not work", built from activities.
+
+**Current ticket**:
+The ticket the tracker is attributing time to right now.
+
+**Worklog row**:
+One line of a day's worklog table: start, end, ticket, description, evidenced or
+estimated, logged or not.
+_Avoid_: entry, time entry
+
+**Work folder**:
+A folder the owner declared as work: everything under it is tracked as work.
