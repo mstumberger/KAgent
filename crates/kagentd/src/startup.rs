@@ -189,18 +189,24 @@ WantedBy=graphical-session.target\n",
     }
 }
 
+/// The end of the greeting while the owner's name is not known.
+pub const ASK_NAME: &str = "What should I call you? Tell me, or set it in Settings -> General.";
+
 /// Greeting text: custom text if set, else time-of-day + persona address.
 pub fn greeting_text(greeting: &Greeting, persona: &Persona, hour: u32) -> String {
     if !greeting.text.trim().is_empty() {
         return greeting.text.clone();
     }
-    let who = if persona.address.is_empty() { persona.name.clone() } else { persona.address.clone() };
     let part = match hour {
         5..=11 => "Good morning",
         12..=17 => "Good afternoon",
         _ => "Good evening",
     };
-    format!("{part}, {who}. KAgent is up and watching.")
+    // No name yet (voice-control.md section 5): the greeting asks for it.
+    if persona.address.trim().is_empty() {
+        return format!("{part}. KAgent is up and watching. {ASK_NAME}");
+    }
+    format!("{part}, {}. KAgent is up and watching.", persona.address)
 }
 
 /// Greet the user once the daemon is up: desktop notification, auto text from the
@@ -236,9 +242,10 @@ mod tests {
         assert!(greeting_text(&auto, &p, 23).starts_with("Good evening, Marko."));
         let custom = Greeting { enabled: true, text: "Pozdravljen!".into() };
         assert_eq!(greeting_text(&custom, &p, 9), "Pozdravljen!");
-        // Falls back to the persona name when no address is set.
+        // No address: no name in the greeting, and it asks for one (voice-control.md section 5).
         let no_addr = Persona { address: String::new(), ..persona() };
-        assert!(greeting_text(&auto, &no_addr, 9).starts_with("Good morning, KAgent."));
+        assert_eq!(greeting_text(&auto, &no_addr, 9), "Good morning. KAgent is up and watching. What should I call you? Tell me, or set it in Settings -> General.");
+        assert_eq!(greeting_text(&custom, &no_addr, 9), "Pozdravljen!", "a custom text is the owner's own words");
     }
 
     #[test]
