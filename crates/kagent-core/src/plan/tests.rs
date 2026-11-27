@@ -21,6 +21,7 @@ use crate::tools::builtin_registry;
 
 mod audit;
 mod expiry;
+mod voice_origin;
 
 /// Never asked: no test here runs a turn.
 struct NoModel;
