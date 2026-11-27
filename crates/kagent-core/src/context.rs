@@ -150,7 +150,9 @@ pub fn spec_chars(t: &crate::tool::ToolSpec) -> usize {
 }
 
 /// Words that make a tool group relevant to the request (English and Slovenian stems).
-const GROUP_HINTS: [(&str, &[&str]); 7] = [
+const GROUP_HINTS: [(&str, &[&str]); 8] = [
+    // The agent's own todo list, plan mode and subagents (a "todo" of the owner's is a task too).
+    ("agent", &["todo", "to-do", "checklist", " plan", "subagent", "sub-agent", "in parallel", "delegate", "načrt", "seznam opravil", "podagent", "vzporedno"]),
     ("tasks", &["remind", "schedule", "every day", "every morning", "every week", "tomorrow", "later", "in an hour", "in 10", "in 20", "in 30", "task", "to-do", "todo", "opomni", "jutri", "vsak dan", "naloga", "kasneje"]),
     ("desktop", &["open", "launch", "start ", "play", "pause", "stop", "music", "song", "video", "movie", "film", "vlc", "spotify", "youtube", "browser", "tab", "website", "web page", "http", "url", "click", "type ", "window", "editor", "vs code", "vscode", "kate", "intellij", "pycharm", "project", "line ", "clipboard", "copy", "paste", "volume", "louder", "quieter", "mute", "bluetooth", "wifi", "wi-fi", "vpn", "dark mode", "light mode", "notif", "screen", "this file", "terminal", "console", "konsole", "claude code", "signal", "slack", "write to", "send to", "type into", "message", "screen", "can you see", "look at", "reboot", "restart the computer", "suspend", "lock the", "lock my", "transcript", "export", "konzol", "napiši", "pošlji", "sporočil", "zaslon", "poglej", "odpri", "zaženi", "predvajaj", "ustavi", "pavz", "glasb", "pesem", "brskal", "zavih", "klikni", "okn", "projekt", "vrstic", "odložišč", "glasn", "utišaj", "temn"]),
     ("security", &["intrud", "hack", "honeytoken", "attack", "breach", "malware", "rootkit", "suspicious", "vdor", "napad", "sumljiv"]),
@@ -324,6 +326,12 @@ mod tests {
         assert!(hinted_groups("why is my machine slow").is_empty());
         assert_eq!(hinted_groups("Write to the Claude Code console in the KAgent folder"), vec!["desktop"]);
         assert_eq!(hinted_groups("can you see my screen?"), vec!["desktop"]);
+        // The agent group (todo list, plan mode, subagents): a "todo" can also be a task.
+        assert_eq!(hinted_groups("make a todo list for this"), vec!["tasks", "agent"]);
+        assert_eq!(hinted_groups("plan the cleanup first"), vec!["agent"]);
+        assert_eq!(hinted_groups("use a subagent for each disk"), vec!["agent"]);
+        assert_eq!(hinted_groups("Naredi načrt"), vec!["agent"]);
+        assert!(hinted_groups("explain this").is_empty(), "no plan in explain");
     }
 
     #[test]
