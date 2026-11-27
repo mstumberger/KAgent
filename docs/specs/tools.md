@@ -456,6 +456,14 @@ the UI still read and edit the files.
 | `plan_enter` | RO-equivalent | `{reason?: string}` | puts the session in plan mode until a plan is approved or the owner cancels it (the flag is the session's): every call that is not read-only, and is not one of `todo_*`, `plan_*`, `load_skill`, `memory_search`, `memory_get`, `session_search`, `agent_run` (read-only profiles only), `agent_stop`, is refused with "plan mode: research only until the plan is approved". Already planning -> error. Emits `planUpdated` |
 | `plan_exit` | RO-equivalent | `{plan: string (markdown, <= 12 KB); it may also come as an array of lines, joined with line breaks (the schema says `anyOf`)}` | raises an approval request with `kind: "plan"` (never rememberable). Approved -> plan mode off, the plan is saved under `<data>/plans/` and the result is "Plan approved. Carry it out step by step with the normal permissions." Denied with a reason -> "Plan rejected: <reason>. Revise the plan and call plan_exit again." Not planning, an empty plan, a plan over 12 KB or one that is neither text nor lines -> error, and no card. A rejection is a result, not an error. Emits `planUpdated` |
 
+## 19a. Settings (group `agent`; S44)
+
+Rules, protected keys and the voice side: `voice-control.md`.
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `settings` | `get`, `models`: RO. `set`: MUT, risk medium, `always_ask`, never rememberable (a call that is refused for its keys is RO: it says why, without a card) | `{action: enum [get, models, set], key?: string (get), changes?: {<dotted key>: value} (set, 1 to 8 keys)}` | `get`: the settings as JSON (secrets `"<set>"` or `"<empty>"`), or the value at `key`. `models`: per provider its enabled models as `ref`, roles and the jobs they hold, and `voices` of the live model's template; no keys. `set`: one patch through the function of `PUT /api/settings`, all or none; result `{changed: [{key, old, new}], notes}`. Card: `change setting <key> from <old> to <new>` (joined with "; "). Protected keys, an unknown key (the 3 nearest are named) and a voice not of the template are errors |
+
 ## 20. Web (group `web`; S30)
 
 Guards, extraction and engines: `web.md`. Both are read-only with side effect

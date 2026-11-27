@@ -31,6 +31,7 @@ mod sentinel;
 mod server;
 mod settings;
 mod settings_apply;
+mod settings_tool;
 mod skills;
 mod skills_api;
 mod skills_import;
@@ -196,6 +197,10 @@ async fn run() -> anyhow::Result<()> {
     }
     let task_store = tasks::TaskStore::load(&paths.data, events.clone(), settings.tasks_config());
     registry.register(Arc::new(tasks::TasksTool::new(task_store.clone())));
+    // The `settings` tool (voice-control.md) changes settings through the route's function; the
+    // daemon's state exists only later, so the tool gets it through this cell.
+    let settings_host: settings_tool::HostCell = Default::default();
+    registry.register(Arc::new(settings_tool::SettingsTool::new(settings_host.clone())));
     let ui_hub = ui::UiHub::new(events.clone());
     registry.register(Arc::new(ui::UiTool::new(ui_hub.clone())));
     registry.register(Arc::new(kagent_core::tools::sessions::Sessions::new(paths.sessions())?));
@@ -393,6 +398,8 @@ async fn run() -> anyhow::Result<()> {
         machine,
         version: VERSION,
     });
+
+    let _ = settings_host.set(Arc::new(settings_apply::Host(state.clone())));
 
     // KRunner (Alt+Space "ka ..."): keep the connection alive for the daemon's lifetime.
     // KRunner is Plasma's launcher; other desktops have no consumer for it.
