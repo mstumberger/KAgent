@@ -30,9 +30,8 @@ panel belongs.
   read the app's storage or cookies, cannot navigate the top window, cannot submit a
   form, open a window, or fetch, connect a socket or load an image, a font, a style or
   a script from the network (measured: 10 attempts, 10 blocked). It can still send its
-  own frame to another address (one GET, without referrer or cookies): only a
-  `frame-src 'none'` policy on the app's document stops that, and the app has none
-  (S33, measured; the owner's decision).
+  own frame to another address (one GET, without referrer or cookies): the app's
+  `frame-src 'none'` stops that (section 6).
 - Theme variables, from the current theme (the page's tokens of the same names):
   `--k-night`, `--k-glass`, `--k-ink`, `--k-dim`, `--k-ice`, `--k-ok`, `--k-bad`,
   `--k-signal`.
@@ -80,6 +79,19 @@ not followed).
 - The renderer never uses `innerHTML` for model output.
 - There is no bridge to the agent and no live data in this stage. (Later, if wanted: a
   `window.kagent` channel through `postMessage` with a fixed set of messages.)
+- The app's own document (`web/index.html`, decision of 2026-11-27) has a CSP meta tag
+  with nothing remote: `default-src 'self'; script-src 'self' 'unsafe-inline' blob:;
+  style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:;
+  media-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; frame-src
+  'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'`.
+  - A srcdoc frame inherits the policy of the app (measured in Chrome: with
+    `script-src 'self'` a widget's inline script does not run), so `script-src` keeps
+    `'unsafe-inline'`; the widget's own meta stays the stricter one inside the frame.
+  - `frame-src 'none'` still loads the srcdoc frame and blocks the frame's navigation to
+    another address (measured: the GET of a widget's `location.href = ...` no longer
+    arrives). `blob:` in `script-src` is the voice audio worklet. `connect-src 'self'`
+    covers the same-origin WebSockets (`/ws`, `/live`).
+  - A remote image in a chat answer is not loaded.
 
 ## 7. Tests
 
