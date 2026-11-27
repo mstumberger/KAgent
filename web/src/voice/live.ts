@@ -69,6 +69,8 @@ export class LiveClient {
   private nextAt = 0;
   private playGain: GainNode | null = null;
   private volume = 0.6;
+  /** settings.voice.volume (0..1): KAgent's speech level, on top of this page's own volume. */
+  private settingsGain = 1;
   /** Muted: the session stays open but no microphone audio is sent. */
   muted = false;
   micAnalyser: AnalyserNode | null = null;
@@ -116,7 +118,17 @@ export class LiveClient {
   /** Playback volume 0..1 (Gemini's voice is loud at unity gain). */
   setVolume(v: number) {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.playGain) this.playGain.gain.value = this.volume;
+    this.applyGain();
+  }
+
+  /** settings.voice.volume, 0..100: applied live, without a reconnect. */
+  setSettingsVolume(pct: number) {
+    this.settingsGain = Math.max(0, Math.min(100, pct)) / 100;
+    this.applyGain();
+  }
+
+  private applyGain() {
+    if (this.playGain) this.playGain.gain.value = this.volume * this.settingsGain;
   }
 
   setMuted(m: boolean) {
@@ -178,7 +190,7 @@ export class LiveClient {
     if (!this.playCtx) {
       this.playCtx = new AudioContext();
       this.playGain = this.playCtx.createGain();
-      this.playGain.gain.value = this.volume;
+      this.playGain.gain.value = this.volume * this.settingsGain;
       this.playAnalyser = this.playCtx.createAnalyser();
       this.playAnalyser.fftSize = 512;
       this.playGain.connect(this.playAnalyser);

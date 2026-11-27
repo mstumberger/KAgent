@@ -278,7 +278,20 @@ async def quiet(ws, conn, got):
     """Nothing is said: the test reads the setup and stops."""
 
 
-SCRIPTS = {"legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
+async def voiceroll(ws, conn, got):
+    """voice-control.md section 2: the voice is changed in settings; at the next turnComplete the connection rolls."""
+    if conn == 1:
+        await audio_then(ws, got)
+        await send(ws, {"sessionResumptionUpdate": {"newHandle": "H2", "resumable": True}})
+        await until(lambda: state.get("voice_put"), "the test to change the voice")
+        await speak(ws, "The voice changes after this sentence.")
+        await asyncio.sleep(2)  # the daemon closes this connection to roll it
+    else:
+        async for raw in ws:
+            got.append(received(json.loads(raw)))
+
+
+SCRIPTS = {"voiceroll": voiceroll, "legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
 
 
 async def fake_gemini(ws):
@@ -479,6 +492,23 @@ async def main():
             state["tool_responses"].get("c5", {}).get("status") == "ok"
             and any(role == "tool" and "denied" not in c for role, c, _, _ in stored)
             and not api("GET", "/api/state")["pendingApprovals"])
+
+        # ---------------------------------------------------------------- the speaking voice changes mid session (voice-control.md section 2)
+        api("PUT", "/api/settings", {"voice": {"brain": "live"}, "liveVoice": "Puck"})
+        session = api("POST", "/api/sessions", {"title": "voice roll"})["id"]
+        state["setups"].clear(); state["recv"].clear(); state["voice_put"] = False; state["connections"] = 0
+
+        async def drive_roll(ws, got):
+            await asyncio.sleep(0.3)
+            api("PUT", "/api/settings", {"liveVoice": "Charon"})
+            state["voice_put"] = True
+            await until(lambda: len(state["setups"]) >= 2 and sum(1 for g in got if g.get("status") == "live") >= 2, "the roll with the new voice", 15)
+
+        got = await live_session(session, "voiceroll", drive_roll)
+        voice_of = lambda i: state["setups"][i]["setup"]["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"]
+        checks["voice: changing liveVoice rolls the connection at turnComplete, with the new voice and the handle"] = (
+            len(state["setups"]) == 2 and voice_of(0) == "Puck" and voice_of(1) == "Charon"
+            and state["setups"][1]["setup"]["sessionResumption"].get("handle") == "H2")
 
         # ---------------------------------------------------------------- auto mode: the tool set
         api("PUT", "/api/settings", {"voice": {"brain": "auto"}})

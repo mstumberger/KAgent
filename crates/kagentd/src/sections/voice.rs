@@ -20,6 +20,8 @@ pub struct VoiceSection {
     pub vocabulary: bool,
     /// Pause media players while a voice session is open.
     pub pause_media: bool,
+    /// 0..=100: the loudness of KAgent's speech (the page's playback gain), not the system volume.
+    pub volume: u8,
 }
 
 impl Default for VoiceSection {
@@ -30,6 +32,7 @@ impl Default for VoiceSection {
             context: true,
             vocabulary: true,
             pause_media: true,
+            volume: 100,
         }
     }
 }
@@ -38,6 +41,9 @@ impl VoiceSection {
     /// The groups must be known tool groups, as in `toolGroups`: an unknown name makes
     /// the settings file invalid, on a patch and on load.
     pub fn validate(&self) -> Result<(), SectionError> {
+        if self.volume > 100 {
+            return Err(SectionError::Invalid { key: "voice".into(), message: format!("volume must be between 0 and 100, not {}", self.volume) });
+        }
         match self.tool_groups.iter().find(|g| !known_groups().contains(&g.as_str())) {
             Some(group) => Err(SectionError::Invalid { key: "voice".into(), message: format!("toolGroups must name tool groups: unknown tool group '{group}'") }),
             None => Ok(()),
@@ -99,6 +105,18 @@ mod tests {
         s.patch(json!({"voice": {"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false}})).unwrap();
         let v = s.voice_config();
         assert_eq!((v.brain, v.tool_groups.clone(), v.context, v.vocabulary, v.pause_media), (VoiceBrain::Auto, vec!["tasks".to_string()], false, false, true));
-        assert_eq!(serde_json::to_value(&v).unwrap(), json!({"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false, "pauseMedia": true}), "the names of config.md section 11");
+        assert_eq!(serde_json::to_value(&v).unwrap(), json!({"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false, "pauseMedia": true, "volume": 100}), "the names of config.md section 11");
+    }
+
+    #[test]
+    fn volume_is_zero_to_one_hundred_and_defaults_to_full() {
+        let mut s = Settings::defaults();
+        assert_eq!(s.voice_config().volume, 100);
+        s.patch(json!({"voice": {"volume": 0}})).unwrap();
+        assert_eq!(s.voice_config().volume, 0, "0 is silence, not a missing value");
+        s.patch(json!({"voice": {"volume": 60}})).unwrap();
+        assert!(s.patch(json!({"voice": {"volume": 101}})).unwrap_err().contains("volume must be between 0 and 100"));
+        assert!(s.patch(json!({"voice": {"volume": -5}})).is_err());
+        assert_eq!(s.voice_config().volume, 60, "a refused patch changes nothing");
     }
 }

@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { api, initialSection, initialSession, initialView, postPlan, putTodo, requestCompaction, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
 import { skillsApi, type SkillView } from "./skillsApi";
 import { builtinOf } from "./commands";
+import { voice } from "./voice/controller";
 import { events, type AgentEvent } from "./events";
 import { resolveView, type View } from "./nav";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
@@ -90,6 +91,7 @@ export async function refreshState() {
   try {
     const state = await api.get<StateView>("/api/state");
     set({ state, approvals: state.pendingApprovals, running: new Set(state.running) });
+    voice.setSettingsVolume(state.settings.voice?.volume ?? 100);
   } catch (e) {
     set({ notice: `state failed: ${String(e)}` });
   }
@@ -98,6 +100,7 @@ export async function refreshState() {
 /** Put settings into the state: what `settingsChanged` carries, or the answer of a save. */
 export function applySettings(settings: StateView["settings"]) {
   if (store.state) set({ state: { ...store.state, settings } });
+  voice.setSettingsVolume(settings.voice?.volume ?? 100);
 }
 
 export async function refreshSessions() {
