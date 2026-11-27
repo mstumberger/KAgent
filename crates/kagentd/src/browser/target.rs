@@ -107,11 +107,12 @@ pub fn gate(kind: TabKind, trust: AttachTrust, action: &str) -> Gate {
     match action {
         "status" | "tabs" | "read" | "screenshot" | "console" => Gate::ReadOnly,
         "launch" => Gate::Refused,
-        "open" | "activate" | "back" => Gate::Free,
+        "open" | "activate" => Gate::Free,
         "close" if kind == TabKind::Agent => Gate::Free,
         "close" => Gate::Refused,
-        "navigate" | "scroll" if kind == TabKind::Owner && trust == AttachTrust::Strict => Gate::Always,
-        "navigate" | "scroll" => Gate::Free,
+        // `back` leaves the owner's page as `navigate` does (decision of 2026-11-27).
+        "navigate" | "scroll" | "back" if kind == TabKind::Owner && trust == AttachTrust::Strict => Gate::Always,
+        "navigate" | "scroll" | "back" => Gate::Free,
         "click" | "type" | "key" if kind == TabKind::Owner && trust == AttachTrust::Strict => Gate::Always,
         "click" | "type" | "key" => Gate::Ask,
         "eval" => Gate::Always,
@@ -194,10 +195,10 @@ pub(crate) mod tests {
         for a in ["read", "screenshot", "console"] {
             row(a, ReadOnly, ReadOnly, ReadOnly);
         }
-        for a in ["open", "activate", "back"] {
+        for a in ["open", "activate"] {
             row(a, Free, Free, Free);
         }
-        for a in ["navigate", "scroll"] {
+        for a in ["navigate", "scroll", "back"] {
             row(a, Free, Always, Free);
         }
         for a in ["click", "type", "key"] {
@@ -232,7 +233,7 @@ pub(crate) mod tests {
         // The owner's tab, strict: read is read-only; acting asks in every mode; closing and launch are refused when run.
         let read = owner(json!({"action": "read"}));
         assert!(read.read_only && !read.needs_approval && !read.always_ask);
-        for a in ["navigate", "scroll"] {
+        for a in ["navigate", "scroll", "back"] {
             let x = owner(json!({"action": a}));
             assert!(!x.read_only && x.always_ask && x.destructive && x.needs_approval, "{a} in the owner's tab: {x:?}");
             assert_eq!(x.risk, Risk::Medium, "{a} keeps the risk of the contract");
@@ -248,10 +249,10 @@ pub(crate) mod tests {
             let x = owner(json!({"action": a}));
             assert!(!x.read_only && !x.needs_approval, "{a} is refused when run, so there is nothing to approve: {x:?}");
         }
-        for a in ["open", "activate", "back"] {
+        for a in ["open", "activate"] {
             let x = owner(json!({"action": a}));
             assert!(!x.read_only && !x.needs_approval && !x.always_ask, "{a}: {x:?}");
-            // A new tab is nobody's; a tab that is shown or goes back keeps its kind in the key.
+            // A new tab is nobody's; a tab that is shown keeps its kind in the key.
             assert_eq!(x.rule_key, if a == "open" { "browser open".to_string() } else { format!("browser@owner {a}") });
         }
         // The engine: full control and a stored rule do not get past the owner's strict rules.

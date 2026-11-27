@@ -63,8 +63,8 @@ new tab is the agent's.
 | Action | Agent tab | Owner's tab, `strict` | Owner's tab, `normal` |
 |---|---|---|---|
 | read, screenshot, console | read-only | read-only | read-only |
-| open (new tab), activate, back | no approval | no approval | no approval |
-| navigate, scroll | no approval | asks, always (never rememberable) | no approval |
+| open (new tab), activate | no approval | no approval | no approval |
+| navigate, scroll, back | no approval | asks, always (never rememberable) | no approval |
 | click, type, key | approval, medium, rememberable | asks always, high | approval, medium, rememberable |
 | close | no approval | refused: "only tabs the agent opened can be closed" | refused the same way |
 | eval | asks always, high | always asks, high | always asks, high |
