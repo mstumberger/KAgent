@@ -230,6 +230,11 @@ async fn run() -> anyhow::Result<()> {
     let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config));
     registry.register(web.fetch_tool());
     registry.register(web.search_tool());
+    // Google Calendar (calendar.md): the tools are registered now and find the module once it exists.
+    let calendar_cell: calendar::tools::CalendarCell = Default::default();
+    for tool in calendar::tools::all(&calendar_cell) {
+        registry.register(tool);
+    }
     // Inline widgets (widgets.md): the fragments live under <data>/widgets.
     let widgets = Arc::new(widgets::Widgets::new(paths.data.clone()));
     registry.register(Arc::new(widgets::WidgetShow::new(widgets.clone())));
@@ -374,6 +379,7 @@ async fn run() -> anyhow::Result<()> {
     let notifier = notify::Notifier::new();
     let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
     let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone()).await;
+    let _ = calendar_cell.set(calendar.clone());
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,

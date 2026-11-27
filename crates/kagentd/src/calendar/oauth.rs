@@ -56,7 +56,7 @@ pub fn auth_url(hosts: &Hosts, client_id: &str, redirect: &str, state: &str, cha
     format!("{}?{}", hosts.auth, encoded.join("&"))
 }
 
-fn urlencode(text: &str) -> String {
+pub(crate) fn urlencode(text: &str) -> String {
     let mut out = String::new();
     for b in text.bytes() {
         match b {

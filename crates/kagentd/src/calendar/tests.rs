@@ -2,6 +2,7 @@
 //! the one place a module is built; each file of `tests/` holds the checks of one part.
 
 mod connection;
+mod google;
 
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -31,6 +32,19 @@ impl Rig {
         self.skew.fetch_add(by.num_seconds(), Ordering::SeqCst);
     }
 
+    /// The tools' handle on the module.
+    pub fn cell(&self) -> super::tools::CalendarCell {
+        let cell: super::tools::CalendarCell = Default::default();
+        let _ = cell.set(self.cal.clone());
+        cell
+    }
+
+    /// Connected, switched on, and these calendars switched on (the first is the default).
+    pub async fn ready(&self, calendars: &[&str]) {
+        self.connect().await.unwrap();
+        self.settings.write().unwrap().patch(serde_json::json!({"calendar": {"calendars": calendars, "defaultCalendar": calendars[0]}})).unwrap();
+    }
+
     pub fn secret_file(&self) -> std::path::PathBuf {
         self.dir.path().join("calendar.json")
     }
@@ -58,6 +72,11 @@ impl Rig {
     }
 }
 
+/// The machine is on UTC+01:00 (Ljubljana in winter).
+pub fn zone(hours: i32) -> super::model::Zone {
+    Arc::new(move |_| chrono::FixedOffset::east_opt(hours * 3600).unwrap())
+}
+
 pub async fn rig() -> Rig {
     let fake = FakeGoogle::start().await;
     let dir = tempfile::tempdir().unwrap();
@@ -74,6 +93,7 @@ pub async fn rig() -> Rig {
         redirect: "http://127.0.0.1:7878/api/calendar/oauth/callback".into(),
         events: events_tx,
         clock: Arc::new(move || start + Duration::seconds(clock_skew.load(Ordering::SeqCst))),
+        zone: zone(1),
     })
     .await;
     Rig { cal, fake, dir, settings, events, skew }
