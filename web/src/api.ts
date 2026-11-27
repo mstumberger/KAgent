@@ -286,6 +286,8 @@ export interface StateView {
   chatModelValid: boolean;
   privHelper: string;
   alertsOpen: number;
+  /** thinkMedianMs: the median of the last 5 brain turns of a voice session (null: none yet). */
+  voice?: { thinkMedianMs: number | null };
 }
 
 export interface Alert {

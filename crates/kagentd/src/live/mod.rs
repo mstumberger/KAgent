@@ -13,6 +13,8 @@ mod confirm;
 pub mod context;
 mod instruction;
 pub mod protocol;
+pub use think_times::median_ms as think_median_ms;
+mod think_times;
 mod tool_call;
 mod voice_roll;
 

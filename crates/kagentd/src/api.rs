@@ -47,6 +47,8 @@ pub async fn get_state(State(st): State<Arc<AppState>>) -> ApiResult<Response> {
         "privHelper": st.services.priv_client.status(),
         "platform": {"desktop": kagent_core::platform::desktop().name(), "wayland": kagent_core::platform::wayland(), "packages": kagent_core::platform::package_manager().name()},
         "alertsOpen": st.alerts.open_count(),
+        // The median of the last 5 brain turns of a voice session, in ms (null: none yet).
+        "voice": {"thinkMedianMs": crate::live::think_median_ms()},
     })))
 }
 

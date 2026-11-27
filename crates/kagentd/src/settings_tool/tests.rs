@@ -62,7 +62,7 @@ async fn get_masks_every_secret_and_shows_the_rest() {
     assert_eq!(v["foo"]["apiToken"], "<set>");
     assert_eq!(v["foo"]["emptyToken"], "<empty>");
     assert_eq!(v["calendar"]["other"], "x", "what is not a secret is shown");
-    assert_eq!(v["voice"]["brain"], "routed", "a missing section shows its defaults");
+    assert_eq!(v["voice"]["brain"], "live", "a missing section shows its defaults");
     assert!(!all.content.contains("abc.apps.example") && !all.content.contains("t-123"));
     let one = run(&t, json!({"action": "get", "key": "calendar.clientId"})).await;
     assert!(one.content.contains("<set>") && !one.content.contains("abc.apps"), "{}", one.content);
