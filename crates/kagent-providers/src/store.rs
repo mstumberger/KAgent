@@ -346,6 +346,22 @@ impl ProviderStore {
         (r.provider.enabled && r.model.enabled && r.model.roles.iter().any(|role| role == "chat")).then_some(r)
     }
 
+    /// Why `model_ref` cannot answer a text turn, or `None` when it can (it agrees with
+    /// `usable`): "unknown model", "provider switched off", "model switched off" or
+    /// "not a chat model" (picker.md section 3).
+    pub fn unusable(&self, model_ref: &str) -> Option<&'static str> {
+        let Ok(r) = self.resolve(model_ref) else { return Some("unknown model") };
+        if !r.provider.enabled {
+            Some("provider switched off")
+        } else if !r.model.enabled {
+            Some("model switched off")
+        } else if !r.model.roles.iter().any(|role| role == "chat") {
+            Some("not a chat model")
+        } else {
+            None
+        }
+    }
+
     /// All enabled models of enabled providers with their resolved config, in `order` order.
     pub fn enabled_models(&self) -> Vec<(String, ModelEntry, ModelConfig)> {
         let file = self.file.read().unwrap();

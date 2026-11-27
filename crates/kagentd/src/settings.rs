@@ -121,6 +121,8 @@ impl From<PrivilegeMethodSerde> for PrivilegeMethod {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOptionsSerde {
+    /// No longer read from S41 on (picker.md section 2): a conversation chooses its own
+    /// effort. Kept, so that a value in an old file survives a load and a save.
     pub reasoning_level: Option<String>,
     /// No longer read from S40 on (models.md section 6): the model's own output limit
     /// is the only source. Kept, so that a value in an old file survives a load and a

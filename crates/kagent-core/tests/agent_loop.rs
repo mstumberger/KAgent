@@ -299,3 +299,104 @@ async fn an_empty_answer_is_asked_again_once_then_the_turn_fails_with_a_notice()
     assert_eq!((result.status, result.error.as_deref()), (TurnStatus::Failed, Some(kagent_core::agent::NO_ANSWER)));
     assert_eq!(r.model.requests.lock().unwrap().len(), 2);
 }
+
+// ------------------------------------------------------------------ the conversation's own model (S41, picker.md section 4)
+
+fn ok_text(text: &str) -> Result<ModelResponse, String> {
+    Ok(ModelResponse { text: text.into(), ..Default::default() })
+}
+
+/// What the daemon's source knows: `fake::big` (4096 window, 512 output, efforts low and
+/// high), the default `fake::test` (no efforts), `fake::backup` (efforts low only) and a
+/// model that is switched off.
+fn known_models() -> kagent_core::agent::children::UsableModels {
+    use kagent_core::agent::children::ModelInfo;
+    Arc::new(|model_ref: &str| match model_ref {
+        "fake::big" => Ok(ModelInfo { context_tokens: 4096, max_output_tokens: Some(512), reasoning_levels: vec!["low".into(), "high".into()] }),
+        "fake::test" => Ok(ModelInfo { context_tokens: 8192, max_output_tokens: Some(100), reasoning_levels: vec![] }),
+        "fake::backup" => Ok(ModelInfo { context_tokens: 8192, max_output_tokens: Some(999), reasoning_levels: vec!["low".into()] }),
+        "fake::off" => Err("model switched off"),
+        _ => Err("unknown model"),
+    })
+}
+
+/// One turn of a session that chose `model` and `level`, with the source when `source`.
+async fn choice_turn(model: Option<&str>, level: Option<&str>, source: bool, script: Vec<Result<ModelResponse, String>>) -> (TurnResult, Vec<AgentEvent>, ScriptedModel) {
+    let cfg = AgentConfig { fallback_model_ref: "fake::backup".into(), fallback_context_tokens: 8_192, fallback_max_output: Some(999), context_tokens: 8192, ..common::config() };
+    let r = common::rig_with(ScriptedModel::scripted(script), Arc::new(Mutex::new(Spans::default())), cfg).await;
+    if source {
+        r.agent.set_usable_models(known_models());
+    }
+    r.agent.set_model_choice(&r.session, model.map(Into::into), level.map(Into::into)).await.unwrap();
+    let before = r.store.meta(&r.session).await.unwrap().updated_at;
+    let mut events = r.events.resubscribe();
+    let SendOutcome::Started { handle, .. } = r.agent.send(&r.session, "hello".into(), Default::default()).await.unwrap() else { panic!("a turn starts") };
+    let result = handle.wait().await;
+    assert_eq!(r.store.meta(&r.session).await.unwrap().model.as_deref(), model, "the choice is kept");
+    assert!(before <= r.store.meta(&r.session).await.unwrap().updated_at);
+    let mut emitted = Vec::new();
+    while let Ok(ev) = events.try_recv() {
+        emitted.push(ev);
+    }
+    (result, emitted, r.model.clone())
+}
+
+#[tokio::test]
+async fn a_choice_replaces_the_model_the_output_limit_and_the_level_of_the_request() {
+    let (result, events, model) = choice_turn(Some("fake::big"), Some("high"), true, vec![ok_text("ok")]).await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    assert_eq!(model.model_refs.lock().unwrap().clone(), [("fake::big".to_string(), Some(512))]);
+    assert_eq!(model.levels.lock().unwrap().clone(), [Some("high".to_string())]);
+    assert!(notices(&events).is_empty(), "{:?}", notices(&events));
+}
+
+#[tokio::test]
+async fn a_choice_that_cannot_be_used_makes_the_default_answer_and_a_notice_says_why() {
+    let (result, events, model) = choice_turn(Some("fake::off"), Some("high"), true, vec![ok_text("ok")]).await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    assert_eq!(model.model_refs.lock().unwrap().clone(), [("fake::test".to_string(), None)]);
+    assert_eq!(
+        notices(&events),
+        ["fake::off cannot answer (model switched off) - answering with fake::test", "effort 'high' is not one fake::test offers (none) - answering with its default"],
+        "the model, then the effort that the default does not offer"
+    );
+    assert_eq!(model.levels.lock().unwrap().clone(), [None]);
+}
+
+#[tokio::test]
+async fn a_level_the_model_does_not_offer_is_not_sent_and_a_notice_says_so() {
+    let (result, events, model) = choice_turn(Some("fake::big"), Some("max"), true, vec![ok_text("ok")]).await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    assert_eq!(model.levels.lock().unwrap().clone(), [None]);
+    assert_eq!(notices(&events), ["effort 'max' is not one fake::big offers (low, high) - answering with its default"]);
+}
+
+#[tokio::test]
+async fn a_choice_equal_to_the_default_gives_no_notice_and_its_level_is_checked_against_the_default() {
+    let (_, events, model) = choice_turn(Some("fake::test"), None, true, vec![ok_text("ok")]).await;
+    assert!(notices(&events).is_empty());
+    assert_eq!(model.model_refs.lock().unwrap().clone(), [("fake::test".to_string(), None)]);
+    // A level with no model of its own is for the default model.
+    let (_, events, model) = choice_turn(None, Some("low"), true, vec![ok_text("ok")]).await;
+    assert_eq!(notices(&events).len(), 1, "the default offers no efforts");
+    assert_eq!(model.levels.lock().unwrap().clone(), [None]);
+}
+
+#[tokio::test]
+async fn without_a_source_the_choice_replaces_the_model_alone_and_the_level_is_sent_as_stored() {
+    let (_, events, model) = choice_turn(Some("fake::big"), Some("high"), false, vec![ok_text("ok")]).await;
+    assert_eq!(model.model_refs.lock().unwrap().clone(), [("fake::big".to_string(), None)], "the window and the limit of the default stay");
+    assert_eq!(model.levels.lock().unwrap().clone(), [Some("high".to_string())]);
+    assert!(notices(&events).is_empty());
+}
+
+#[tokio::test]
+async fn a_fallback_that_does_not_offer_the_level_gets_none() {
+    // `fake::big` is out of quota; `fake::backup` offers low only.
+    let (result, _, model) = choice_turn(Some("fake::big"), Some("high"), true, vec![Err("429 quota".into()), ok_text("ok")]).await;
+    assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
+    assert_eq!(model.model_refs.lock().unwrap().iter().map(|(m, _)| m.as_str()).collect::<Vec<_>>(), ["fake::big", "fake::backup"]);
+    assert_eq!(model.levels.lock().unwrap().clone(), [Some("high".to_string()), None]);
+    let (_, _, model) = choice_turn(Some("fake::big"), Some("low"), true, vec![Err("429 quota".into()), ok_text("ok")]).await;
+    assert_eq!(model.levels.lock().unwrap().clone(), [Some("low".to_string()), Some("low".to_string())], "a fallback that offers it keeps it");
+}

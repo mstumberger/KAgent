@@ -161,13 +161,18 @@ impl Profile {
 }
 
 /// What a model is (the window and the output limit of a profile's model), by ref.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelInfo {
     pub context_tokens: usize,
     pub max_output_tokens: Option<u64>,
+    /// The efforts the model offers, in order (`effective.reasoningLevels`); empty: none.
+    pub reasoning_levels: Vec<String>,
 }
 
 pub type ModelWindow = Arc<dyn Fn(&str) -> Option<ModelInfo> + Send + Sync>;
+/// What a conversation's choice of model is asked of (picker.md section 4.3): `Ok` for a
+/// model that can be used, `Err(reason)` otherwise.
+pub type UsableModels = Arc<dyn Fn(&str) -> Result<ModelInfo, &'static str> + Send + Sync>;
 
 /// One job for a subagent.
 #[derive(Debug, Clone)]

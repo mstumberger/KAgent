@@ -332,6 +332,8 @@ mod tests {
                 todo: Vec::new(),
                 planning: false,
                 approved_plan: None,
+                model: None,
+                reasoning_level: None,
             },
             vec![],
         )

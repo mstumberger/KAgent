@@ -139,6 +139,8 @@ impl Agent {
         config.model_ref = config.fallback_model_ref.clone();
         config.context_tokens = config.fallback_context_tokens;
         config.options.max_output_tokens = config.fallback_max_output;
+        // The level of the choice goes only to a model that offers it (picker.md section 4.2).
+        self.level_for_fallback(config);
     }
 }
 
