@@ -14,6 +14,7 @@ pub mod context;
 mod instruction;
 pub mod protocol;
 mod tool_call;
+mod voice_roll;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -147,6 +148,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     let (mut user_buf, mut asst_buf) = (String::new(), String::new());
     let mut rolls = 0u32;
     let mut ever_connected = false;
+    // Set when a roll changes the voice: a server that refuses the handle with the new voice gets a fresh connection.
+    let mut voice_rolled = false;
     // Media paused when the session went live, resumed when it ends (voice.pauseMedia).
     let media_ctx = kagent_core::tool::ToolContext::standalone(Duration::from_secs(3), 64_000);
     let mut paused: Option<Vec<String>> = None;
@@ -191,6 +194,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
         rolls += 1;
         let (mut up_tx, mut up_rx) = up.split();
         let first = handle.is_none();
+        let mut set_up = false;
         let setup = protocol::setup_message(&SetupParams {
             model: &target.model,
             voice: &voice,
@@ -267,13 +271,23 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             // Google explains refusals here (quota, model, bad setup).
                             let why = frame.map(|f| format!("{} {}", f.code, f.reason)).unwrap_or_default();
                             tracing::warn!(session, "live upstream closed: {why}");
+                            if voice_roll::refused(voice_rolled, set_up) {
+                                handle = None;
+                                voice_rolled = false;
+                            }
                             if !ever_connected && !why.is_empty() {
                                 status(&out, &st, &session, "error", &format!("Gemini closed the connection: {why}"));
                                 break 'conn;
                             }
                             continue 'conn;
                         }
-                        None | Some(Err(_)) => continue 'conn,
+                        None | Some(Err(_)) => {
+                            if voice_roll::refused(voice_rolled, set_up) {
+                                handle = None;
+                                voice_rolled = false;
+                            }
+                            continue 'conn;
+                        }
                         _ => continue,
                     };
                     let Ok(msg) = serde_json::from_str::<Value>(&text) else { continue };
@@ -288,6 +302,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                 // sessions roll on every goAway).
                                 rolls = 0;
                                 ever_connected = true;
+                                set_up = true;
+                                voice_rolled = false;
                                 if paused.is_none() && st.settings.read().unwrap().voice_pauses_media() {
                                     paused = Some(kagent_core::tools::media::pause_playing(&media_ctx).await);
                                 }
@@ -321,6 +337,14 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             ServerEvent::TurnComplete => {
                                 close_turn!();
                                 let _ = out.send(json!({"type": "turnComplete"}));
+                                // `settings set liveVoice` (voice-control.md section 2): the sentence that
+                                // announced the change is over, so the connection rolls with the new voice.
+                                if let Some(next) = voice_roll::changed(&st.settings.read().unwrap().live_voice, &voice) {
+                                    tracing::info!(session, "live voice {voice} -> {next}: rolling the connection");
+                                    voice = next;
+                                    voice_rolled = true;
+                                    continue 'conn;
+                                }
                             }
                             ServerEvent::ToolCalls(list) => {
                                 for c in list {

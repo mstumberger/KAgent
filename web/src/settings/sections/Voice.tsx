@@ -2,6 +2,7 @@
 // The Voice tab keeps the live stage (orb, talk button, transcript) and links here.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, type Template, type ToolView, type VoiceBrain } from "../../api";
+import { voice as ctl } from "../../voice/controller";
 import { ORB_THEMES, normalizeTheme, type OrbTheme } from "../../voice/Orb";
 import { useStore } from "../../store";
 import type { SectionProps } from "../registry";
@@ -37,6 +38,8 @@ export default function VoiceSection({ title, description }: SectionProps) {
   const [voices, setVoices] = useState<string[]>([]);
   const [liveModels, setLiveModels] = useState<{ ref: string }[]>([]);
   const [tools, setTools] = useState<ToolView[]>([]);
+  // The slider moves at once (the page applies it live); the setting is saved when it is let go.
+  const [dragging, setDragging] = useState<number | null>(null);
   const look = useSyncExternalStore(subscribeLook, readLook, readLook);
 
   useEffect(() => {
@@ -86,6 +89,29 @@ export default function VoiceSection({ title, description }: SectionProps) {
               <option key={v}>{v}</option>
             ))}
           </select>
+        </Row>
+        <Row label="Volume" hint="How loud KAgent speaks. Not the system volume.">
+          <input
+            type="range"
+            aria-label="Volume"
+            min={0}
+            max={100}
+            step={5}
+            value={dragging ?? voice?.volume ?? 100}
+            onChange={(e) => {
+              setDragging(Number(e.target.value));
+              ctl.setSettingsVolume(Number(e.target.value));
+            }}
+            onPointerUp={(e) => {
+              void save("voice", { volume: Number(e.currentTarget.value) });
+              setDragging(null);
+            }}
+            onKeyUp={(e) => {
+              void save("voice", { volume: Number(e.currentTarget.value) });
+              setDragging(null);
+            }}
+          />
+          <span className="hint">{dragging ?? voice?.volume ?? 100}%</span>
         </Row>
         <Row label="Look" hint="The orb on the Voice tab.">
           <select aria-label="Look" value={look} onChange={(e) => setLook(e.target.value as OrbTheme)}>

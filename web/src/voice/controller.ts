@@ -22,6 +22,8 @@ export const voice = {
   detail: "",
   muted: false,
   volume: readNum("kagent.volume", 0.6),
+  /** settings.voice.volume, 0..100: set by the owner or by the agent's `settings` tool (voice-control.md section 2). */
+  settingsVolume: 100,
   lines: [] as Line[],
   /** What was said in the current turn, not yet stored in the session (shown live in chat). */
   pending: [] as Line[],
@@ -60,6 +62,7 @@ export const voice = {
     voice.thinking = false;
     client = new LiveClient(handle);
     client.setVolume(voice.volume);
+    client.setSettingsVolume(voice.settingsVolume);
     client.setMuted(voice.muted);
     void client.start(sessionId, voiceName);
     changed();
@@ -77,6 +80,11 @@ export const voice = {
   setMuted(m: boolean) {
     voice.muted = m;
     client?.setMuted(m);
+    changed();
+  },
+  setSettingsVolume(pct: number) {
+    voice.settingsVolume = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 100));
+    client?.setSettingsVolume(voice.settingsVolume);
     changed();
   },
   setVolume(v: number) {
