@@ -27,7 +27,7 @@ pub struct VoiceSection {
 impl Default for VoiceSection {
     fn default() -> Self {
         Self {
-            brain: VoiceBrain::Routed,
+            brain: VoiceBrain::Live,
             tool_groups: ["desktop", "tasks", "system"].iter().map(|g| g.to_string()).collect(),
             context: true,
             vocabulary: true,
@@ -55,9 +55,9 @@ impl VoiceSection {
 #[serde(rename_all = "lowercase")]
 pub enum VoiceBrain {
     /// The chat model thinks; the live model listens and reads out its reply.
-    #[default]
     Routed,
-    /// The live model alone.
+    /// The live model alone (the default).
+    #[default]
     Live,
     Auto,
 }
@@ -118,5 +118,16 @@ mod tests {
         assert!(s.patch(json!({"voice": {"volume": 101}})).unwrap_err().contains("volume must be between 0 and 100"));
         assert!(s.patch(json!({"voice": {"volume": -5}})).is_err());
         assert_eq!(s.voice_config().volume, 60, "a refused patch changes nothing");
+    }
+
+    #[test]
+    fn the_brain_is_live_unless_the_file_says_otherwise() {
+        assert_eq!(VoiceSection::default().brain, VoiceBrain::Live);
+        let mut s = Settings::defaults();
+        assert_eq!(s.voice_config().brain, VoiceBrain::Live, "no section");
+        s.patch(json!({"voice": {"pauseMedia": false}})).unwrap();
+        assert_eq!(s.voice_config().brain, VoiceBrain::Live, "a section without the key");
+        s.patch(json!({"voice": {"brain": "routed"}})).unwrap();
+        assert_eq!(s.voice_config().brain, VoiceBrain::Routed, "what the owner chose stays");
     }
 }

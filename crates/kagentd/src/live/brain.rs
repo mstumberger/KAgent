@@ -31,6 +31,9 @@ const TOO_LONG: &str = "that took too long";
 /// The reason of a card denied because the server cancelled its call.
 pub const INTERRUPTED: &str = "cancelled: the user interrupted";
 
+/// The tool that is declared to the live model in `live` and `auto` whatever `voice.toolGroups` holds.
+pub const SETTINGS_TOOL: &str = "settings";
+
 /// The statuses of a `think` result (tools.md section 24).
 pub const OK: &str = "ok";
 pub const FAILED: &str = "failed";
@@ -113,7 +116,8 @@ pub fn tools(st: &AppState, mode: VoiceBrain, groups: &[String]) -> Vec<ToolSpec
         out.push(protocol::think_spec());
     }
     if mode != VoiceBrain::Routed {
-        out.extend(st.agent.advertised_specs().into_iter().filter(|t| groups.iter().any(|g| g == kagent_core::tools::group_of(&t.name))));
+        // `settings` is declared whatever `voice.toolGroups` holds (voice-control.md section 1).
+        out.extend(st.agent.advertised_specs().into_iter().filter(|t| t.name == SETTINGS_TOOL || groups.iter().any(|g| g == kagent_core::tools::group_of(&t.name))));
     }
     out
 }
@@ -276,6 +280,7 @@ async fn think(st: &AppState, session: &str, id: &str, c: &FunctionCall, out: &m
         }
         Think::Brain => {
             calls.think_used.store(true, Ordering::Relaxed);
+            let started = std::time::Instant::now();
             // While a brain turn runs the text is queued behind it, so it steers the first.
             match st.agent.send_with(session, text, Via::Voice, TurnOpts::default()).await {
                 Ok(SendOutcome::Started { .. }) => {}
@@ -283,7 +288,13 @@ async fn think(st: &AppState, session: &str, id: &str, c: &FunctionCall, out: &m
                 Err(e) => return (sorry(&format!("{e:#}")), FAILED),
             }
             match tokio::time::timeout(BRAIN_LIMIT, st.agent.wait_idle(session)).await {
-                Ok(result) => outcome(&result),
+                Ok(result) => {
+                    // What the owner waited (voice-control.md section 3); a cancelled turn says nothing about the Brain.
+                    if result.status != TurnStatus::Cancelled {
+                        super::think_times::record(started.elapsed().as_millis() as u64);
+                    }
+                    outcome(&result)
+                }
                 Err(_) => {
                     st.agent.cancel(session).await;
                     let _ = tokio::time::timeout(Duration::from_secs(10), st.agent.wait_idle(session)).await;

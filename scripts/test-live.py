@@ -415,7 +415,7 @@ async def main():
         checks.update({
             "setup has model/voice/tools": setup["setup"]["model"] == "models/gemini-3.8-live"
                 and setup["setup"]["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Puck"
-                and "system_info" in declared(setup["setup"]),
+                and "system_info" in declared(setup["setup"]) and "settings" in declared(setup["setup"]),
             "mic audio relayed upstream": state["audio_in"] >= 2,
             "tool executed by daemon": tools == [("system_info", "started"), ("system_info", "ok")],
             "tool response sent with id": state["response_ids"][:1] == ["t1"] and len(state["tool_responses"].get("t1", {}).get("output", "")) > 50,
@@ -477,6 +477,9 @@ async def main():
                 and not any(c == SPOKEN for _, c, _, _ in stored),
         })
 
+        median = api("GET", "/api/state")["voice"]["thinkMedianMs"]
+        checks["routed: GET /api/state tells the median of the brain turns"] = isinstance(median, int) and median >= 0
+
         # ---------------------------------------------------------------- spoken confirmation of a live tool call
         api("PUT", "/api/settings", {"voice": {"brain": "live"}})
         session = api("POST", "/api/sessions", {"title": "confirm test"})["id"]
@@ -517,7 +520,8 @@ async def main():
         await live_session(session, "auto", wait_script)
         names = declared(state["setups"][0]["setup"])
         checks["auto: think and the tools of voice.toolGroups"] = ("think" in names and "system_info" in names and "audio_control" in names and "tasks" in names
-                                                                 and "kernel_info" not in names and "shell" not in names and names.index("think") == 0)
+                                                                 and "kernel_info" not in names and "shell" not in names and names.index("think") == 0
+                                                                 and "settings" in names)  # declared though voice.toolGroups has no agent group
         checks["live: the default groups are desktop, tasks and system"] = "kernel_info" not in declared(first) and "system_info" in declared(first)
 
         # ---------------------------------------------------------------- routed without a chat model

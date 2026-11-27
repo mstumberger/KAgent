@@ -1,7 +1,7 @@
 // Voice: the live model, who thinks, the voice, the look of the orb and pausing media.
 // The Voice tab keeps the live stage (orb, talk button, transcript) and links here.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { api, type Template, type ToolView, type VoiceBrain } from "../../api";
+import { api, type StateView, type Template, type ToolView, type VoiceBrain } from "../../api";
 import { voice as ctl } from "../../voice/controller";
 import { ORB_THEMES, normalizeTheme, type OrbTheme } from "../../voice/Orb";
 import { useStore } from "../../store";
@@ -17,10 +17,12 @@ const EXTENDED_HINT = "slower, more thorough";
 /** The daemon's defaults, shown until the settings say otherwise. */
 const DEFAULT_GROUPS = ["desktop", "tasks", "system"];
 const THINKING: { id: VoiceBrain; label: string; hint: string }[] = [
-  { id: "routed", label: "Chat model (smarter, a little slower)", hint: "The chat model thinks, with the conversation, your memory and skills, and the live model reads its answer aloud. Without a chat model the live model thinks." },
   { id: "live", label: "Live model (fastest)", hint: "The live model thinks by itself, with the tools picked below." },
   { id: "auto", label: "Live model decides", hint: "The live model answers small talk and direct commands itself and hands everything else to the chat model." },
+  { id: "routed", label: "Chat model (smarter, a little slower)", hint: "The chat model thinks, with the conversation, your memory and skills, and the live model reads its answer aloud. Without a chat model the live model thinks." },
 ];
+/** Over this many ms of median wait for the Brain, the line becomes a warning (voice-control.md section 3). */
+const SLOW_MS = 4000;
 
 const readLook = (): OrbTheme => normalizeTheme(localStorage.getItem(ORB));
 
@@ -37,6 +39,7 @@ export default function VoiceSection({ title, description }: SectionProps) {
   const { save } = useSettingPatch();
   const [voices, setVoices] = useState<string[]>([]);
   const [liveModels, setLiveModels] = useState<{ ref: string }[]>([]);
+  const [thinkMs, setThinkMs] = useState<number | null>(null);
   const [tools, setTools] = useState<ToolView[]>([]);
   // The slider moves at once (the page applies it live); the setting is saved when it is let go.
   const [dragging, setDragging] = useState<number | null>(null);
@@ -45,6 +48,10 @@ export default function VoiceSection({ title, description }: SectionProps) {
   useEffect(() => {
     void api.get<Template[] | { templates: Template[] }>("/api/providers/templates").then((t) => setVoices([...new Set((Array.isArray(t) ? t : t.templates).flatMap((x) => x.voices ?? []))]));
     void api.get<Record<string, { ref: string }[]>>("/api/models").then((m) => setLiveModels(m.live ?? []));
+    void api
+      .get<StateView>("/api/state")
+      .then((st) => setThinkMs(st.voice?.thinkMedianMs ?? null))
+      .catch(() => setThinkMs(null));
     // The groups the live model may be given: those of the registered tools.
     void api
       .get<{ tools: ToolView[] }>("/api/tools")
@@ -55,7 +62,7 @@ export default function VoiceSection({ title, description }: SectionProps) {
   const liveModel = settings?.liveModel ?? "";
   const liveVoice = settings?.liveVoice ?? "Kore";
   const voice = settings?.voice;
-  const brain = voice?.brain ?? "routed";
+  const brain = voice?.brain ?? "live";
   const liveGroups = voice?.toolGroups ?? DEFAULT_GROUPS;
   const setLook = (t: OrbTheme) => {
     localStorage.setItem(ORB, t);
@@ -134,6 +141,13 @@ export default function VoiceSection({ title, description }: SectionProps) {
             ))}
           </div>
         </Row>
+        {brain !== "live" && (
+          <p className={thinkMs !== null && thinkMs > SLOW_MS ? "hint ui-note warn-text" : "hint ui-note"} role={thinkMs !== null && thinkMs > SLOW_MS ? "alert" : undefined}>
+            {thinkMs !== null && thinkMs > SLOW_MS
+              ? `The Brain took ${Math.round(thinkMs / 1000)} s on average: live answers faster.`
+              : `Every request waits for the Brain (${(settings?.chatModel ?? "").split("::").pop() || "no chat model"}).`}
+          </p>
+        )}
         <Row label="Tools for the live model" hint="The groups the live model may call itself in the other two modes. A group that is off for chat is off here too; none picked means no tools." stacked>
           <div className="chips">
             {groups.map((g) => (
