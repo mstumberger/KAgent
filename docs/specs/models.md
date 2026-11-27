@@ -165,8 +165,8 @@ cannot answer text stays.
 
 ## 6. Settings
 
-- `options.reasoningLevel` and `options.temperature` stay, in the Defaults card.
-  `options.reasoningLevel` leaves in S41, when the effort is chosen per conversation.
+- `options.temperature` stays, in the Defaults card. `options.reasoningLevel` is no longer
+  read since S41: the effort is chosen per conversation (`picker.md`; `config.md` section 2).
 - `options.maxOutputTokens` is no longer read: the model's own value is the only
   source. A value in an old file is ignored (`config.md` says so).
 - `maxIterations` and `approvalTimeoutSec` move to Tools and permissions, card "Limits
@@ -251,7 +251,8 @@ Over the page with `settings/dialog.tsx` (`wide`). Title "Edit model" or "Add mo
   an empty value for none).
 - A dropdown whose model cannot be used keeps its option and shows why under it: "provider
   switched off", "model switched off" or "unknown model".
-- Reasoning level (the levels the chat models offer) and Temperature, as today.
+- Temperature, as today. The reasoning level left the card in S41: the effort is chosen per
+  conversation in the composer (`picker.md`).
 - The live model stays in the Voice section.
 
 ### 7.7 Files

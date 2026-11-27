@@ -53,6 +53,9 @@ All writes of JSON config are atomic (tmp + rename) and keep mode 0600.
 }
 ```
 - Unknown keys are preserved on save (forward compatible).
+- `options.reasoningLevel` is no longer read (S41): the effort is chosen per conversation
+  (`SessionMeta.reasoningLevel`, section 12). The field stays so that a value in an old file
+  survives a load and a save, as `options.maxOutputTokens` does since S40.
 - `permissionMode`: `read-only | ask | trusted`. `privilege`: `sudo | pkexec | none`.
 - `toolOverrides`: tool -> `allow | ask | deny` (applied after mode, before rules;
   never relaxes PRIV/always_ask).
@@ -352,3 +355,27 @@ Session meta: the session of a coder run carries `coder`; every other session ha
 ```
 S38 adds `branch` (string or null), `worktree` (the folder, or null) and `files` (the
 files the tool edited).
+
+## 12. Phase 6 session fields (S41-S43)
+
+S41 opens this section; S42 and S43 add their fields. All are optional (`#[serde(default)]`),
+so a meta file from before loads.
+
+```json
+{"id": "...", "title": "...", "createdAt": "...", "updatedAt": "...",
+ "model": "anthropic::claude-opus-4-6", "reasoningLevel": "high",
+ "planning": false, "approvedPlan": null}
+```
+
+| Field | Meaning |
+|---|---|
+| `model` | a model ref `<providerId>::<modelId>` the conversation chose, or `null`: the default chat model answers |
+| `reasoningLevel` | one of the levels the answering model offers (`effective.reasoningLevels`), or `null`: nothing is sent and the provider's own default applies |
+
+- The session of a subagent never has either: the route refuses it and the child is made
+  with none. Voice, tasks, alerts and Telegram keep the default unless the session has a choice.
+- A choice that cannot be used when a turn starts (the provider or model was switched off
+  since) makes the default answer, and a `notice` says why.
+- The last choice of the owner is in the browser, not in a file: localStorage `kagent.picker` =
+  `{"model": "<ref> or null", "reasoningLevel": "<level> or null"}`; a new conversation
+  starts with it.

@@ -165,7 +165,7 @@ Known and accepted: the memory block of the closure is sized by the window of th
 model, not of the session's choice (the closure cannot read the session). The history
 budget counts the whole prompt, so the request still fits.
 
-## 5. The UI (`ui-settings.md` section 10)
+## 5. The UI (`ui-settings.md` section 11)
 
 ### 5.1 The composer (`views/Chat.tsx`)
 
@@ -445,7 +445,7 @@ Scenarios: `scenarios.md` S41.
   `sessionMetaChanged`.
 - `config.md` section 12 (opened here): the two session fields and the note on
   `options.reasoningLevel` (section 2 of that file).
-- `ui-settings.md` section 10 (new): the composer's model menu, the header without the
+- `ui-settings.md` section 11 (new; 10 is the Calendar page of S45): the composer's model menu, the header without the
   dot, the widget's sheet and the house popup of 5.8.
 - `models.md` section 6 (the sentence on `options.reasoningLevel`) and section 7.6 (the
   Defaults card without the reasoning level).

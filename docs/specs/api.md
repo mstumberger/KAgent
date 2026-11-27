@@ -50,7 +50,7 @@ type AuditRecord = /* config.md section 6 */;
 | GET `/api/tools` | | `ToolView[]` |
 | POST `/api/tools/:name/call` | `{input, sessionId?: string /*default "mcp"*/}` | `{status: ToolCallStatus, output: string, durationMs}` (runs `Agent::execute_call`, approvals included; used by MCP) |
 | GET `/api/sessions` | | `SessionMeta[]` newest first |
-| POST `/api/sessions` | `{title?}` | `SessionMeta` (201) |
+| POST `/api/sessions` | `{title?, model?, reasoningLevel?}` (the last two from S41, section 8) | `SessionMeta` (201) |
 | GET `/api/sessions/:id` | | `{meta: SessionMeta, messages: Message[]}` |
 | DELETE `/api/sessions/:id` | | 204 (cancels if running) |
 | POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice"}` | `{status: "started", turnId}` or `{status: "queued"}`; 409 for the session of a subagent (read-only) |
@@ -270,3 +270,45 @@ body. A refused write is 400 (`invalid_input`) or 409 (`conflict`).
 
 Phase 5 adds no event: a coder run is reported with `subagentUpdated`, as a subagent is
 (`coders.md` section 2).
+
+## 8. Phase 6 endpoints and events (S41-S43)
+
+Same transport, auth and error shape as section 3. S41 opens this section; S42 and S43 add
+their rows. Spec of S41: `picker.md`.
+
+### Endpoints
+
+| Method path | Request | Response |
+|---|---|---|
+| PUT `/api/sessions/:id/model` | `{model?: string\|null, reasoningLevel?: string\|null}` | `SessionMeta` |
+| POST `/api/sessions` | `{title?, model?, reasoningLevel?}` | `SessionMeta` (201) |
+| GET `/api/models` | | as `models.md` section 4; each model of every list also has `providerId` and `providerName` |
+
+The two writes are checked by one function, before anything is written:
+
+- A key left out keeps its value; `null` or `""` clears it. A refused request changes
+  nothing and makes no session.
+- 404 `not_found` "session <id> not found" (PUT only).
+- 409 `conflict` "the session of a subagent takes the model of its job: it cannot be
+  changed" for a session with origin `subagent` (PUT only).
+- 400 `invalid_input`: a body that is not an object, a key other than `model` and
+  `reasoningLevel` (and `title` on POST), or a value that is neither a string nor null
+  ("expected an object with model and reasoningLevel (strings, or null to clear)"); a
+  model that cannot be used ("model '<ref>' cannot be used: <reason>", the reason being
+  `unknown model`, `provider switched off`, `model switched off` or `not a chat model`);
+  an effort the answering model does not offer ("model '<ref>' has no effort '<level>' (it
+  offers: low, medium, high)" or "(it offers none)"). The answering model is the `model` of
+  the body, else the session's, else `settings.chatModel`; with none of the three an effort
+  is refused with "effort '<level>' needs a model: pick a model first".
+- When `model` is given and `reasoningLevel` is not, a stored level the new model does not
+  offer is cleared.
+- Nothing changes and no event goes out when the meta would be the same.
+
+### Events
+
+```json
+{"type":"sessionMetaChanged","sessionId":"...","meta":{/* SessionMeta */}}
+```
+
+The whole meta after the file was written, so a window applies it without reading anything
+(S42 reuses it for the folder and the pin).
