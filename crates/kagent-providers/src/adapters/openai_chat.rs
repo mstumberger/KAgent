@@ -93,7 +93,12 @@ pub fn build_body(p: &BodyParams) -> Value {
 #[derive(Default)]
 pub struct Reducer {
     text: String,
-    tool_calls: BTreeMap<u64, ToolCall>,
+    /// The calls in the order they started.
+    tool_calls: Vec<ToolCall>,
+    /// The position in `tool_calls` of the call each stream `index` is filling now.
+    /// Gemini's OpenAI-compatible API sends parallel calls all under `index` 0, each
+    /// with an `id` of its own: a new `id` on an index starts a new call.
+    slots: BTreeMap<u64, usize>,
     usage: Usage,
 }
 
@@ -124,15 +129,19 @@ impl Reducer {
         if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
             for c in calls {
                 let index = c.get("index").and_then(Value::as_u64).unwrap_or(0);
-                let entry = self.tool_calls.entry(index).or_insert_with(|| ToolCall {
-                    id: String::new(),
-                    name: String::new(),
-                    input: Value::Null,
-                });
-                if let Some(id) = c.get("id").and_then(Value::as_str) {
-                    if !id.is_empty() {
-                        entry.id = id.to_string();
+                let id = c.get("id").and_then(Value::as_str).filter(|id| !id.is_empty());
+                let other_call = |slot: usize, calls: &[ToolCall]| id.is_some_and(|id| !calls[slot].id.is_empty() && calls[slot].id != id);
+                let slot = match self.slots.get(&index) {
+                    Some(&slot) if !other_call(slot, &self.tool_calls) => slot,
+                    _ => {
+                        self.tool_calls.push(ToolCall { id: String::new(), name: String::new(), input: Value::Null });
+                        self.slots.insert(index, self.tool_calls.len() - 1);
+                        self.tool_calls.len() - 1
                     }
+                };
+                let entry = &mut self.tool_calls[slot];
+                if let Some(id) = id {
+                    entry.id = id.to_string();
                 }
                 if let Some(f) = c.get("function") {
                     if let Some(name) = f.get("name").and_then(Value::as_str) {
@@ -156,7 +165,7 @@ impl Reducer {
     pub fn finish(self) -> ModelResponse {
         let tool_calls = self
             .tool_calls
-            .into_values()
+            .into_iter()
             .filter(|c| !c.name.is_empty())
             .map(|mut c| {
                 let raw = c.input.as_str().unwrap_or_default().to_string();
@@ -254,6 +263,24 @@ mod tests {
         assert_eq!(out.tool_calls.len(), 1);
         assert_eq!(out.tool_calls[0].id, "call_1");
         assert_eq!(out.tool_calls[0].input, json!({"a": 1, "b": 2}));
+    }
+
+    #[test]
+    fn parallel_calls_under_one_index_stay_apart() {
+        // Gemini's OpenAI-compatible stream: two calls, both `index` 0, each complete in
+        // one chunk with its own id. They were glued into one `{..}{..}` call.
+        let mut r = Reducer::new();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        for data in [
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"search_files","arguments":"{\"pattern\":\"x\",\"path\":\"~/a\"}"}}]}}]}"#,
+            r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"b","function":{"name":"search_files","arguments":"{\"pattern\":\"x\",\"path\":\"~/b\"}"}}]}}]}"#,
+        ] {
+            r.feed(&SseEvent { event: None, data: data.to_string() }, &tx);
+        }
+        let out = r.finish();
+        assert_eq!(out.tool_calls.len(), 2);
+        assert_eq!((out.tool_calls[0].id.as_str(), out.tool_calls[0].input["path"].as_str()), ("a", Some("~/a")));
+        assert_eq!((out.tool_calls[1].id.as_str(), out.tool_calls[1].input["path"].as_str()), ("b", Some("~/b")));
     }
 
     #[test]
