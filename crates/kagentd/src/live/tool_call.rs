@@ -35,6 +35,7 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
         // about, and every `always_ask` call (typing into a terminal, changing a
         // setting), runs only after the owner's own "yes" / "confirm"; its card, if it
         // has one, is then answered by that voice, not by a click.
+        st.agent.prime_call(&call).await;
         if let Some((assessment, ask)) = st.agent.voice_gate(&session, &call) {
             let refuse = |state: &str, response: Value| {
                 calls.finish(&call.id);

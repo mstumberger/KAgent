@@ -1,6 +1,7 @@
 //! Tests of the calendar module against the fake Google (calendar.md section 9). `rig` is
 //! the one place a module is built; each file of `tests/` holds the checks of one part.
 
+mod change;
 mod connection;
 mod google;
 
@@ -30,6 +31,18 @@ impl Rig {
     /// The clock moves on by `by`.
     pub fn later(&self, by: Duration) {
         self.skew.fetch_add(by.num_seconds(), Ordering::SeqCst);
+    }
+
+    /// A tool context with the daemon's services: the journal in this rig's folder, and the module as the undo of calendar records.
+    pub fn ctx(&self) -> kagent_core::tool::ToolContext {
+        let journal = Arc::new(kagent_core::journal::ChangeJournal::new(self.dir.path().join("changes")).unwrap());
+        let services = Arc::new(kagent_core::tool::ToolServices::new(journal, Arc::new(kagent_core::tools::privop::PrivClient::with_path("/nonexistent/kagent-priv"))));
+        super::change::register_undo(&self.cal, &services);
+        let mut ctx = kagent_core::tool::ToolContext::standalone(std::time::Duration::from_secs(5), 24_000);
+        ctx.services = Some(services);
+        ctx.session_id = "s1".into();
+        ctx.call_id = "c1".into();
+        ctx
     }
 
     /// The tools' handle on the module.

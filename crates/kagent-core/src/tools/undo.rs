@@ -102,9 +102,12 @@ pub async fn run_undo(ctx: &ToolContext, change_id: &str) -> anyhow::Result<Tool
     let Some(undo) = change.undo.clone() else {
         return Ok(ToolOutput::error(format!("change {change_id} ({}) has no automatic undo", change.summary)));
     };
+    let handler = undo.get("action").and_then(Value::as_str).and_then(|a| services.undo.read().unwrap().iter().find(|h| h.action() == a).cloned());
     let (ok, detail) = if undo.get("op").is_some() {
         let r = services.priv_client.call(ctx, &undo).await?;
         (r.ok, format!("{}{}", r.stdout.trim(), r.message.map(|m| format!("\n{m}")).unwrap_or_default()))
+    } else if let Some(handler) = handler {
+        handler.undo(&undo).await
     } else {
         match undo.get("action").and_then(Value::as_str) {
             Some("restore_file") => {

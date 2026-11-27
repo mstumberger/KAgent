@@ -13,7 +13,7 @@ use crate::model::{ModelClient, ModelDelta, ModelRequest, ModelResponse};
 use crate::permission::{PermissionBroker, PermissionEngine, PermissionMode};
 use crate::protocol::{AgentEvent, Message, ToolCall, ToolCallStatus};
 use crate::session::SessionStore;
-use crate::tool::{PrivilegeMethod, ToolRegistry};
+use crate::tool::{CallAssessment, PrivilegeMethod, Tool, ToolContext, ToolContract, ToolOutput, ToolRegistry};
 
 /// Never asked: no test here runs a turn.
 struct NoModel;
@@ -22,6 +22,30 @@ struct NoModel;
 impl ModelClient for NoModel {
     async fn complete(&self, _request: ModelRequest, _deltas: mpsc::UnboundedSender<ModelDelta>, _cancel: CancellationToken) -> anyhow::Result<ModelResponse> {
         anyhow::bail!("no model in this test")
+    }
+}
+
+/// A tool whose question needs a lookup (`Tool::prime`), as a calendar event does.
+struct Primed(std::sync::Mutex<String>);
+
+#[async_trait]
+impl Tool for Primed {
+    fn contract(&self) -> &ToolContract {
+        static CONTRACT: std::sync::OnceLock<ToolContract> = std::sync::OnceLock::new();
+        CONTRACT.get_or_init(|| {
+            let mut c = ToolContract::read_only("primed", "test", json!({"type":"object"})).mutating(crate::tool::SideEffect::Network, crate::tool::Risk::Low);
+            c.always_ask = true;
+            c
+        })
+    }
+    async fn prime(&self, input: &Value) {
+        *self.0.lock().unwrap() = format!("move \"{}\"", input["id"].as_str().unwrap_or("?"));
+    }
+    fn assess(&self, _input: &Value) -> CallAssessment {
+        CallAssessment::from_contract(self.contract(), self.0.lock().unwrap().clone(), "primed".into())
+    }
+    async fn call(&self, _input: Value, _ctx: ToolContext) -> anyhow::Result<ToolOutput> {
+        Ok(ToolOutput::ok("ok"))
     }
 }
 
@@ -35,6 +59,7 @@ fn agent_over(dir: &Path, mode: PermissionMode) -> (Arc<Agent>, broadcast::Sende
     registry.register(Arc::new(TodoWrite::new(access.clone())));
     registry.register(Arc::new(TodoRead::new(access.clone())));
     registry.register(Arc::new(crate::tools::terminal::Terminal::new()));
+    registry.register(Arc::new(Primed(Default::default())));
     let (events, _) = broadcast::channel(64);
     let cfg = AgentConfig {
         model_ref: String::new(),
@@ -308,4 +333,29 @@ async fn from_voice_an_always_ask_call_is_confirmed_in_full_mode_too() {
     let (_, ask) = agent.voice_gate(&id, &ToolCall { id: "c".into(), name: "todo_read".into(), input: json!({}) }).unwrap();
     assert!(!ask);
     assert!(agent.voice_gate(&id, &ToolCall { id: "c".into(), name: "nope".into(), input: json!({}) }).is_none());
+}
+
+/// A tool may read what its question will say before it is asked (calendar.md section 3: the
+/// sentence comes from the stored event): `prime_call` before the voice gate, and the call
+/// itself before its card.
+#[tokio::test]
+async fn a_tool_is_primed_before_its_question_is_built() {
+    let dir = tempfile::tempdir().unwrap();
+    let (agent, events) = agent_over(dir.path(), PermissionMode::Full);
+    let mut seen = events.subscribe();
+    let id = agent.store().create("t").await.unwrap().id;
+    let call = ToolCall { id: "c".into(), name: "primed".into(), input: json!({"id": "evt1"}) };
+    let (a, _) = agent.voice_gate(&id, &call).unwrap();
+    assert_eq!(a.summary, "", "without a lookup the question has nothing to say");
+    agent.prime_call(&call).await;
+    let (a, ask) = agent.voice_gate(&id, &call).unwrap();
+    assert!(ask && a.summary == "move \"evt1\"", "{a:?}");
+    let other = ToolCall { id: "c2".into(), name: "primed".into(), input: json!({"id": "evt2"}) };
+    let (msg, status) = agent.execute_call(&id, "t1", &other, &CancellationToken::new(), PrivilegeMethod::None).await;
+    assert_eq!((status, msg.content.as_str()), (ToolCallStatus::Ok, "ok"));
+    let started = std::iter::from_fn(|| seen.try_recv().ok()).find_map(|e| match e {
+        AgentEvent::ToolCallStarted { summary, .. } => Some(summary),
+        _ => None,
+    });
+    assert_eq!(started.as_deref(), Some("move \"evt2\""), "the call primes the tool before it assesses it");
 }
