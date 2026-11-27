@@ -328,7 +328,7 @@ impl Agent {
                 }
                 continue;
             }
-            let results = self.execute_calls(session_id, turn_id, &calls, cancel, config.privilege).await;
+            let results = self.execute_calls_from(session_id, turn_id, &calls, cancel, config.privilege, crate::permission::Origin::of_via(input.via)).await;
             self.push_messages(session_id, state, results).await?;
         }
     }

@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::hooks::HookRefusal;
 use super::Agent;
-use crate::permission::{AllowRule, ApprovalDecision, ApprovalKind, ApprovalRequest, Decision};
+use crate::permission::{AllowRule, ApprovalDecision, ApprovalKind, ApprovalRequest, Decision, Origin};
 use crate::protocol::{AgentEvent, Message, ToolCall, ToolCallStatus};
 use crate::scheduler::parallel_groups;
 use crate::tool::{CallAssessment, PrivilegeMethod, ToolContext};
@@ -41,14 +41,20 @@ impl Agent {
         self.tools_for("")
     }
 
-    /// Run a batch of calls: assess, group, then execute group by group.
-    pub async fn execute_calls(
+    /// Run a batch of calls of the chat: assess, group, then execute group by group.
+    pub async fn execute_calls(&self, session_id: &str, turn_id: &str, calls: &[ToolCall], cancel: &CancellationToken, privilege: PrivilegeMethod) -> Vec<Message> {
+        self.execute_calls_from(session_id, turn_id, calls, cancel, privilege, Origin::Chat).await
+    }
+
+    /// `execute_calls` for calls of this origin (the turn's `via`).
+    pub(crate) async fn execute_calls_from(
         &self,
         session_id: &str,
         turn_id: &str,
         calls: &[ToolCall],
         cancel: &CancellationToken,
         privilege: PrivilegeMethod,
+        origin: Origin,
     ) -> Vec<Message> {
         let safe: Vec<bool> = calls
             .iter()
@@ -56,7 +62,7 @@ impl Agent {
             .collect();
         let mut results: Vec<Option<Message>> = vec![None; calls.len()];
         for group in parallel_groups(&safe) {
-            let futures = group.iter().map(|&i| self.execute_call(session_id, turn_id, &calls[i], cancel, privilege));
+            let futures = group.iter().map(|&i| self.execute_call_from(session_id, turn_id, &calls[i], cancel, privilege, origin));
             let outs = futures::future::join_all(futures).await;
             for (&i, (msg, _)) in group.iter().zip(outs) {
                 results[i] = Some(msg);
@@ -77,18 +83,25 @@ impl Agent {
         let tool = self.tools.get(&call.name)?;
         let input = normalize_input(&tool.contract().input_schema, call.input.clone());
         let assessment = self.named(session_id, tool.assess(&input));
-        let engine_asks = matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. });
+        let engine_asks = matches!(self.permissions.evaluate_from(session_id, &call.name, &assessment, Origin::Voice), Decision::Ask { .. });
         let ask = engine_asks || (assessment.always_ask && !assessment.read_only);
         Some((assessment, ask))
     }
 
-    pub async fn execute_call(
+    pub async fn execute_call(&self, session_id: &str, turn_id: &str, call: &ToolCall, cancel: &CancellationToken, privilege: PrivilegeMethod) -> (Message, ToolCallStatus) {
+        // The live model's calls carry the turn id "live".
+        let origin = if turn_id == "live" { Origin::Voice } else { Origin::Chat };
+        self.execute_call_from(session_id, turn_id, call, cancel, privilege, origin).await
+    }
+
+    pub(super) async fn execute_call_from(
         &self,
         session_id: &str,
         turn_id: &str,
         call: &ToolCall,
         cancel: &CancellationToken,
         privilege: PrivilegeMethod,
+        origin: Origin,
     ) -> (Message, ToolCallStatus) {
         let started = Instant::now();
         let Some(tool) = self.tools.get(&call.name) else {
@@ -158,13 +171,13 @@ impl Agent {
             services: self.services.clone(),
         };
         // Dry run for the approval card, only when we are going to ask (the engine, or a hook).
-        let preview = if hook_ask.is_some() || matches!(self.permissions.evaluate(session_id, &call.name, &assessment), Decision::Ask { .. }) {
+        let preview = if hook_ask.is_some() || matches!(self.permissions.evaluate_from(session_id, &call.name, &assessment, origin), Decision::Ask { .. }) {
             tokio::time::timeout(Duration::from_secs(20), tool.preview(&call.input, &ctx)).await.ok().flatten()
         } else {
             None
         };
 
-        match self.authorize(session_id, &call, &assessment, preview, cancel, hook_ask).await {
+        match self.authorize(session_id, &call, &assessment, preview, cancel, hook_ask, origin).await {
             Ok(()) => {}
             Err(reason) => {
                 let status = if cancel.is_cancelled() { ToolCallStatus::Cancelled } else { ToolCallStatus::Denied };
@@ -209,10 +222,11 @@ impl Agent {
         preview: Option<String>,
         cancel: &CancellationToken,
         hook_ask: Option<String>,
+        origin: Origin,
     ) -> Result<(), String> {
         // A hook's `ask` gets its card where the engine would allow the call (hooks.md
         // section 3). The other way round a hook relaxes nothing: a denial stays one.
-        let reason = match self.permissions.evaluate(session_id, &call.name, assessment) {
+        let reason = match self.permissions.evaluate_from(session_id, &call.name, assessment, origin) {
             Decision::Allow { .. } => match hook_ask.as_deref() {
                 Some(reason) => format!("a PreToolUse hook asks for your confirmation: {reason}"),
                 None => return Ok(()),

@@ -138,8 +138,15 @@ impl PermissionEngine {
     }
 
     /// The decision for a call made in `session_id` (session allowances are looked up
-    /// there and nowhere else).
+    /// there and nowhere else), as a call of the chat.
     pub fn evaluate(&self, session_id: &str, tool: &str, call: &CallAssessment) -> Decision {
+        self.evaluate_from(session_id, tool, call, Origin::Chat)
+    }
+
+    /// `evaluate` for a call of this origin. A call from voice that is `always_ask` asks in
+    /// every mode, `full` included (voice-control.md section 4): `full` lets those through
+    /// in chat only.
+    pub fn evaluate_from(&self, session_id: &str, tool: &str, call: &CallAssessment, origin: Origin) -> Decision {
         let ovr = self.overrides.read().unwrap().get(tool).copied();
         if ovr == Some(ToolOverride::Deny) {
             return Decision::Deny { reason: format!("'{tool}' is set to deny in tool overrides") };
@@ -164,7 +171,8 @@ impl PermissionEngine {
         if call.destructive {
             return Decision::Ask { reason: "potentially destructive: needs your explicit confirmation".into() };
         }
-        if mode == PermissionMode::Full && !call.privileged && ovr != Some(ToolOverride::Ask) {
+        let voice_asks = origin == Origin::Voice && call.always_ask;
+        if mode == PermissionMode::Full && !call.privileged && ovr != Some(ToolOverride::Ask) && !voice_asks {
             return Decision::Allow { reason: "full control".into() };
         }
         if call.always_ask || call.privileged {
@@ -200,6 +208,21 @@ impl PermissionEngine {
         } else {
             Decision::Allow { reason: "no approval needed".into() }
         }
+    }
+}
+
+/// Where a call comes from: the chat, or voice (a live tool call, or a call inside a turn
+/// that was sent with `Via::Voice`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Origin {
+    #[default]
+    Chat,
+    Voice,
+}
+
+impl Origin {
+    pub fn of_via(via: crate::protocol::Via) -> Self {
+        if via == crate::protocol::Via::Voice { Self::Voice } else { Self::Chat }
     }
 }
 
