@@ -1,0 +1,32 @@
+/* The action menu (Menu.tsx): the house popup, fixed at its anchor. */
+.menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 180px;
+  max-width: 280px;
+  outline: none;
+  user-select: none;
+}
+.menu .menu-item {
+  gap: 9px;
+}
+.menu .menu-item svg {
+  flex: 0 0 auto;
+  color: var(--dim);
+}
+.menu .menu-item.danger,
+.menu .menu-item.danger svg {
+  color: var(--bad);
+}
+/* The widget is dark in both themes (sheet.css): so are the menus opened from its sheet. */
+html.overlay-mode .menu,
+html.overlay-mode .attach {
+  --glass: #121a2e;
+  --rim: rgba(140, 170, 255, 0.12);
+  --rim-strong: rgba(140, 170, 255, 0.24);
+  --ink: #e6ebf7;
+  --dim: #8b95b2;
+  --ice: #7cc4ff;
+  --bad: #ff6b7d;
+  color: var(--ink);
+}

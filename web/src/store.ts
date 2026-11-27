@@ -2,11 +2,11 @@
 // wholesale by the reducer; views subscribe via useStore().
 
 import { useSyncExternalStore } from "react";
-import { api, initialSection, initialSession, initialView, postPlan, putTodo, requestCompaction, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
+import { api, postPlan, putProject, putTodo, requestCompaction, type ProjectView, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
 import { skillsApi, type SkillView } from "./skillsApi";
-import { builtinOf } from "./commands";
+import { builtinOf, projectArg } from "./commands";
+import { readPrefs, type SidebarView } from "./components/sidebar/prefs";
 import { voice } from "./voice/controller";
-import { events, type AgentEvent } from "./events";
 import { resolveView, type View } from "./nav";
 import * as picker from "./picker";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
@@ -42,9 +42,19 @@ export interface Store {
   metas: Record<string, SessionInfo>;
   /** The models a conversation may choose (picker.md section 5.6); `null` until the first read. */
   models: picker.PickerModel[] | null;
-  /** The widget's one open sheet (picker.md section 5.5); S42 and S43 add theirs. */
-  sheet: "models" | null;
+  /** The widget's one open sheet (picker.md section 5.5, sidebar.md section 5.8); S43 adds its own. */
+  sheet: "models" | "sessions" | null;
+  /** The sidebar (sidebar.md section 5): a rail or expanded, the drawer of a narrow window, the list it shows and the folders it closed. */
+  sidebarCollapsed: boolean;
+  sidebarDrawer: boolean;
+  sidebarView: SidebarView;
+  sidebarClosed: string[];
+  /** The projects of `GET /api/projects` (read when "Attach folder" opens), with the roots they come from. */
+  projects: ProjectView[] | null;
+  projectRoots: string[];
 }
+
+const prefs = readPrefs();
 
 let store: Store = {
   sessions: [],
@@ -70,12 +80,19 @@ let store: Store = {
   metas: {},
   models: null,
   sheet: null,
+  sidebarCollapsed: prefs.collapsed,
+  sidebarDrawer: false,
+  sidebarView: prefs.view,
+  sidebarClosed: prefs.closed,
+  projects: null,
+  projectRoots: [],
 };
 
 const listeners = new Set<() => void>();
 
-function set(patch: Partial<Store>) {
-  store = { ...store, ...patch };
+/** Replace part of the state; the other stores (components/sidebar/store.ts) write through it. */
+export function patch(next: Partial<Store>) {
+  store = { ...store, ...next };
   listeners.forEach((l) => l());
 }
 
@@ -97,56 +114,57 @@ export function useStore(): Store {
 export async function refreshState() {
   try {
     const state = await api.get<StateView>("/api/state");
-    set({ state, approvals: state.pendingApprovals, running: new Set(state.running) });
+    patch({ state, approvals: state.pendingApprovals, running: new Set(state.running) });
     voice.setSettingsVolume(state.settings.voice?.volume ?? 100);
   } catch (e) {
-    set({ notice: `state failed: ${String(e)}` });
+    patch({ notice: `state failed: ${String(e)}` });
   }
 }
 
 /** Put settings into the state: what `settingsChanged` carries, or the answer of a save. */
 export function applySettings(settings: StateView["settings"]) {
-  if (store.state) set({ state: { ...store.state, settings } });
+  if (store.state) patch({ state: { ...store.state, settings } });
   voice.setSettingsVolume(settings.voice?.volume ?? 100);
 }
 
 export async function refreshSessions() {
   const { sessions } = await api.get<{ sessions: SessionRow[] }>("/api/sessions");
-  set({ sessions });
+  patch({ sessions });
   if (!store.activeSession && sessions.length > 0) {
     void openSession(sessions[0].id);
   }
 }
 
 export async function openSession(id: string) {
-  set({ activeSession: id });
+  patch({ activeSession: id });
   const s = await api.get<{ meta: SessionInfo; messages: Message[] }>(`/api/sessions/${id}`);
   // The session's todo list comes with its meta (plan-todo.md section 1), as does what
   // tells the session of a subagent (agents.md section 6).
-  set({ messages: { ...store.messages, [id]: s.messages }, todos: { ...store.todos, [id]: s.meta.todo ?? [] }, planning: { ...store.planning, [id]: s.meta.planning ?? false }, metas: { ...store.metas, [id]: s.meta } });
+  patch({ messages: { ...store.messages, [id]: s.messages }, todos: { ...store.todos, [id]: s.meta.todo ?? [] }, planning: { ...store.planning, [id]: s.meta.planning ?? false }, metas: { ...store.metas, [id]: s.meta } });
 }
 
-export async function newSession(): Promise<string> {
+/** A new session, in folder `project` when given (sidebar.md section 5.2); it opens in the chat. */
+export async function newSession(project?: string): Promise<string> {
   // The last choice starts it (picker.md section 5.6); a model that is gone is forgotten, not sent.
   await refreshModels();
   const last = picker.last();
   const kept = last.model && store.models?.some((m) => m.ref === last.model);
   if (last.model && !kept) picker.remember({ model: null, reasoningLevel: null });
-  const body = kept ? last : {};
+  const body = { ...(kept ? last : {}), ...(project ? { project } : {}) };
   const meta = await api.post<SessionMeta>("/api/sessions", body);
-  set({ sessions: [meta, ...store.sessions], activeSession: meta.id, messages: { ...store.messages, [meta.id]: [] }, todos: { ...store.todos, [meta.id]: [] }, planning: { ...store.planning, [meta.id]: false }, metas: { ...store.metas, [meta.id]: meta } });
+  patch({ sessions: [meta, ...store.sessions], activeSession: meta.id, messages: { ...store.messages, [meta.id]: [] }, todos: { ...store.todos, [meta.id]: [] }, planning: { ...store.planning, [meta.id]: false }, metas: { ...store.metas, [meta.id]: meta } });
   return meta.id;
 }
 
 /** The picker's models, read again when older than 10 s; a daemon that cannot answer leaves the last list. */
 export async function refreshModels(force = false) {
   const models = await picker.list(force).catch(() => null);
-  if (models) set({ models });
+  if (models) patch({ models });
 }
 
 /** A session's meta as the daemon has it: the open one and its row (`sessionMetaChanged`, the answer of the model route). */
-function applyMeta(id: string, meta: SessionMeta) {
-  set({ metas: id in store.metas ? { ...store.metas, [id]: { ...store.metas[id], ...meta } } : store.metas, sessions: store.sessions.map((row) => (row.id === id ? { ...row, ...meta } : row)) });
+export function applyMeta(id: string, meta: SessionMeta) {
+  patch({ metas: id in store.metas ? { ...store.metas, [id]: { ...store.metas[id], ...meta } } : store.metas, sessions: store.sessions.map((row) => (row.id === id ? { ...row, ...meta } : row)) });
 }
 
 /** Choose a conversation's model and effort: the answer replaces its meta and is the last choice; a refusal is a notice, and thrown. */
@@ -156,21 +174,21 @@ export async function setSessionModel(id: string, body: Partial<picker.Choice>) 
     applyMeta(id, meta);
     picker.remember({ model: meta.model ?? null, reasoningLevel: meta.reasoningLevel ?? null });
   } catch (e) {
-    set({ notice: `Model not changed: ${e instanceof Error ? e.message : String(e)}` });
+    patch({ notice: `Model not changed: ${e instanceof Error ? e.message : String(e)}` });
     throw e;
   }
 }
 
-export const openSheet = (sheet: NonNullable<Store["sheet"]>) => set({ sheet });
-export const closeSheet = () => set({ sheet: null });
+export const openSheet = (sheet: NonNullable<Store["sheet"]>) => patch({ sheet });
+export const closeSheet = () => patch({ sheet: null });
 
 /** Send a session's todo list as the panel changed it (a tick, Clear): one PUT with the whole list; the answer is the list the daemon stored. A failure is a notice. */
 export async function saveTodo(id: string, items: TodoItem[]) {
   try {
     const r = await putTodo(id, items);
-    set({ todos: { ...store.todos, [id]: r.items } });
+    patch({ todos: { ...store.todos, [id]: r.items } });
   } catch (e) {
-    set({ notice: `Todo list not saved: ${e instanceof Error ? e.message : String(e)}` });
+    patch({ notice: `Todo list not saved: ${e instanceof Error ? e.message : String(e)}` });
     throw e;
   }
 }
@@ -180,7 +198,7 @@ export async function deleteSession(id: string) {
   const sessions = store.sessions.filter((s) => s.id !== id);
   // The daemon deleted the subagents of the session with it (agents.md section 2).
   const without = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id));
-  set({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
+  patch({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
   if (store.activeSession) void openSession(store.activeSession);
 }
 
@@ -188,9 +206,9 @@ export async function deleteSession(id: string) {
 export async function setPlan(id: string, active: boolean) {
   try {
     const r = await postPlan(id, active);
-    set({ planning: { ...store.planning, [id]: r.planning } });
+    patch({ planning: { ...store.planning, [id]: r.planning } });
   } catch (e) {
-    set({ notice: `Plan not ${active ? "started" : "cancelled"}: ${e instanceof Error ? e.message : String(e)}` });
+    patch({ notice: `Plan not ${active ? "started" : "cancelled"}: ${e instanceof Error ? e.message : String(e)}` });
     throw e;
   }
 }
@@ -206,12 +224,25 @@ export async function sendMessage(text: string, plan = false) {
   if (!id || !line) return;
   // The session of a subagent is read-only (agents.md section 6); the daemon refuses too.
   if (store.metas[id]?.origin === "subagent") {
-    set({ notice: "The session of a subagent is read-only: its answer arrives in the session that started it." });
+    patch({ notice: "The session of a subagent is read-only: its answer arrives in the session that started it." });
     return;
   }
+  const folder = projectArg(line);
+  if (folder !== null) return attachByCommand(id, folder);
   const prefixed = /^\/plan\s/.test(line);
   const body = prefixed ? { text: line.replace(/^\/plan\s+/, ""), plan: true } : plan ? { text, plan: true } : { text };
   await api.post(`/api/sessions/${id}/messages`, body);
+}
+
+/** `/project <path>` attaches a folder to the session, `/project` alone detaches it (sidebar.md section 5.5). The daemon canonicalizes the path; a refusal is a notice with its message. */
+async function attachByCommand(id: string, path: string) {
+  try {
+    const meta = await putProject(id, path || null);
+    applyMeta(id, meta);
+    patch({ notice: meta.project ? `Project: ${meta.project}` : "Project detached" });
+  } catch (e) {
+    patch({ notice: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** `/compact` (compaction.md section 4): the daemon summarizes everything before the last user message of the active session. The result shows as a notice; nothing is sent as a message. */
@@ -220,16 +251,16 @@ export async function compactSession() {
   if (!id) return;
   try {
     const result = await requestCompaction(id);
-    set({ notice: `Compacted: ${result.keptMessages} recent messages kept, the rest is a summary.` });
+    patch({ notice: `Compacted: ${result.keptMessages} recent messages kept, the rest is a summary.` });
   } catch (e) {
-    set({ notice: `Compaction failed: ${e instanceof Error ? e.message : String(e)}` });
+    patch({ notice: `Compaction failed: ${e instanceof Error ? e.message : String(e)}` });
   }
 }
 
 /** The skills library. A daemon that cannot answer leaves the last list in place. */
 export async function refreshSkills() {
   try {
-    set({ skills: await skillsApi.list() });
+    patch({ skills: await skillsApi.list() });
   } catch {
     // keep the last list
   }
@@ -240,12 +271,12 @@ export async function refreshSkills() {
  * the text from the store when it mounts. */
 export async function prefillComposer(text: string) {
   if (!store.activeSession) await newSession();
-  set({ view: "chat", composerDraft: text });
+  patch({ view: "chat", composerDraft: text });
   window.dispatchEvent(new CustomEvent("kagent-composer", { detail: text }));
 }
 
 export function takeComposerDraft() {
-  set({ composerDraft: "" });
+  patch({ composerDraft: "" });
 }
 
 export async function cancelSession() {
@@ -258,146 +289,28 @@ export async function stopSubagent(sessionId: string, childId: string) {
   try {
     await agentsApi.stop(sessionId, childId);
   } catch (e) {
-    set({ notice: `Subagent not stopped: ${e instanceof Error ? e.message : String(e)}` });
+    patch({ notice: `Subagent not stopped: ${e instanceof Error ? e.message : String(e)}` });
   }
 }
 
 /** Answer a card. `reason` is the text of the reason field of a plan card (plan-todo.md section 2). */
 export async function decideApproval(requestId: string, decision: "allowOnce" | "allowSession" | "allowAlways" | "deny", reason?: string) {
   await api.post(`/api/approvals/${requestId}`, reason ? { decision, reason } : { decision });
-  set({ approvals: store.approvals.filter((a) => a.requestId !== requestId) });
+  patch({ approvals: store.approvals.filter((a) => a.requestId !== requestId) });
 }
 
 export function setView(view: View) {
-  set({ view });
+  patch({ view });
 }
 
 /** Open a view as a deep link or `ui show` names it (nav.ts `resolveView`). */
 export function showView(name: string, section: string | null = null) {
   const target = resolveView(name, section);
   if (!target) return;
-  set(target.section ? { view: target.view, settingsSection: target.section } : { view: target.view });
+  patch(target.section ? { view: target.view, settingsSection: target.section } : { view: target.view });
 }
 
 /** Open a settings page. The page remembers it (localStorage `kagent.settings.section`). */
 export function setSection(id: string) {
-  set({ settingsSection: id });
-}
-
-// ---------------------------------------------------------------- event wiring
-
-export function handleEvent(ev: AgentEvent) {
-  switch (ev.type) {
-    case "messageAppended": {
-      const list = store.messages[ev.sessionId] ?? [];
-      set({
-        messages: { ...store.messages, [ev.sessionId]: [...list, ev.message] },
-        streaming: { ...store.streaming, [ev.sessionId]: "" },
-      });
-      break;
-    }
-    case "reasoningDelta": {
-      set({ reasoning: { ...store.reasoning, [ev.sessionId]: (store.reasoning[ev.sessionId] ?? "") + ev.text } });
-      break;
-    }
-    case "alertRaised":
-    case "alertUpdated":
-      set({ alertsTick: store.alertsTick + 1 });
-      void refreshState();
-      break;
-    case "changeRecorded":
-      set({ changesTick: store.changesTick + 1 });
-      break;
-    case "textDelta": {
-      set({ streaming: { ...store.streaming, [ev.sessionId]: (store.streaming[ev.sessionId] ?? "") + ev.text } });
-      break;
-    }
-    case "turnStarted": {
-      const running = new Set(store.running);
-      running.add(ev.sessionId);
-      set({ running });
-      break;
-    }
-    case "turnFinished": {
-      const running = new Set(store.running);
-      running.delete(ev.sessionId);
-      set({ running, streaming: { ...store.streaming, [ev.sessionId]: "" }, reasoning: { ...store.reasoning, [ev.sessionId]: "" } });
-      // A failed turn otherwise leaves the chat silent.
-      if (ev.status === "failed" && ev.error) set({ notice: `Turn failed: ${ev.error.slice(0, 300)}` });
-      // Reload the finished history of the open chat. Another session's turn (a subagent's,
-      // a task's) ends without opening that session here.
-      if (ev.sessionId === store.activeSession) void openSession(ev.sessionId);
-      void refreshSessions();
-      break;
-    }
-    case "approvalRequested": {
-      void refreshState();
-      break;
-    }
-    case "approvalResolved": {
-      set({ approvals: store.approvals.filter((a) => a.requestId !== ev.requestId) });
-      void refreshState();
-      break;
-    }
-    case "sessionUpdated":
-      void refreshSessions();
-      break;
-    case "todoUpdated":
-      // The agent wrote the list, or the daemon stored what the panel sent.
-      set({ todos: { ...store.todos, [ev.sessionId]: ev.items } });
-      break;
-    case "planUpdated":
-      // The session entered or left plan mode (the agent, an approval, "Cancel plan").
-      set({ planning: { ...store.planning, [ev.sessionId]: ev.active } });
-      break;
-    case "sessionMetaChanged":
-      applyMeta(ev.sessionId, ev.meta);
-      break;
-    case "subagentUpdated": {
-      // A subagent of the session started, got a slot, ended or was stopped (agents.md section 3).
-      const mine = store.children[ev.sessionId] ?? [];
-      const child = { ...ev.child, status: ev.status };
-      set({ children: { ...store.children, [ev.sessionId]: mine.some((c) => c.id === child.id) ? mine.map((c) => (c.id === child.id ? child : c)) : [...mine, child] } });
-      break;
-    }
-    case "settingsChanged":
-      // The event carries the whole settings (the answer of PUT /api/settings): no
-      // second GET /api/state.
-      if (store.state && ev.settings && typeof ev.settings === "object") applySettings(ev.settings as StateView["settings"]);
-      else void refreshState();
-      break;
-    case "notice":
-      set({ notice: ev.text });
-      break;
-    case "tasksChanged":
-    case "taskRun":
-      // A task was added, changed, claimed or finished (automations.md section 3): Tasks reads the list again.
-      set({ tasksTick: store.tasksTick + 1 });
-      break;
-    case "skillsChanged":
-      // A skill was written, removed or switched: Skills reads the list again.
-      set({ skillsTick: store.skillsTick + 1 });
-      void refreshSkills();
-      break;
-    default:
-      break;
-  }
-}
-
-export function init() {
-  if (initialView) showView(initialView, initialSection);
-  events.on(handleEvent);
-  events.start(api.wsUrl);
-  void refreshState();
-  void refreshSkills();
-  void refreshModels(true);
-  void refreshSessions().then(() => {
-    if (initialSession) {
-      void openSession(initialSession);
-    } else if (!store.activeSession && store.sessions.length > 0) {
-      // Continue the most recent conversation (voice too) instead of starting a new one.
-      const latest = [...store.sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
-      void openSession(latest.id);
-    }
-  });
+  patch({ settingsSection: id });
 }

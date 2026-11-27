@@ -16,6 +16,8 @@ export default function Sheet({ title, onClose, children }: { title: string; onC
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      // A menu or a popup over the sheet takes the key first (sidebar.md section 5.8).
+      if (document.querySelector(".menu, .attach")) return;
       e.preventDefault();
       e.stopPropagation();
       close.current();

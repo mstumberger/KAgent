@@ -68,54 +68,8 @@ export const api = {
   },
 };
 
-/** A compaction by hand (compaction.md section 4): everything before the last user message of the session is summarized. */
-export function requestCompaction(id: string): Promise<CompactResult> {
-  return api.post<CompactResult>(`/api/sessions/${id}/compact`, {});
-}
-
-// ---- shared API types (api.md section 2)
-
-export interface SessionMeta {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messageCount: number;
-  /** From compaction (compaction.md section 4): the summary of the first `summaryUpto` stored messages. */
-  summary?: string | null;
-  summaryUpto?: number | null;
-  /** The session's todo list (plan-todo.md section 1); empty while there is none. */
-  todo?: TodoItem[];
-  /** Plan mode (plan-todo.md section 2): on while the session plans; `approvedPlan` is the plan the owner approved last. */
-  planning?: boolean;
-  approvedPlan?: { path: string; text: string; approvedAt?: string } | null;
-  /** The model and the effort this conversation chose (picker.md section 2); `null`: the default. */
-  model?: string | null;
-  reasoningLevel?: string | null;
-}
-
-/** One item of a session's todo list (api.md section 6). */
-export interface TodoItem {
-  content: string;
-  status: "pending" | "in_progress" | "completed";
-  priority: "high" | "medium" | "low";
-}
-
-/** Replace the todo list of a session; an empty list clears it. The daemon normalises what it receives and answers with the stored list. */
-export function putTodo(id: string, items: TodoItem[]): Promise<{ items: TodoItem[] }> {
-  return api.put(`/api/sessions/${id}/todo`, { items });
-}
-
-/** Put a session in or out of plan mode ("Cancel plan" sends `{active: false}`); the answer is its flag. */
-export function postPlan(id: string, active: boolean): Promise<{ planning: boolean }> {
-  return api.post(`/api/sessions/${id}/plan`, { active });
-}
-
-/** The answer of `POST /api/sessions/:id/compact`: `keptMessages` stored messages follow the summary unchanged. */
-export interface CompactResult {
-  summary: string;
-  keptMessages: number;
-}
+// ---- shared API types (api.md section 2); the session ones are in sessionApi.ts
+export * from "./sessionApi";
 
 export interface Message {
   role: "user" | "assistant" | "tool";
@@ -125,11 +79,6 @@ export interface Message {
   toolName?: string;
   isError?: boolean;
   via?: "text" | "voice";
-}
-
-export interface Session {
-  meta: SessionMeta;
-  messages: Message[];
 }
 
 /** What the built-in rules give a model, and what is sent with a request: the config of config.md section 3, resolved (models.md section 4). */

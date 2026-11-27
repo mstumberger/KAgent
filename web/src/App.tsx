@@ -1,6 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, captureToken } from "./api";
-import { init, openSession, refreshSessions, setView, useStore } from "./store";
+import { openSession, refreshSessions, setView, useStore } from "./store";
+import Sidebar from "./components/Sidebar";
+import { useNarrow } from "./components/sidebar/useNarrow";
+import { toggleSidebar } from "./components/sidebar/store";
+import { init } from "./storeEvents";
 import { installDiagnostics } from "./diag";
 import { startDrag, startResize, toggleMaximize } from "./frame";
 import Icon from "./components/Icon";
@@ -9,7 +13,6 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import PermissionPicker from "./components/PermissionPicker";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
-import { VIEWS } from "./nav";
 import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
 import SettingsPage from "./settings/SettingsPage";
 import Chat from "./views/Chat";
@@ -54,6 +57,7 @@ function setCompactInUrl(compact: boolean) {
 
 export default function App() {
   const s = useStore();
+  const narrow = useNarrow();
   const [compact, setCompact] = useState(initialCompact);
   const isApp = new URLSearchParams(location.search).has("app");
   // Local switch (from the daemon's `layout` command) vs. a click here, which also asks
@@ -128,6 +132,17 @@ export default function App() {
   return (
     <div className="app">
       <header className={isApp ? "app-titlebar" : ""} onPointerDown={startDrag} onDoubleClick={toggleMaximize}>
+        <button
+          id="sidebar-toggle"
+          className="tab icon-tab"
+          title="Toggle the sidebar"
+          aria-label="Toggle the sidebar"
+          aria-expanded={narrow ? s.sidebarDrawer : !s.sidebarCollapsed}
+          aria-controls="sidebar"
+          onClick={toggleSidebar}
+        >
+          <Icon name="sidebar" size={15} />
+        </button>
         <span className="logo">KAgent</span>
         {s.notice && <span className="notice">{s.notice}</span>}
         <span className="spacer" />
@@ -138,15 +153,6 @@ export default function App() {
             stop all
           </button>
         )}
-        <nav>
-          {VIEWS.map((v) => (
-            <button key={v} className={s.view === v ? "tab active" : "tab"} onClick={() => setView(v)}>
-              {v === "settings" && <Icon name="gear" size={13} />}
-              {v}
-              {v === "alerts" && (s.state?.alertsOpen ?? 0) > 0 && <span className="badge">{s.state?.alertsOpen}</span>}
-            </button>
-          ))}
-        </nav>
         <button className="tab icon-tab" title={theme === "dark" ? "Light theme" : "Dark theme"} aria-label="Switch theme" onClick={() => setPref(theme === "dark" ? "light" : "dark")}>
           {theme === "dark" ? "☀" : "☾"}
         </button>
@@ -164,6 +170,8 @@ export default function App() {
           </div>
         )}
       </header>
+      <div className="shell">
+      <Sidebar />
       <main>
         <ErrorBoundary key={s.view} name={s.view}>
         {s.view === "chat" && <Chat />}
@@ -176,6 +184,7 @@ export default function App() {
         {s.view === "system" && <System />}
         </ErrorBoundary>
       </main>
+      </div>
       <ResizeEdges />
       {isApp && (
         <div className="resize-grip" title="Drag to resize" onPointerDown={(e) => startResize(e, "se")}>

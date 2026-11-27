@@ -1,7 +1,7 @@
 // The slash commands of the chat composer (skills.md section 6). Typing `/` offers the
 // enabled skills and the built-in commands. A skill goes to the daemon as
 // `/<name> <request>`; a built-in command is done by the UI: `/new` starts a session,
-// `/compact` calls the compaction route of the active session, `/plan <request>` sends the
+// `/compact` calls the compaction route of the active session, `/project <path>` attaches a folder to it (`/project` alone detaches), `/plan <request>` sends the
 // message with `plan: true` (plan-todo.md section 2) and `/plan` alone arms the Plan toggle.
 import type { SkillView } from "./skillsApi";
 
@@ -15,6 +15,7 @@ export interface SlashCommand {
 export const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: "new", description: "Start a new, empty session" },
   { name: "compact", description: "Summarize the conversation so far" },
+  { name: "project", description: "Attach a folder to this conversation; alone, it detaches" },
   { name: "plan", description: "Plan first: the agent researches and shows a plan before anything changes" },
 ];
 
@@ -60,4 +61,10 @@ export function matchSlash(items: SlashItem[], query: string, limit = 8): SlashI
 export function builtinOf(text: string): SlashCommand | null {
   const word = text.trim();
   return BUILTIN_COMMANDS.find((c) => `/${c.name}` === word) ?? null;
+}
+
+/** What follows `/project`: the folder as typed, `""` for the bare command (detach), or null when the line is not that command. */
+export function projectArg(text: string): string | null {
+  const m = /^\/project(?:\s+(.*))?$/s.exec(text.trim());
+  return m ? (m[1] ?? "").trim() : null;
 }

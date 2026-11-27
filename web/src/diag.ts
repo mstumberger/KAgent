@@ -7,6 +7,7 @@ import { events } from "./events";
 import { getStore, openSession, showView, subscribe, type Store } from "./store";
 import { currentSection } from "./settings/registry";
 import { voice } from "./voice/controller";
+import { DRAWER_BELOW } from "./components/sidebar/prefs";
 
 interface LogEntry {
   level: "error" | "warn" | "crash" | "log";
@@ -36,6 +37,12 @@ export function logUi(level: LogEntry["level"], message: string, stack?: string)
   if (queue.length > 200) queue.splice(0, queue.length - 200);
 }
 
+/** What the sidebar is: expanded, a rail, a drawer, or hidden (below 900 px with the drawer closed). */
+function sidebarState(s: Store): string {
+  if (innerWidth < DRAWER_BELOW) return s.sidebarDrawer ? "drawer" : "hidden";
+  return s.sidebarCollapsed ? "rail" : "expanded";
+}
+
 function uiState() {
   const s: Store = getStore();
   return {
@@ -44,6 +51,9 @@ function uiState() {
     // The open settings page (ui-settings.md section 2); only while settings is open.
     section: s.view === "settings" ? currentSection(s.settingsSection).id : undefined,
     activeSession: s.activeSession,
+    // The sidebar and the folder of the open session (sidebar.md section 5.7).
+    sidebar: sidebarState(s),
+    project: s.activeSession ? (s.metas[s.activeSession]?.project ?? null) : null,
     running: [...s.running],
     approvalsPending: s.state?.pendingApprovals?.length ?? s.approvals.length,
     voice: { status: voice.status, detail: voice.detail, muted: voice.muted, volume: voice.volume, transcriptTail: voice.lines.slice(-6) },
