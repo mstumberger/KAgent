@@ -7,9 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import Approvals from "../components/Approvals";
 import PermissionPicker from "../components/PermissionPicker";
 import Icon from "../components/Icon";
+import { ModelBody } from "../components/ModelMenu";
+import { useChoice } from "../components/useChoice";
+import Sheet from "../components/Sheet";
 import { startDrag } from "../frame";
 import Orb, { ORB_THEMES, normalizeTheme, type OrbTheme } from "../voice/Orb";
-import { getStore, useStore } from "../store";
+import { label as modelLabel } from "../picker";
+import { closeSheet, getStore, openSheet, refreshModels, useStore } from "../store";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
 
@@ -18,6 +22,12 @@ const ORBS = ORB_THEMES;
 function liveVoice(): string | undefined {
   // Read at call time so a voice changed in Settings applies to the next session.
   return (getStore().state?.settings.liveVoice as string) || undefined;
+}
+
+/** Open the sheet of the model picker; the list is read again when it is old. */
+function openModels() {
+  void refreshModels();
+  openSheet("models");
 }
 
 interface Props {
@@ -33,6 +43,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const [orbSize, setOrbSize] = useState(180);
   const name = s.state?.settings.persona.name ?? "KAgent";
+  const choice = useChoice(s.activeSession);
 
   // The orb fills the free space of the window, whatever size the user drags it to.
   useEffect(() => {
@@ -51,6 +62,14 @@ export default function Overlay({ onExpand, onHide }: Props) {
     document.title = "KAgent";
     if (new URLSearchParams(location.search).has("autostart")) voice.start(getStore().activeSession, liveVoice());
     const key = (e: KeyboardEvent) => {
+      // While a sheet is open the keys of the widget do nothing: the sheet has its own.
+      if (getStore().sheet) return;
+      // Ctrl+M opens the model sheet and never mutes (picker.md section 5.4).
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyM") {
+        e.preventDefault();
+        if (getStore().activeSession) openModels();
+        return;
+      }
       if (e.target instanceof HTMLInputElement) return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -117,6 +136,12 @@ export default function Overlay({ onExpand, onHide }: Props) {
             {todoDone}/{todo.length}
           </span>
         )}
+        {s.activeSession && (
+          <button type="button" className={`widget-model${choice.none ? " none" : ""}`} title="Model and effort (Ctrl+M)" aria-label={`Model and effort: ${choice.none ? "no model" : modelLabel(choice.answering)}`} onClick={openModels}>
+            {choice.none ? "No model" : modelLabel(choice.chosen ?? choice.chatModel)}
+            {choice.level && !choice.none ? ` · ${choice.level}` : ""}
+          </button>
+        )}
       </div>
 
       {(lastUser || lastAgent) && (
@@ -164,6 +189,12 @@ export default function Overlay({ onExpand, onHide }: Props) {
           <span>{theme}</span>
         </button>
       </div>
+
+      {s.sheet === "models" && (
+        <Sheet title="Model and effort" onClose={closeSheet}>
+          <ModelBody sessionId={s.activeSession} />
+        </Sheet>
+      )}
 
       <div className="widget-approvals">
         <Approvals />
