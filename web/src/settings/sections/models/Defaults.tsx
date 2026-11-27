@@ -1,5 +1,6 @@
 // Defaults (models.md section 7.6): which chat model answers, steps in, does the
-// short jobs and reads the screen; then the reasoning level and the temperature. The
+// short jobs and reads the screen; then the temperature. The effort is chosen per
+// conversation in the composer (picker.md). The
 // live model is chosen in the Voice section.
 import type { FormEvent } from "react";
 import type { ModelView, ProviderView } from "../../../api";
@@ -22,9 +23,6 @@ const PICKS: Pick[] = [
 export default function Defaults({ chat, providers }: { chat: ModelView[]; providers: ProviderView[] }) {
   const settings = useStore().state?.settings;
   const { save } = useSettingPatch();
-  const level = settings?.options?.reasoningLevel ?? "";
-  // What the chat models offer, and the level set now.
-  const levels = [...new Set([...(level ? [level] : []), ...chat.flatMap((m) => m.config.reasoningLevels ?? [])])];
   const [temperature, setTemperature, temperatureDirty] = useDraft({ value: settings?.options?.temperature ?? null });
 
   const temperatureOk = temperature.value === null || (temperature.value >= 0 && temperature.value <= 2);
@@ -47,20 +45,6 @@ export default function Defaults({ chat, providers }: { chat: ModelView[]; provi
           </Row>
         );
       })}
-      <Row label="Reasoning level" hint="How long a model thinks before it answers. Only a model that offers levels uses it.">
-        {levels.length > 0 ? (
-          <div className="dd-cell">
-            <Dropdown
-              ariaLabel="Reasoning level"
-              value={level}
-              options={[{ value: "", label: "(provider default)" }, ...levels.map((l) => ({ value: l, label: l }))]}
-              onChange={(value) => void save("options", { reasoningLevel: value || null })}
-            />
-          </div>
-        ) : (
-          <span className="hint">No chat model offers reasoning levels.</span>
-        )}
-      </Row>
       <form className="ui-form" onSubmit={saveTemperature}>
         <Field label="Temperature" hint="0 to 2. Lower is more exact, higher more varied. Empty: what the provider chooses.">
           <input type="number" min={0} max={2} step={0.1} value={temperature.value ?? ""} onChange={(e) => setTemperature({ value: e.target.value.trim() === "" ? null : Number(e.target.value) })} />

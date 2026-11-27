@@ -89,6 +89,9 @@ export interface SessionMeta {
   /** Plan mode (plan-todo.md section 2): on while the session plans; `approvedPlan` is the plan the owner approved last. */
   planning?: boolean;
   approvedPlan?: { path: string; text: string; approvedAt?: string } | null;
+  /** The model and the effort this conversation chose (picker.md section 2); `null`: the default. */
+  model?: string | null;
+  reasoningLevel?: string | null;
 }
 
 /** One item of a session's todo list (api.md section 6). */

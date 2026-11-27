@@ -8,6 +8,7 @@ import { builtinOf } from "./commands";
 import { voice } from "./voice/controller";
 import { events, type AgentEvent } from "./events";
 import { resolveView, type View } from "./nav";
+import * as picker from "./picker";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
 
 export interface Store {
@@ -39,6 +40,8 @@ export interface Store {
   children: Record<string, ChildView[]>;
   /** The meta of each session opened here: `origin` and `parent` tell the session of a subagent (read-only). */
   metas: Record<string, SessionInfo>;
+  /** The models a conversation may choose (picker.md section 5.6); `null` until the first read. */
+  models: picker.PickerModel[] | null;
 }
 
 let store: Store = {
@@ -63,6 +66,7 @@ let store: Store = {
   planning: {},
   children: {},
   metas: {},
+  models: null,
 };
 
 const listeners = new Set<() => void>();
@@ -120,10 +124,40 @@ export async function openSession(id: string) {
 }
 
 export async function newSession(): Promise<string> {
-  const meta = await api.post<SessionMeta>("/api/sessions", {});
+  // The last choice starts it (picker.md section 5.6); a model that is gone is forgotten, not sent.
+  await refreshModels();
+  const last = picker.last();
+  const kept = last.model && store.models?.some((m) => m.ref === last.model);
+  if (last.model && !kept) picker.remember({ model: null, reasoningLevel: null });
+  const body = kept ? last : {};
+  const meta = await api.post<SessionMeta>("/api/sessions", body);
   set({ sessions: [meta, ...store.sessions], activeSession: meta.id, messages: { ...store.messages, [meta.id]: [] }, todos: { ...store.todos, [meta.id]: [] }, planning: { ...store.planning, [meta.id]: false }, metas: { ...store.metas, [meta.id]: meta } });
   return meta.id;
 }
+
+/** The picker's models, read again when older than 10 s; a daemon that cannot answer leaves the last list. */
+export async function refreshModels(force = false) {
+  const models = await picker.list(force).catch(() => null);
+  if (models) set({ models });
+}
+
+/** A session's meta as the daemon has it: the open one and its row (`sessionMetaChanged`, the answer of the model route). */
+function applyMeta(id: string, meta: SessionMeta) {
+  set({ metas: id in store.metas ? { ...store.metas, [id]: { ...store.metas[id], ...meta } } : store.metas, sessions: store.sessions.map((row) => (row.id === id ? { ...row, ...meta } : row)) });
+}
+
+/** Choose a conversation's model and effort: the answer replaces its meta and is the last choice; a refusal is a notice, and thrown. */
+export async function setSessionModel(id: string, body: Partial<picker.Choice>) {
+  try {
+    const meta = await picker.putModel(id, body);
+    applyMeta(id, meta);
+    picker.remember({ model: meta.model ?? null, reasoningLevel: meta.reasoningLevel ?? null });
+  } catch (e) {
+    set({ notice: `Model not changed: ${e instanceof Error ? e.message : String(e)}` });
+    throw e;
+  }
+}
+
 
 /** Send a session's todo list as the panel changed it (a tick, Clear): one PUT with the whole list; the answer is the list the daemon stored. A failure is a notice. */
 export async function saveTodo(id: string, items: TodoItem[]) {
@@ -311,6 +345,9 @@ export function handleEvent(ev: AgentEvent) {
       // The session entered or left plan mode (the agent, an approval, "Cancel plan").
       set({ planning: { ...store.planning, [ev.sessionId]: ev.active } });
       break;
+    case "sessionMetaChanged":
+      applyMeta(ev.sessionId, ev.meta);
+      break;
     case "subagentUpdated": {
       // A subagent of the session started, got a slot, ended or was stopped (agents.md section 3).
       const mine = store.children[ev.sessionId] ?? [];
@@ -348,6 +385,7 @@ export function init() {
   events.start(api.wsUrl);
   void refreshState();
   void refreshSkills();
+  void refreshModels(true);
   void refreshSessions().then(() => {
     if (initialSession) {
       void openSession(initialSession);

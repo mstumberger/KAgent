@@ -12,9 +12,11 @@ interface Props {
   /** A picked item, as `/<name>` and a space: ready for the request. */
   onPick: (text: string) => void;
   placeholder?: string;
+  /** The slash picker stays shut while another menu (the model menu) is open. */
+  suspend?: boolean;
 }
 
-export default function CommandInput({ value, skills, onChange, onPick, placeholder }: Props) {
+export default function CommandInput({ value, skills, onChange, onPick, placeholder, suspend }: Props) {
   const listId = useId();
   // The highlighted item of the word it was moved in: a new word starts at the top.
   const [cursor, setCursor] = useState<{ word: string; index: number }>({ word: "", index: 0 });
@@ -24,7 +26,7 @@ export default function CommandInput({ value, skills, onChange, onPick, placehol
   const items = query === null ? [] : matchSlash(slashItems(skills), query);
   const active = cursor.word === query ? Math.min(cursor.index, Math.max(items.length - 1, 0)) : 0;
   const setActive = (index: number) => setCursor({ word: query ?? "", index });
-  const open = query !== null && dismissed !== query && items.length > 0;
+  const open = !suspend && query !== null && dismissed !== query && items.length > 0;
 
   const pick = (item: SlashItem | undefined) => {
     if (item && !item.comesWith) onPick(`/${item.name} `);

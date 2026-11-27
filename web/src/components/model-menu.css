@@ -1,0 +1,228 @@
+/* The model picker of the composer (ModelMenu.tsx, picker.md section 5): the trigger, the
+   menu above it, the effort row, and the composer's two rows. */
+.chat-main .composer {
+  flex-direction: column;
+  gap: 6px;
+}
+.composer .cmd {
+  flex: 0 0 auto;
+}
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.composer-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.composer-bar .mic-btn {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+}
+.composer-bar button:not(.mic-btn):not(.mm-trigger) {
+  height: 32px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.mm {
+  position: relative;
+  min-width: 0;
+}
+
+.mm-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  background: var(--glass-2);
+  border: 1px solid var(--rim);
+  border-radius: 999px;
+  color: var(--ink);
+}
+.mm-trigger:hover:not(:disabled) {
+  border-color: var(--rim-strong);
+}
+.mm-trigger:disabled {
+  opacity: 0.5;
+}
+.mm-chevron {
+  display: inline-flex;
+  color: var(--dim);
+  transition: transform 0.15s;
+}
+.mm-trigger.open .mm-chevron {
+  transform: rotate(180deg);
+}
+.mm-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mm-effort-tag {
+  color: var(--dim);
+  white-space: nowrap;
+}
+.mm-trigger.none {
+  color: var(--bad);
+}
+.mm-trigger.gone {
+  color: var(--signal);
+}
+/* Narrow: the chevron alone, the text in the title */
+@media (max-width: 899px) {
+  .mm-name,
+  .mm-effort-tag {
+    display: none;
+  }
+  .mm-trigger {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* The menu: above the trigger, its left edge on the trigger's */
+.mm-pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mm-list {
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mm-list .pop-item:focus-visible {
+  outline: none;
+}
+.mm-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.mm-image {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--dim);
+}
+.mm-manage {
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+}
+.mm-manage:hover {
+  background: rgba(124, 196, 255, 0.12);
+}
+
+/* The effort row: the word, a slider whose stops are the levels, the name of the stop */
+.mm-effort {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.mm-stop {
+  flex: 0 0 auto;
+  min-width: 88px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--dim);
+}
+.mm-range {
+  --thumb: 14px;
+  --p: calc(var(--at) / var(--n) * (100% - var(--thumb)) + var(--thumb) / 2);
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 80px;
+  height: 20px;
+}
+.mm-range i {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--i) / var(--n) * (100% - var(--thumb)) + var(--thumb) / 2);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--rim-strong);
+  pointer-events: none;
+}
+.mm-range i.on {
+  background: var(--ice);
+}
+.mm-body .mm-range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.mm-range input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--ice) var(--p), var(--rim-strong) var(--p));
+}
+.mm-range input::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rim-strong);
+}
+.mm-range input::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ice);
+}
+.mm-range input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--ice);
+  border: 2px solid var(--glass);
+  box-sizing: border-box;
+}
+.mm-range input::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 50%;
+  background: var(--ice);
+  border: 2px solid var(--glass);
+  box-sizing: border-box;
+}
+.mm-range input:focus-visible {
+  outline: none;
+}
+.mm-range input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(124, 196, 255, 0.35);
+}
