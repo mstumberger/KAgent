@@ -48,6 +48,7 @@ function uiState() {
     approvalsPending: s.state?.pendingApprovals?.length ?? s.approvals.length,
     voice: { status: voice.status, detail: voice.detail, muted: voice.muted, volume: voice.volume, transcriptTail: voice.lines.slice(-6) },
     theme: document.documentElement.dataset.theme,
+    themePref: document.documentElement.dataset.themePref,
     // compact = the small widget layout of KAgent's own window (app).
     compact: new URLSearchParams(location.search).has("compact") || new URLSearchParams(location.search).has("overlay"),
     app: new URLSearchParams(location.search).has("app"),

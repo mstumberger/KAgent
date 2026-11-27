@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, captureToken } from "./api";
 import { init, openSession, refreshSessions, setView, useStore } from "./store";
 import { installDiagnostics } from "./diag";
@@ -10,6 +10,7 @@ import PermissionPicker from "./components/PermissionPicker";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
 import { VIEWS } from "./nav";
+import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
 import SettingsPage from "./settings/SettingsPage";
 import Chat from "./views/Chat";
 import System from "./views/System";
@@ -79,9 +80,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [token, setToken] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">(
-    () => (localStorage.getItem("kagent.theme") as "dark" | "light") ?? "dark",
-  );
+  // The owner's choice (auto by default) and the theme in use (theme.ts).
+  const [pref, setPref] = useState<ThemePref>(readPref);
+  const system = useSyncExternalStore(subscribeSystemTheme, systemTheme, systemTheme);
+  const theme = themeOf(pref, system);
 
   useEffect(() => {
     const t = captureToken();
@@ -93,7 +95,7 @@ export default function App() {
     }
     const onTheme = (e: Event) => {
       const v = (e as CustomEvent).detail;
-      if (v === "dark" || v === "light") setTheme(v);
+      if (isPref(v)) setPref(v);
     };
     window.addEventListener("kagent-theme", onTheme);
     return () => window.removeEventListener("kagent-theme", onTheme);
@@ -101,8 +103,9 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("kagent.theme", theme);
-  }, [theme]);
+    document.documentElement.dataset.themePref = pref;
+    storePref(pref);
+  }, [theme, pref]);
 
   if (token && compact) {
     return (
@@ -152,7 +155,7 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <button className="tab icon-tab" title={theme === "dark" ? "Light theme" : "Dark theme"} aria-label="Switch theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+        <button className="tab icon-tab" title={theme === "dark" ? "Light theme" : "Dark theme"} aria-label="Switch theme" onClick={() => setPref(theme === "dark" ? "light" : "dark")}>
           {theme === "dark" ? "☀" : "☾"}
         </button>
         {isApp && (
