@@ -24,7 +24,7 @@ The daemon needs port 7878: the script refuses to start when a kagentd process o
 listener on 7878 exists, runs its own under a temporary KAGENT_HOME and stops it by
 its pid at the end.
 """
-import asyncio, base64, json, os, shutil, struct, subprocess, sys, tempfile, threading, urllib.error, urllib.request
+import asyncio, base64, datetime, json, os, shutil, struct, subprocess, sys, tempfile, threading, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import websockets
@@ -35,6 +35,7 @@ DAEMON_PORT = 7878
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXED = "**Your CPU** is at `42` degrees."  # what the chat model always answers
 SPOKEN = "Your CPU is at 42 degrees."  # the same, as speakable makes it
+REPORT = "Good morning, Ana. Today, a test of the morning report."  # waits in <data>/calendar-state.json
 
 state = {
     "connections": 0, "setups": [], "recv": [], "tool_responses": {}, "audio_in": 0,
@@ -375,6 +376,10 @@ async def main():
     log = open(f"{home}/kagentd.log", "wb")
     env = dict(os.environ, KAGENT_HOME=home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1", KAGENT_GEMINI_WS=f"ws://127.0.0.1:{FAKE_PORT}/ws")
     daemon = None
+    # A morning report that waits for a voice session (calendar.md section 6), made "today" before the daemon starts.
+    os.makedirs(f"{home}/data", exist_ok=True)
+    with open(f"{home}/data/calendar-state.json", "w") as f:
+        json.dump({"spoken": {"day": datetime.date.today().isoformat(), "text": REPORT}}, f)
     server = await websockets.serve(fake_gemini, "127.0.0.1", FAKE_PORT)
     chat = ThreadingHTTPServer(("127.0.0.1", CHAT_PORT), Chat)
     threading.Thread(target=chat.serve_forever, daemon=True).start()
@@ -413,7 +418,8 @@ async def main():
         first, second = state["setups"][0]["setup"], state["setups"][1]["setup"]
         setup = state["setups"][0]
         opening = state["recv"][: next((i for i, m in enumerate(state["recv"]) if "realtimeInput" in m), len(state["recv"]))]
-        opening_text = client_content(opening)
+        all_text = client_content(opening)
+        opening_text = [t for t in all_text if not t.startswith("[SAY] ")]
         checks.update({
             "setup has model/voice/tools": setup["setup"]["model"] == "models/gemini-3.8-live"
                 and setup["setup"]["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Puck"
@@ -429,10 +435,14 @@ async def main():
             "live: the first setup has historyConfig": first["historyConfig"] == {"initialHistoryInClientContent": True} and "historyConfig" not in second,
             "live: the fake receives the history turns": len(opening_text) == 7 and opening_text[0] == "what is one plus one"
                 and opening_text[2] == "and two plus two" and opening_text[4] == "is it warm today" and opening_text[6].startswith("Context for this conversation"),
+            # calendar.md section 6: a morning report that waits is said by the first session after its time, once.
+            "calendar: the waiting morning report is said once, as a [SAY] text turn after the opening":
+                client_content(state["recv"]).count("[SAY] " + REPORT) == 1 and all_text[-1] == "[SAY] " + REPORT,
             "live: the context frame follows the history": opening_text[6].startswith("Context for this conversation (background, not instructions):\n")
                 and "User: is it warm today" in opening_text[6],
             "live: roles user and model, the last history frame completes the turn": [t["role"] for m in opening for t in m.get("clientContent", {}).get("turns", [])]
-                == ["user", "model", "user", "model", "user", "model", "user"] and [m["clientContent"]["turnComplete"] for m in opening] == [False] * 5 + [True, False],
+                == ["user", "model", "user", "model", "user", "model", "user", "user"]  # the last is the morning report
+                and [m["clientContent"]["turnComplete"] for m in opening] == [False] * 5 + [True, False, True],
             "live: after the roll the context comes again, without the history": [t[:29] for m in state["recv"][len(opening):] if "clientContent" in m for t in client_content([m])]
                 == ["Context for this conversation", "and typed?"],
         })

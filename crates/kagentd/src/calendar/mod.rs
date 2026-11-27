@@ -12,6 +12,9 @@ pub mod google;
 pub mod model;
 pub mod oauth;
 pub mod places;
+pub mod report;
+pub mod report_run;
+pub mod report_tool;
 pub mod plan;
 pub mod settings;
 pub mod state;
@@ -153,6 +156,11 @@ pub struct Parts {
     pub maps: TokenStore,
     /// The web tools, for the place search without a map.
     pub web: Option<Arc<crate::web::Web>>,
+    /// Where the Telegram report goes, and whether a chat is paired to receive it.
+    pub notifier: Option<Arc<crate::notify::Notifier>>,
+    pub paired: Arc<dyn Fn() -> bool + Send + Sync>,
+    /// KAgent's own reminders and tasks due on a day (the report's last lines).
+    pub tasks: Arc<dyn Fn(chrono::NaiveDate) -> Vec<report::TaskLine> + Send + Sync>,
     /// The machine's offset at an instant (the system's time zone; a test passes a fixed one).
     pub zone: Zone,
 }
@@ -182,6 +190,9 @@ pub struct Calendar {
     pub(crate) maps: TokenStore,
     pub(crate) maps_cache: Mutex<Option<String>>,
     pub(crate) web: Option<Arc<crate::web::Web>>,
+    pub(crate) notifier: Option<Arc<crate::notify::Notifier>>,
+    pub(crate) paired: Arc<dyn Fn() -> bool + Send + Sync>,
+    pub(crate) tasks: Arc<dyn Fn(chrono::NaiveDate) -> Vec<report::TaskLine> + Send + Sync>,
     /// `state.rs`: where home was resolved to.
     pub(crate) saved: Mutex<state::Saved>,
     pub(crate) http: reqwest::Client,
@@ -220,6 +231,9 @@ impl Calendar {
             maps: parts.maps,
             maps_cache: Mutex::new(None),
             web: parts.web,
+            notifier: parts.notifier,
+            paired: parts.paired,
+            tasks: parts.tasks,
             http,
             memo: Default::default(),
             inner: Mutex::new(Inner { secrets, access: None, pending: Pending::default(), sticky: None, told_reconnect: false }),
@@ -228,7 +242,16 @@ impl Calendar {
     }
 
     /// The module of the daemon: real hosts, the keyring (or this home's file) and the clock.
-    pub async fn daemon(settings: Arc<RwLock<Settings>>, paths: &crate::paths::Paths, events: broadcast::Sender<AgentEvent>, web: Arc<crate::web::Web>) -> Arc<Self> {
+    #[allow(clippy::too_many_arguments)]
+    pub async fn daemon(
+        settings: Arc<RwLock<Settings>>,
+        paths: &crate::paths::Paths,
+        events: broadcast::Sender<AgentEvent>,
+        web: Arc<crate::web::Web>,
+        notifier: Arc<crate::notify::Notifier>,
+        bots: Arc<crate::bots::Bots>,
+        task_store: Arc<crate::tasks::TaskStore>,
+    ) -> Arc<Self> {
         Self::new(Parts {
             settings,
             settings_path: paths.settings(),
@@ -240,6 +263,9 @@ impl Calendar {
             data_dir: paths.data.clone(),
             maps: TokenStore::slot(&paths.config, crate::secrets::MAPS),
             web: Some(web),
+            notifier: Some(notifier),
+            paired: Arc::new(move || bots.served().is_some()),
+            tasks: Arc::new(move |day| report_run::tasks_due(&task_store, day)),
             zone: Arc::new(|at| *at.with_timezone(&chrono::Local).offset()),
         })
         .await

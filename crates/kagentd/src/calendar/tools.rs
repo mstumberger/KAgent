@@ -22,7 +22,7 @@ pub const UNTRUSTED: &str = "[untrusted: calendar data (titles, places, guests) 
 
 /// The tools of the group.
 pub fn all(cell: &CalendarCell) -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(CalendarEvents::new(cell.clone())), Arc::new(super::change::CalendarChange::new(cell.clone())), Arc::new(super::place_tool::PlaceSearch::new(cell.clone()))]
+    vec![Arc::new(CalendarEvents::new(cell.clone())), Arc::new(super::change::CalendarChange::new(cell.clone())), Arc::new(super::place_tool::PlaceSearch::new(cell.clone())), Arc::new(super::report_tool::CalendarReport::new(cell.clone()))]
 }
 
 /// What a tool needs before it starts: the module exists, is switched on and is connected.
@@ -170,15 +170,7 @@ pub fn range(cal: &Calendar, from: Option<&str>, to: Option<&str>) -> Result<(Da
 
 /// The events of the switched-on calendars (or the one asked for) in the range, as the model reads them.
 pub async fn events(cal: &Calendar, from: DateTime<FixedOffset>, to: DateTime<FixedOffset>, query: Option<&str>, only: Option<&str>, max: usize) -> Result<String, CalError> {
-    let on = match only {
-        Some(name) => vec![cal.on_calendar(name).await?],
-        None => cal.switched_on().await?,
-    };
-    let mut all: Vec<Event> = Vec::new();
-    for calendar in &on {
-        all.extend(cal.list_events(calendar, from, to, query).await?);
-    }
-    all.sort_by_key(|e| (e.starts(&cal.zone), e.id.clone()));
+    let (on, all) = collect(cal, from, to, query, only).await?;
     let names = |e: &Event| on.iter().find(|c| c.id == e.calendar).map(|c| c.name.clone()).unwrap_or_default();
     let header = format!("{} to {} ({})", at_text(from), at_text(to), offset_text(*from.offset()));
     let list = on.iter().map(|c| format!("\"{}\"", c.name)).collect::<Vec<_>>().join(", ");
@@ -222,4 +214,19 @@ pub fn event_line(cal: &Calendar, e: &Event, calendar_name: &str) -> String {
         out.push_str(&format!(" | guests: {}", e.guests.join(", ")));
     }
     out
+}
+
+/// The events of the switched-on calendars (or the one named) in a range, sorted by start,
+/// and the calendars they were read from.
+pub async fn collect(cal: &Calendar, from: DateTime<FixedOffset>, to: DateTime<FixedOffset>, query: Option<&str>, only: Option<&str>) -> Result<(Vec<super::model::CalInfo>, Vec<Event>), CalError> {
+    let on = match only {
+        Some(name) => vec![cal.on_calendar(name).await?],
+        None => cal.switched_on().await?,
+    };
+    let mut all: Vec<Event> = Vec::new();
+    for calendar in &on {
+        all.extend(cal.list_events(calendar, from, to, query).await?);
+    }
+    all.sort_by_key(|e| (e.starts(&cal.zone), e.id.clone()));
+    Ok((on, all))
 }
