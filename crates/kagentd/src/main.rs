@@ -30,6 +30,7 @@ mod sections;
 mod sentinel;
 mod server;
 mod settings;
+mod settings_apply;
 mod skills;
 mod skills_api;
 mod skills_import;
