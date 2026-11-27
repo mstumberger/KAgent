@@ -42,6 +42,8 @@ export interface Store {
   metas: Record<string, SessionInfo>;
   /** The models a conversation may choose (picker.md section 5.6); `null` until the first read. */
   models: picker.PickerModel[] | null;
+  /** The widget's one open sheet (picker.md section 5.5); S42 and S43 add theirs. */
+  sheet: "models" | null;
 }
 
 let store: Store = {
@@ -67,6 +69,7 @@ let store: Store = {
   children: {},
   metas: {},
   models: null,
+  sheet: null,
 };
 
 const listeners = new Set<() => void>();
@@ -158,6 +161,8 @@ export async function setSessionModel(id: string, body: Partial<picker.Choice>) 
   }
 }
 
+export const openSheet = (sheet: NonNullable<Store["sheet"]>) => set({ sheet });
+export const closeSheet = () => set({ sheet: null });
 
 /** Send a session's todo list as the panel changed it (a tick, Clear): one PUT with the whole list; the answer is the list the daemon stored. A failure is a notice. */
 export async function saveTodo(id: string, items: TodoItem[]) {
