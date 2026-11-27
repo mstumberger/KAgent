@@ -8,6 +8,7 @@ mod http;
 mod places;
 mod report;
 mod secrets;
+mod skill;
 
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
