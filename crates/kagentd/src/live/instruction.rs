@@ -3,6 +3,7 @@
 //! word: they are a second line of defence next to `approve.rs`.
 
 use crate::sections::VoiceBrain;
+use crate::prompt;
 use crate::settings::Persona;
 use crate::AppState;
 
@@ -102,30 +103,34 @@ fn language_rule(language: &str) -> &'static str {
 /// `routed` (voice.md section 2): the chat model thinks; the live model listens and
 /// reads its reply.
 pub fn routed(persona: &Persona) -> String {
+    let address = if persona.address.trim().is_empty() { "the owner" } else { persona.address.as_str() };
     format!(
         "You are {name}, the voice interface of {address}'s Linux machine. {lang}\n{ROUTED}\n{SAY}\n{LISTENING}\n{OWN_WORDS}\n{CARD}\n{DESTRUCTIVE}",
         name = persona.name,
-        address = persona.address,
+        address = address,
         lang = language_rule(&persona.language)
     )
 }
 
 /// `live` (voice.md section 3): the chat system prompt and the voice rules.
-pub fn live(chat_prompt: &str) -> String {
-    format!("{chat_prompt}\n\n{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
+pub fn live(chat_prompt: &str, address: &str) -> String {
+    // The Brain, `settings` and name lines (voice-control.md): this model has the tool whatever the chat
+    // prompt was built with, and a line the chat prompt already holds is not said twice.
+    let rules: String = prompt::owner_rules(true, address).lines().filter(|l| !chat_prompt.contains(l)).map(|l| format!("{l}\n")).collect();
+    format!("{chat_prompt}\n\n{rules}{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
 }
 
 /// `auto` (voice.md section 1): the instruction of `live`, and when to call `think`.
-pub fn auto(chat_prompt: &str) -> String {
-    format!("{}\n{THINK}\n{SAY}", live(chat_prompt))
+pub fn auto(chat_prompt: &str, address: &str) -> String {
+    format!("{}\n{THINK}\n{SAY}", live(chat_prompt, address))
 }
 
 /// The instruction of a session in `mode`, read once when it connects.
 pub fn of(st: &AppState, mode: VoiceBrain) -> String {
     match mode {
         VoiceBrain::Routed => routed(&st.settings.read().unwrap().persona),
-        VoiceBrain::Live => live(&st.agent.config().system_prompt),
-        VoiceBrain::Auto => auto(&st.agent.config().system_prompt),
+        VoiceBrain::Live => live(&st.agent.config().system_prompt, &st.settings.read().unwrap().persona.address),
+        VoiceBrain::Auto => auto(&st.agent.config().system_prompt, &st.settings.read().unwrap().persona.address),
     }
 }
 
@@ -142,14 +147,15 @@ mod tests {
     fn every_mode_keeps_the_card_and_destructive_sentences() {
         const CARD_TEXT: &str = "Actions that change the system show an approval card on the screen: say what you asked for and that it waits for approval there; the user can answer it by voice ('yes' / 'no'; root actions need 'approve'), so ask a short question like 'Shall I send it?' and wait; never claim it is done before the result arrives.";
         const DESTRUCTIVE_TEXT: &str = "Destructive actions (reboot, power off, kill, closing windows, deleting) ALWAYS need the user's explicit spoken confirmation, even with full control: first warn about unsaved work and ask 'Shall I reboot now? Say yes, reboot.' A question from the user ('should we reboot?') is never a request; one-word or garbled fragments are never a confirmation.";
-        let (routed, live, auto) = (routed(&persona()), live("PROMPT"), auto("PROMPT"));
+        let (routed, live, auto) = (routed(&persona()), live("PROMPT", "Marko"), auto("PROMPT", "Marko"));
         for text in [&routed, &live, &auto] {
             assert!(text.contains(CARD_TEXT) && text.contains(DESTRUCTIVE_TEXT), "the two safety sentences are word for word in every mode:\n{text}");
         }
         assert!(routed.starts_with("You are KAgent, the voice interface of Marko's Linux machine. Always answer in Slovenian.\n"), "{routed}");
         assert!(routed.contains("call `think` with the user's exact words in their language and say nothing else") && routed.contains("[SAY] is your own answer"), "{routed}");
         assert!(!routed.contains("Recent conversation"), "the history frames carry the conversation");
-        assert!(live.starts_with("PROMPT\n\nVOICE MODE: you are speaking out loud.") && !live.contains("Recent conversation") && !live.contains("`think`,"), "live is today's text without the Recent conversation block:\n{live}");
+        assert!(live.starts_with("PROMPT\n\n- The owner calls the chat model 'the Brain'") && live.contains("VOICE MODE: you are speaking out loud."), "{live}");
+        assert!(live.contains("VOICE MODE: you are speaking out loud.") && !live.contains("Recent conversation") && !live.contains("`think`,"), "live is today's text without the Recent conversation block:\n{live}");
         assert!(live.contains("Retries: when something did not work, check first (screen with window, focus_context) and fix the cause; do not repeat the same action blindly, and never type the same text twice."));
         assert!(auto.starts_with(&live) && auto.contains("one function, `think`"), "auto is live plus the think rule");
         // voice.md section 12: the model that acts itself knows what `needs_confirmation` is.
@@ -157,5 +163,23 @@ mod tests {
             assert!(text.contains("status `needs_confirmation` means nothing was done yet") && text.contains("call the same tool again with exactly the same arguments"), "{text}");
         }
         assert!(!routed.contains("needs_confirmation"), "routed has no tools of its own");
+    }
+
+    /// voice-control.md sections 3 and 5 in the live instructions.
+    #[test]
+    fn live_and_auto_carry_the_brain_settings_and_name_lines_once() {
+        for text in [live("PROMPT", "Marko"), auto("PROMPT", "Marko")] {
+            assert_eq!(text.matches(prompt::BRAIN_RULE.trim_end()).count(), 1, "{text}");
+            assert!(text.contains(prompt::SETTINGS_RULE.trim_end()) && !text.contains("do not know the owner's name"));
+        }
+        let nameless = live("PROMPT", "");
+        assert!(nameless.contains(prompt::NAME_RULE.trim_end()), "{nameless}");
+        // A chat prompt that has the lines already is not repeated.
+        let chat = format!("PROMPT\n{}{}", prompt::BRAIN_RULE, prompt::SETTINGS_RULE);
+        let text = live(&chat, "Marko");
+        assert_eq!(text.matches("the Brain'").count(), 1, "{text}");
+        assert!(!routed(&persona()).contains("`settings`"), "routed has no tools of its own");
+        let nameless_persona = Persona { address: String::new(), ..persona() };
+        assert!(routed(&nameless_persona).contains("of the owner's Linux machine"));
     }
 }

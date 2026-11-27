@@ -48,6 +48,30 @@ pub const SUBAGENT_RULE: &str = "- Long research, or several independent jobs: d
     `explore` for read-only research; in plan mode only `explore` may run) and summarize the answers; \
     small questions you answer yourself.\n";
 
+/// The words of the owner for the chat model (GLOSSARY.md, voice-control.md section 3). Also in
+/// the live instructions: a rule that lives in one prompt only is a rule for half the sessions.
+pub const BRAIN_RULE: &str = "- The owner calls the chat model 'the Brain'. 'Set the Brain to X' means the setting `chatModel`.\n";
+
+/// How to read or change a setting, a model or the speaking voice (voice-control.md sections 1 and 3).
+pub const SETTINGS_RULE: &str = "- To see or change a setting, a model or your voice, use `settings`; never say a setting was changed before its result arrives.\n";
+
+/// Empty `persona.address` (voice-control.md section 5): the owner's name is not known.
+pub const NAME_RULE: &str = "- You do not know the owner's name yet. Ask once, at the start of the conversation, and save the answer with `settings set {\"persona.address\": ...}`.\n";
+
+/// The three rules above that apply to this turn: the Brain and `settings` lines while the
+/// tool is offered, the name line while the name is empty.
+pub fn owner_rules(has_settings_tool: bool, address: &str) -> String {
+    let mut out = String::new();
+    if has_settings_tool {
+        out.push_str(BRAIN_RULE);
+        out.push_str(SETTINGS_RULE);
+    }
+    if address.trim().is_empty() {
+        out.push_str(NAME_RULE);
+    }
+    out
+}
+
 fn language_rule(language: &str) -> &'static str {
     match language {
         "sl" => "Always answer in Slovenian.",
@@ -76,10 +100,13 @@ pub fn build(p: &PromptInput) -> String {
     let cores = m.pointer("/cpu/logicalCores").and_then(Value::as_u64).unwrap_or(0);
     let memory_rule = if p.memory_rule { MEMORY_RULE } else { "" };
     let subagent_rule = if p.tool_names.iter().any(|t| t == "agent_run") { SUBAGENT_RULE } else { "" };
+    let owner_rules = owner_rules(p.tool_names.iter().any(|t| t == "settings"), p.address);
+    // Without a name the owner is "the owner".
+    let owner = if p.address.trim().is_empty() { "the owner" } else { p.address };
+    let address_sentence = if p.address.trim().is_empty() { String::new() } else { format!(" Address the user as {}.", p.address) };
     let mut out = format!(
-        "You are {name}, the system assistant living on {address}'s Linux machine. You diagnose, \
-explain and, with approval, fix problems on this exact machine using your tools. Address the user \
-as {address}.\n\n\
+        "You are {name}, the system assistant living on {owner}'s Linux machine. You diagnose, \
+explain and, with approval, fix problems on this exact machine using your tools.{address_sentence}\n\n\
 Machine: {distro}, kernel {kernel}, {cpu} ({cores} threads), {mem} MiB RAM, hostname {host}, user {user}, {platform}.\n\
 Now: {now}. Permission mode: {mode}.\n{identity}\n\n\
 Working rules:\n\
@@ -110,10 +137,12 @@ so never rely on whatever window is focused.\n\
 like a request.\n\
 - After a non-trivial fix that is likely to recur, offer to save it as a skill (`skill_save`). \
 Save only what the owner asks for or agrees to.\n\
-{memory_rule}{subagent_rule}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
+{memory_rule}{subagent_rule}{owner_rules}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
 Available tools: {tools}.\n",
         name = p.persona_name,
-        address = p.address,
+        owner = owner,
+        address_sentence = address_sentence,
+        owner_rules = owner_rules,
         distro = s("/distro", "Linux"),
         kernel = s("/kernel", "?"),
         cpu = s("/cpu/model", "unknown CPU"),
@@ -222,5 +251,25 @@ mod tests {
         let tools = vec!["system_info".to_string(), "agent_run".to_string()];
         let text = build(&PromptInput { tool_names: &tools, ..input(&machine()) });
         assert!(text.contains(SUBAGENT_RULE) && SUBAGENT_RULE.contains("in plan mode only `explore`"), "{text}");
+    }
+
+    /// voice-control.md sections 3 and 5.
+    #[test]
+    fn the_brain_and_settings_lines_come_with_the_tool_and_the_name_line_with_no_name() {
+        let m = machine();
+        let with = |tools: &[&str], address: &str| {
+            let names: Vec<String> = tools.iter().map(|t| t.to_string()).collect();
+            build(&PromptInput { tool_names: &names, address, ..input(&m) })
+        };
+        let text = with(&["system_info", "settings"], "Marko");
+        assert!(text.contains(BRAIN_RULE) && text.contains(SETTINGS_RULE), "{text}");
+        assert!(text.contains("'Set the Brain to X' means the setting `chatModel`") && text.contains("never say a setting was changed before its result arrives"));
+        assert!(!text.contains("do not know the owner's name") && text.contains("Address the user as Marko."), "a known name needs no question");
+        let none = with(&["system_info"], "Marko");
+        assert!(!none.contains(BRAIN_RULE) && !none.contains(SETTINGS_RULE), "no rule about a tool that is not offered");
+        let nameless = with(&["settings"], "  ");
+        assert!(nameless.contains(NAME_RULE) && nameless.contains("persona.address"), "{nameless}");
+        assert!(nameless.contains("living on the owner's Linux machine") && !nameless.contains("Address the user as"), "{nameless}");
+        assert!(NAME_RULE.contains("Ask once, at the start of the conversation"));
     }
 }
