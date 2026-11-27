@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      widgets.md section 6. Nothing remote: every source is this daemon. A widget frame is
+      a sandboxed srcdoc and inherits this policy, so script-src keeps 'unsafe-inline' (the
+      widget's own scripts); frame-src 'none' still loads a srcdoc frame but stops a widget
+      from sending its frame to another address. blob: is the voice audio worklet.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
     <title>KAgent</title>
   </head>
   <body>
