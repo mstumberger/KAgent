@@ -10,7 +10,8 @@ can still reach whatever the owner can (section 5).
 ## 1. Credential files
 
 `<config>/token`, `<config>/router.secret`, `<config>/telegram.secret`,
-`<config>/search.secret`. Where they are follows `kagentd/src/paths.rs` (`KAGENT_HOME`,
+`<config>/search.secret`, `<config>/calendar.json` (the Google connection: client secret and
+refresh token, S45) and `<config>/maps.secret` (the Maps key, S45). Where they are follows `kagentd/src/paths.rs` (`KAGENT_HOME`,
 else XDG); the rules read the environment at each check.
 
 - `read_file` refuses them with an error and without a card, in every mode: "refused, the
@@ -55,6 +56,12 @@ hooks.md section 5 does; never rememberable) when:
   `search_files` from a credential file are recognised.
 - `tests/token_guard.rs`: a tool output that holds the token reaches the model and the
   session without it; without a redactor it passes unchanged.
+
+The calendar module adds one rule of its own (`calendar.md` sections 1 and 5): a token or a key
+never appears in a tool result, a view, an error or a log line. The access token lives in memory
+only; Google's own error text is scrubbed of the key and the token before it is shown; the Maps
+key travels in a header, never in a URL. `calendar/tests/secrets.rs` runs a whole session against
+the fake Google with the log captured and greps all of it.
 
 ## 5. Known limits
 

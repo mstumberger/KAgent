@@ -50,6 +50,7 @@ become sections there, never new main tabs.
 | Agent capabilities | `tools` | Tools and permissions | Permission mode, always-allow rules, per-tool overrides, tool groups for chat and for MCP, the contracts table (today's Tools view) | S19 |
 | Agent capabilities | `tasks` | Automations | The defaults of `settings.tasks`: approval policy, delivery, time limit (`timeoutMin`), runs at once (`maxConcurrent`) | v0.0.2 |
 | Agent capabilities | `hooks` | Hooks | `hooks.md` section 7 | S32 |
+| Agent capabilities | `calendar` | Calendar | `calendar.md` section 2: four cards (Connection, Calendars, Places and travel, Morning report), after Automations | S45 |
 | Channels | `telegram` | Telegram | `bots.md` section 7 | S29 |
 
 - The tasks themselves are in the Tasks tab (`automations.md`); the `tasks` section holds
@@ -131,3 +132,29 @@ until now UI work needed a production build and a reload for every change.
   and looks right at 1200x820 and at 700x500 (menu as a select).
 - Behaviour: a persona draft survives a toggle in another card; one save causes one
   PUT; `#view=providers` opens Models; `ui show settings/skills` opens Skills.
+
+## 10. The Calendar page (S45)
+
+One section file, `sections/Calendar.tsx` (state, actions, the read of `GET /api/calendar` on
+open and after each `calendarChanged`), and one file per card under `settings/calendar/`
+(`Connection`, `Calendars`, `Places`, `Report`, `api.ts`, `calendar.css`). It uses the shared
+components and `useSettingPatch`; the client secret, the token and the Maps key are typed into
+password fields that are emptied after a save, and the page only hears whether they exist.
+
+- Connection: the badge of the state (Not connected, Waiting for Google, Connected, Reconnect
+  needed, Error), the account's address, the two client fields, Save client, Connect (Reconnect
+  when the state is `reconnect`), Disconnect, the "Testing expires the token after 7 days" note
+  and a fold with the five steps. Connect posts, then opens the returned address with
+  `window.open` in the browser; it is disabled until a client id and secret are saved.
+- Calendars: one row per calendar of the account (colour, name, a "read-only" badge, the default
+  as a radio, a switch). A read-only calendar cannot be the default; the last calendar that is on
+  cannot be switched off; switching the default off gives the default to a writable one that stays
+  on. The rows save through `PUT /api/settings`, which validates them.
+- Places and travel: the masked Maps key with Save, Test and Delete, the home address, the margin.
+- Morning report: the switch, the two times (each with a switch for "no report on these days"),
+  Spoken, Telegram (disabled with "Pair the bot first" while no chat is paired), Tomorrow,
+  Reminders, Leave by, Send now (shows the text and where it went) and the last report.
+- Verified by `scripts/test-calendar-web.py`: a real daemon under a temporary home behind a proxy
+  that mocks the calendar and Telegram routes (no Google host is reached), headless Chrome, the
+  seven states of the connection in dark and light at 1200x820 (top and bottom of the page,
+  screenshots in `/tmp/kagent-s45-shots/`), 700x500, the behaviours above and no console error.

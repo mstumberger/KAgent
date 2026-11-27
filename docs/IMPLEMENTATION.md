@@ -2799,6 +2799,88 @@ Decisions the spec did not settle:
   `voice.volume` once. The over-4 s warning is checked by reading the code only (no brain
   turn was slow enough to run).
 
+### Session 2026-11-27, night (S45: Google Calendar and the morning report, v0.0.2 item 3)
+
+`specs/calendar.md` built in eight commits on `v0.0.2`. 765 workspace tests (692 before),
+`tsc` clean, `scripts/test-live.py` 37/37 (one new check), `scripts/test-calendar-web.py`
+60/60 (headless Chrome, the real daemon behind a proxy that mocks the calendar routes),
+`KAGENT_IT=1` passes. Nothing reached a Google host: every test talks to a loopback fake
+(`calendar/fake*.rs`). Decisions the spec did not settle:
+
+- A tool may look something up before its question is built: `Tool::prime(input)` (async,
+  default nothing) runs before every `assess` of a call that runs (`execute_call_from`) and
+  `Agent::prime_call` before `voice_gate` (`live/tool_call.rs`). `calendar_change` reads the
+  event of an `update` or `delete` there, so the card and the spoken question say what Google
+  holds ("one read before the question"). Without the read the sentence says `delete event
+  <id>` and invents no title.
+- `undo_change` asks a handler registered by `action` (`ToolServices.undo`, `UndoHandler`); the
+  calendar module is the handler of `calendar`. The way back inside a record is keyed `step`,
+  not `op`: `run_undo` reads an `undo.op` as a root-helper request (found when the first undo
+  test asked the root helper to delete an event).
+- `TokenStore` is generalised over a `Slot` (kind, id, label, file): `TELEGRAM`, `CALENDAR`,
+  `MAPS`. The calendar keeps ONE text in its slot, a JSON `{clientSecret, refreshToken,
+  account}`, so the keyring item and `<config>/calendar.json` hold the same thing. Disconnect
+  deletes the refresh token and the account and keeps the client secret (Connect works again
+  without pasting). `calendar.json` and `maps.secret` are credential files of the token guard.
+- The group `calendar` is not in `DEFAULT_TOOL_GROUPS` ("default on once connected"): the first
+  successful callback sets `calendar.enabled` and adds the group to `toolGroups` AND to
+  `voice.toolGroups` (the spec named only the first; by voice needs the second). A later
+  connection leaves the owner's choices alone. `calendar` is in `GROUP_PRIORITY` (after `web`)
+  and has its `GROUP_HINTS`.
+- `PROTECTED_KEYS`: `calendar.enabled` and `calendar.clientId`; free: `calendars`,
+  `defaultCalendar`, `defaultDurationMin`, `home`, `travelMarginMin`, `report`. The test
+  `get_masks_every_secret...` patched an unknown key `calendar.other`; the section is typed now
+  (`deny_unknown_fields`), so it patches `calendar.home`.
+- The account's address is the id of the primary calendar (no `userinfo` scope was asked).
+- `calendar.home` is resolved lazily (first use with a key), not when saved, and again when the
+  text or the Maps key changes; the result is in `<data>/calendar-state.json` (`homeLatLng`), not
+  in settings. That file also holds the last language, the last report and the report's book.
+- `near` of `place_search` is looked up first with a one-result search, whose coordinates are
+  the centre of the bias circle (20 km). The web fallback reads an address out of the title and
+  snippet of the results with a regex (street, number, optional postcode, town); a result
+  without one is skipped; `Web::search_hits` is the engine part of `web_search`, shared.
+- Leave-by: the first timed event of today that has a place and is still to come; its place is
+  looked up with Places; Routes is asked twice (the no-traffic time, then traffic at the
+  departure `start - no-traffic`, never in the past); the line says traffic minutes plus the margin.
+- The timer polls every 20 s. A day is marked before its report is made: a report that cannot
+  be made (Google fails) raises one notice and is not retried that day; a connection that is off
+  raises one notice, not one a day (`toldSkip`, reset by the next report that is made). The
+  late-start rule: due within 5 minutes of its time, or later but before 12:00; after noon today
+  has none. `persona.language: auto` follows the last language the owner wrote, guessed from
+  Slovenian letters and common words (`report::language_of`; fed by chat messages and voice
+  transcripts; one or two words with no Slovenian in them say nothing).
+- The spoken report is made at the report time and kept in the state file; the first live
+  connection of a session sends it as a `[SAY]` text turn right after the opening frames (there
+  is no spoken greeting in `live`), once, and only on the day it was made. `SAY` is in the `live`
+  instruction; `auto` no longer appends it a second time. `scripts/test-live.py` seeds the file.
+- `GET /api/calendar` asks Google for the calendar list on every call and reports the state
+  after that call (a revoked grant shows as `reconnect`). The callback takes `ConnectInfo`, so
+  `serve` now uses `into_make_service_with_connect_info`; the bearer exemption was checked
+  against a running daemon (callback 400 without a bearer, every other calendar route 401).
+- Delete tells nobody (`sendUpdates=none`); its undo inserts the stored copy as a NEW event
+  (Google keeps the id of a deleted one), without the Meet link, mailing nobody. A whole series
+  is a master with `recurrence`: refused with "change the series in Google Calendar"; the
+  instances that `singleEvents` lists are changed one at a time.
+- The Calendar page is in "Agent capabilities" after Automations; icon `calendar`; the
+  read-only default is refused when an event is added, not when saved. The check script is
+  `scripts/test-calendar-web.py` (kept in the repo; screenshots go to `/tmp/kagent-s45-shots/`).
+- Seen and fixed on the way: the view read the state before its own Google call (a revoked
+  grant showed as connected); `callback` and `disconnect` changed the state outside the call that
+  raises `calendarChanged`. The fifth commit holds a secrets test that is flaky in a full run
+  (tracing caches the interest of a callsite another test thread hit first); the sixth commit
+  fixes it (`rebuild_interest_cache` and a marker line).
+- Rests on the fake alone, never tried against Google: the exact JSON of Google's answers
+  (`calendarList`, `events`, `places:searchText`, `computeRoutes`, the `invalid_grant` body), PKCE
+  and the loopback redirect at a real consent screen, the refresh token's life under "Testing",
+  Meet creation (`conferenceDataVersion=1`), `sendUpdates`, all-day dates in the calendar's own
+  time zone (the fake counts them on UTC+01:00), and the web fallback's regex on real result
+  pages. Scenario S45 item 9 is the owner's check with a real account.
+- Open questions for the owner: (1) restore by insert gives a new id and drops the Meet link;
+  is that enough, or should a deleted event be restored by patching `status: confirmed` (Google
+  keeps it for a time)? (2) The Calendar page sits in "Agent capabilities"; "Channels" is the
+  other candidate (the report goes to channels). (3) Should a read-only default calendar be
+  refused on save as well?
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2851,6 +2933,7 @@ Phase 5 (planned 2026-11-27, not started; the order is the dependency order)
 
 v0.0.2
 - [x] S44 settings by voice and the voice rules (`specs/voice-control.md`; section E, 2026-11-27 night)
+- [x] S45 Google Calendar and the morning report (`specs/calendar.md`; items 1 to 8 automatic against a fake Google, item 9 is the owner's with a real account; section E, 2026-11-27 night)
 
 Phase 6 (planned 2026-11-27, not started; S40 first)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
@@ -2882,4 +2965,6 @@ Phase 6 (planned 2026-11-27, not started; S40 first)
 | S35 | Claude Code installed and logged in as in a terminal (`claude --version` answers). Once: Settings -> Coding agents -> Test (it starts one short job and uses a little of the subscription). tmux is not needed |
 | S36 | install Codex (`codex` on PATH; KAgent never installs it) and log in; Settings -> Coding agents -> Test |
 | S37 | Konsole, for "Open in a terminal" |
+| S45 | console.cloud.google.com: a project; enable "Google Calendar API"; OAuth consent screen (External, your address as a test user, then "Publish app", else Google expires the token after 7 days); Credentials, OAuth client ID, Desktop app; paste the client id and secret into Settings -> Calendar, Save client, Connect |
+| S45 | for places and leave-by (optional): enable "Places API (New)" and "Routes API", create an API key restricted to those two, paste it into Settings -> Calendar (Places and travel), Test; billing must be on for the project (this use stays inside the free monthly allowance). Then restart the daemon (release rebuild) for the new tools and routes |
 | S40 | once, before the first start of the new daemon: copy `~/.config/kagent/providers.json`. At load the daemon corrects the roles of the models that are not chat models (`specs/models.md` section 3) |

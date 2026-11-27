@@ -542,3 +542,24 @@ holds the whole job; `profile` says what the coder may do (`claude-plan` reads a
 analyses, `claude-edit` edits and runs tests, `claude-full` anything with the user's
 approval; S36 adds the `codex-*` names); for N jobs it makes N calls in one answer. The
 wording is settled with raw replays of the local model (`coders.md` section 4).
+
+## 26. Calendar (group `calendar`; S45)
+
+Google Calendar and places, a native module of the daemon (`calendar.md`). The group is not
+in `DEFAULT_TOOL_GROUPS`: the first successful connection adds it to `toolGroups` and to
+`voice.toolGroups` ("default on once connected"); a later connection leaves the owner's
+choices alone. Until then every tool answers that the calendar is switched off or not
+connected, and says where to fix it. Results that hold calendar text (titles, places,
+guests) start with `[untrusted: calendar data ...]`.
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `calendar_events` | RO, side effect Network | `{from?: date or datetime, to?: date or datetime, query?: string, calendar?: name or id, max?: 1..50 (default 25)}` | the events of the switched-on calendars in the range (default: today; a date as `to` includes that day; at most 366 days), sorted by start: when (machine time zone, with the weekday), title, place, calendar, id, Meet link, guests, `overlaps`, "one event of a series". A calendar that is not switched on is refused; Google failing is an error, never an empty list |
+| `calendar_change` | MUT, risk medium, `always_ask`; `delete` is destructive | `{action: add\|update\|delete, id?, calendar?, title?, start?, end?, durationMin?, allDay?, location?: {name, address, mapsUrl?}, notes?, reminderMin?: integer\|null, meet?: boolean, guests?: [email]}` | `add` needs title and start, then `end` or `durationMin` (default `calendar.defaultDurationMin`); `update` and `delete` need the `id` of `calendar_events`. The card and the spoken question are built from the event as Google stores it (`Tool::prime` reads it first), never from the model's words: `add "Lunch with Miha", Sat 28 Nov 12:00 to 13:00, at Thai Orchid, Glavni trg 5, Maribor, calendar Personal, reminder 30 min` / `move "<title>" from <old> to <new>` / `delete "<title>", <when>`. Refusals, before anything is sent: a calendar that is not switched on or is read-only; `end` not after `start`; a start more than 5 years from now; more than 20 guests or a guest that is not an email address; `mapsUrl` that is not a Google Maps link; a whole series (`recurrence`: "change the series in Google Calendar"); an `id` not found in a switched-on calendar; nothing to change. Guests get Google's mail only when `guests` is given (only the new ones on `update`); a delete tells nobody. Journaled with its way back: `add` -> delete, `update` -> the old fields written back, `delete` -> the stored copy inserted as a new event (Google keeps the old id; a Meet link is lost) |
+| `place_search` | RO, side effect Network | `{query: string (<= 200), near?: string}` | up to 3 candidates (name, address, `mapsUrl`, `source`): Google Places (New) with a Maps key, biased to `near` or to `calendar.home`; without a key, or when Places fails or finds nothing, the web search, the address taken from the first results that have one, `source: "web"`, and the answer says "I could not check this on the map" |
+| `calendar_report` | RO, side effect Network | `{day?: today\|tomorrow}` | the morning report's text for the model (`calendar.md` section 6): changes nothing and sends nothing |
+
+The permission rules are those of `voice-control.md` section 4: `add` and `update` ask in
+`ask` and `trusted`, ask from voice in every mode, and pass without a card in chat under
+`full`; `delete` asks in every mode and by voice only "confirm" answers it.
+

@@ -182,15 +182,22 @@ The `calendar` settings section goes through `PUT /api/settings`. Event `calenda
 ## 8. Files
 
 ```
-crates/kagentd/src/calendar/mod.rs       the hub: state, token refresh, the timer
+crates/kagentd/src/calendar/mod.rs       the hub: state, token refresh, settings it saves
 crates/kagentd/src/calendar/oauth.rs     PKCE, state, code exchange, refresh, revoke
-crates/kagentd/src/calendar/google.rs    calendarList, events list/insert/patch/delete
+crates/kagentd/src/calendar/google.rs    calendarList, events list/insert/patch/delete; the switched-on rule
+crates/kagentd/src/calendar/model.rs     calendars and events as read from Google, and their text (pure)
 crates/kagentd/src/calendar/places.rs    Places, Routes, the web fallback
-crates/kagentd/src/calendar/report.rs    the text (pure), delivery
-crates/kagentd/src/calendar/tools.rs     the four tools, summaries, journal records
+crates/kagentd/src/calendar/place_tool.rs   place_search
+crates/kagentd/src/calendar/report.rs    when it is due, the language, the text (pure)
+crates/kagentd/src/calendar/report_run.rs   the timer, the text for a day, delivery, the spoken one
+crates/kagentd/src/calendar/report_tool.rs  calendar_report
+crates/kagentd/src/calendar/tools.rs     what the tools share, and calendar_events
+crates/kagentd/src/calendar/plan.rs      what calendar_change is asked: checks, Google's JSON, the sentences (pure)
+crates/kagentd/src/calendar/change.rs    calendar_change, the journal records, the undo handler
+crates/kagentd/src/calendar/state.rs     <data>/calendar-state.json
 crates/kagentd/src/calendar/http.rs      the routes
 crates/kagentd/src/calendar/settings.rs  the section, its checks
-crates/kagentd/src/calendar/fake.rs      a fake Google for the tests (as bots/fakes.rs)
+crates/kagentd/src/calendar/fake.rs, fake_api.rs, fake_maps.rs   a fake Google for the tests (as bots/fakes.rs)
 skills/calendar-event/SKILL.md           the interview
 web/src/settings/sections/Calendar.tsx, web/src/settings/calendar/*
 ```
