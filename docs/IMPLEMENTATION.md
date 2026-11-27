@@ -2923,6 +2923,48 @@ daemon behind a proxy that mocks the model and session routes; dark and light at
 - Open question for the owner: should the effort tag be hidden when the stored level is not one
   the answering model offers? Today it shows, dim, as the spec words it.
 
+### Session 2026-11-28 (S42: the left sidebar and projects, v0.0.2 item 5)
+
+`specs/sidebar.md` built in four commits on `v0.0.2`. 798 workspace tests (779 before; also 798
+with `KAGENT_IT=1`), `tsc` clean, `npm run lint` with its four old warnings, `scripts/test-live.py`
+37/37, `scripts/test-sidebar-web.py` 162/162, `test-picker-web.py` 103/103,
+`test-calendar-web.py` 60/60. Decisions the spec did not settle:
+
+- The agent methods are in `crates/kagent-core/src/agent/project.rs` (public module, next to
+  `picker.rs`), not `src/project.rs`, because they need the agent's private state. The unit
+  tests of `agents_md`/`block` are there; the credential-link test, the setters and the loop
+  tests are `tests/project.rs` (its own process, so `KAGENT_HOME` cannot race another test).
+  `hooks::protect` became `pub` for `dirs()` and `is_credential`.
+- `check` writes `<config>` and `<data>` literally in the refusal (the spec's placeholders).
+  `POST /api/sessions` strips `project` before `model_api::create` (which refuses unknown keys).
+  `list_filters` holds the "parent or project" rule so it has a unit test.
+- `subagents::listed` takes the folder; the agent counts still come from the unfiltered list.
+- Phase 5 is not in the tree: `coders.md` carries the two rules (child inherits the folder;
+  default `project` of `coder_run`) for S35, as the spec says.
+- The settings section is number 12 of `ui-settings.md` (11 was taken by S41).
+- Web: `store.ts` exports `patch`; the daemon's events and `init` moved to `storeEvents.ts`
+  (App imports `init` from there) to keep `store.ts` under 400 lines; the sidebar's own state
+  (`sidebarCollapsed`, `sidebarDrawer`, `sidebarView`, `sidebarClosed`, `projects`) is in the
+  store. `/project` is done in `store.ts` (`attachByCommand`) and not in the sidebar store, to
+  avoid a circular import. With the slash list open the first Enter takes `/project` into the
+  field and the second sends it (as `/compact`).
+- Only the section of a folder opens and closes; "Pinned", "This machine" and the dates are
+  labels. The row class is `sb-item` (`sb-row` belongs to the subagents settings).
+- A menu opens with its cursor on the checked item; the focus returning to a button scrolls the
+  list, so a scroll in the first 250 ms does not close a menu. A press on the button that
+  opened a menu is that button's own click.
+- The amendment: Stop all keeps showing only while a turn runs; the permission row of the
+  sidebar is a button with `Menu` (the widget keeps the select); the theme button goes light,
+  dark, auto; `theme.ts` gained `readApplied`/`subscribeApplied`/`requestPref`, shared with the
+  Appearance page. The header's notice line stays until S43 (toasts, `notices.md`). The screen
+  watch chip is not built (S48 does not exist yet). In KAgent's own window the window controls
+  sit between the voice chip and the sidebar in the tab order.
+- `diag.ts` reports `sidebar` and `project`. `scripts/picker_web_lib.py` gained the session,
+  project and pin routes, `Env` and `report`; the sidebar script is 442 lines (over the 400 of
+  the rule, one script by scenario list).
+- Not verified: a real daemon with a real folder and `AGENTS.md` through the model (scenario
+  item 10, the owner's); the title bar in the real frameless window (only `?app` in Chrome).
+
 ## F. Progress
 
 - [x] S0 compile drafts
@@ -2980,7 +3022,7 @@ v0.0.2
 Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
 - [x] S41 model picker in the composer (`specs/picker.md`; items 1 to 7 checked, item 8 is the owner's, live; section E)
-- [ ] S42 left sidebar and projects
+- [x] S42 left sidebar and projects (`specs/sidebar.md`, with the amendment: the header is a title bar; items 1 to 9 checked, item 10 is the owner's, live; section E)
 - [ ] S43 work windows: agents, plan, progress
 
 ## G. Owner actions (things KAgent prints, you run)
