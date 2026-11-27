@@ -2715,6 +2715,19 @@ Decisions (the owner may veto):
   `turn_config.rs` out of `main.rs`, `skillsApi.ts` out of `api.ts`, `index.css` into
   `styles/*.css` and `settings.css` into two parts, imported in order (the built
   CSS is byte-identical).
+- S40 headless pass (items 6 to 9), done here because the stage agent was stopped by
+  the usage limit before it: the current web source on a Vite dev server with every
+  `/api` route answered in the page (the agent's fixture), dark and light at
+  1200x820 and the dialog at 700x500. All pass: placeholders, an override and its
+  removal, Smart off with a refused empty field (focus on it), a dragged model and
+  provider kept after a reload, one `PUT` on leaving the name field, and the
+  dropdown (theme colours, mouse, keyboard, Escape back to the trigger, click
+  outside). The theme follows the app's own toggle, not the system scheme. A row's
+  `chat` and `voice` badges are its jobs in the settings, not its roles.
+- Live after the release build: the role correction ran once (gemini 38 rows, ollama
+  1), the old `at` reminder loads as `once`, the window's browser runs in its own
+  scope with none left in `kagentd.service`, and the daemon used 0.12 CPU-s in 20 s
+  with the window open (the spin burned about 1.3 CPU-s per second).
 
 ## F. Progress
 
@@ -2767,7 +2780,7 @@ Phase 5 (planned 2026-11-27, not started; the order is the dependency order)
 - [ ] S39 automation: scheduled coder runs
 
 Phase 6 (planned 2026-11-27, not started; S40 first)
-- [ ] S40 models and providers
+- [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
 - [ ] S41 model picker in the composer
 - [ ] S42 left sidebar and projects
 - [ ] S43 work windows: agents, plan, progress

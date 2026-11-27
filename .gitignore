@@ -3,3 +3,4 @@
 /web/dist
 /app/src-tauri/target
 __pycache__/
+.idea/
