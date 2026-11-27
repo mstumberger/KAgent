@@ -190,11 +190,23 @@ pub struct ToolServices {
     /// The daemon's redactor of every tool output (token-guard.md): it takes the API token
     /// out; `None`: outputs pass as they are.
     pub redact: std::sync::RwLock<Option<Arc<dyn Fn(&str) -> String + Send + Sync>>>,
+    /// Undo of changes that only the daemon can reverse (a calendar event): `undo_change`
+    /// asks the handler of the journal record's `action`.
+    pub undo: std::sync::RwLock<Vec<Arc<dyn UndoHandler>>>,
+}
+
+/// Reverses a journaled change of one kind (`{"kind":"user","action":"<action>",...}`).
+#[async_trait]
+pub trait UndoHandler: Send + Sync {
+    /// The `action` this handler reverses.
+    fn action(&self) -> &'static str;
+    /// Reverse it: whether it worked, and what to tell the owner.
+    async fn undo(&self, undo: &Value) -> (bool, String);
 }
 
 impl ToolServices {
     pub fn new(journal: Arc<crate::journal::ChangeJournal>, priv_client: Arc<crate::tools::privop::PrivClient>) -> Self {
-        Self { journal, priv_client, desktop: Default::default(), hooks: Default::default(), redact: Default::default() }
+        Self { journal, priv_client, desktop: Default::default(), hooks: Default::default(), redact: Default::default(), undo: Default::default() }
     }
 }
 
@@ -258,6 +270,11 @@ pub trait Tool: Send + Sync {
         let summary = format!("{} {}", c.name, compact_json(input, 120));
         CallAssessment::from_contract(c, summary, c.name.clone())
     }
+
+    /// Look up what the card or the spoken question has to say, before `assess` (which is
+    /// not async and cannot read from the network). Called before every `assess` of a call
+    /// that runs, and by the voice path before it asks. Default: nothing to look up.
+    async fn prime(&self, _input: &Value) {}
 
     /// Dry-run text shown on the approval card before the user decides (apt simulation,
     /// old -> new value, file diff). Only called when the call needs approval.

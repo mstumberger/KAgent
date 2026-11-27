@@ -380,6 +380,7 @@ async fn run() -> anyhow::Result<()> {
     let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
     let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone()).await;
     let _ = calendar_cell.set(calendar.clone());
+    calendar::change::register_undo(&calendar, &services);
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,

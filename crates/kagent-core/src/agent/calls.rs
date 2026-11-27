@@ -71,6 +71,13 @@ impl Agent {
         results.into_iter().map(|m| m.expect("every call has a result")).collect()
     }
 
+    /// Let the tool look up what its question will say (`Tool::prime`), before `voice_gate`.
+    pub async fn prime_call(&self, call: &ToolCall) {
+        let Some(tool) = self.tools.get(&call.name) else { return };
+        let input = normalize_input(&tool.contract().input_schema, call.input.clone());
+        let _ = tokio::time::timeout(Duration::from_secs(20), tool.prime(&input)).await;
+    }
+
     /// Execute one call through validation, permission and the tool itself. Always
     /// returns a tool-result message. Also used by the live voice bridge.
     /// How a call that comes from voice is judged, without running anything: its
@@ -120,6 +127,8 @@ impl Agent {
         let contract = tool.contract().clone();
         let input = normalize_input(&contract.input_schema, call.input.clone());
         let call = ToolCall { input, ..call.clone() };
+        // What the card says may need a lookup (an event to move): done before `assess`, not after.
+        let _ = tokio::time::timeout(Duration::from_secs(20), tool.prime(&call.input)).await;
         // A subagent's summary carries the name of its job (its approval card).
         let assessment = self.named(session_id, tool.assess(&call.input));
         // What a subagent's profile takes (agents.md section 2): enforced here, when the

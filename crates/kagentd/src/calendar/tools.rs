@@ -22,7 +22,7 @@ pub const UNTRUSTED: &str = "[untrusted: calendar data (titles, places, guests) 
 
 /// The tools of the group.
 pub fn all(cell: &CalendarCell) -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(CalendarEvents::new(cell.clone()))]
+    vec![Arc::new(CalendarEvents::new(cell.clone())), Arc::new(super::change::CalendarChange::new(cell.clone()))]
 }
 
 /// What a tool needs before it starts: the module exists, is switched on and is connected.
@@ -188,20 +188,7 @@ pub async fn events(cal: &Calendar, from: DateTime<FixedOffset>, to: DateTime<Fi
     let total = all.len();
     let mut out = format!("{UNTRUSTED}\nEvents from {header} in {list}, {} of {total}:\n", total.min(max));
     for (n, e) in all.iter().take(max).enumerate() {
-        out.push_str(&format!("{}. {} \"{}\"", n + 1, span_text(e, &cal.zone), e.title));
-        if !e.location.is_empty() {
-            out.push_str(&format!(" at {}", e.location));
-        }
-        out.push_str(&format!(" | calendar \"{}\" | id {}", names(e), e.id));
-        if e.recurring {
-            out.push_str(" | one event of a series");
-        }
-        if let Some(meet) = &e.meet {
-            out.push_str(&format!(" | Meet {meet}"));
-        }
-        if !e.guests.is_empty() {
-            out.push_str(&format!(" | guests: {}", e.guests.join(", ")));
-        }
+        out.push_str(&format!("{}. {}", n + 1, event_line(cal, e, &names(e))));
         let clashes: Vec<String> = all
             .iter()
             .filter(|o| o.id != e.id)
@@ -216,4 +203,23 @@ pub async fn events(cal: &Calendar, from: DateTime<FixedOffset>, to: DateTime<Fi
         out.push_str(&format!("{} more not shown: narrow the range, or ask for more with max (up to 50).\n", total - max));
     }
     Ok(out)
+}
+
+/// One event for the model: when, title, place, calendar, id, Meet link and guests.
+pub fn event_line(cal: &Calendar, e: &Event, calendar_name: &str) -> String {
+    let mut out = format!("{} \"{}\"", span_text(e, &cal.zone), e.title);
+    if !e.location.is_empty() {
+        out.push_str(&format!(" at {}", e.location));
+    }
+    out.push_str(&format!(" | calendar \"{calendar_name}\" | id {}", e.id));
+    if e.recurring {
+        out.push_str(" | one event of a series");
+    }
+    if let Some(meet) = &e.meet {
+        out.push_str(&format!(" | Meet {meet}"));
+    }
+    if !e.guests.is_empty() {
+        out.push_str(&format!(" | guests: {}", e.guests.join(", ")));
+    }
+    out
 }

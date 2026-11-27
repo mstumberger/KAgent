@@ -7,9 +7,11 @@
 // Until the routes and the tools use all of it (the last commits of S45), parts are unused.
 #![allow(dead_code)]
 
+pub mod change;
 pub mod google;
 pub mod model;
 pub mod oauth;
+pub mod plan;
 pub mod settings;
 pub mod tools;
 
@@ -166,6 +168,8 @@ pub struct Calendar {
     pub(crate) clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
     pub(crate) zone: Zone,
     pub(crate) http: reqwest::Client,
+    /// What was read before a question (`change.rs`).
+    pub(crate) memo: Mutex<change::Memo>,
     inner: Mutex<Inner>,
     /// One refresh at a time.
     refreshing: tokio::sync::Mutex<()>,
@@ -195,6 +199,7 @@ impl Calendar {
             clock: parts.clock,
             zone: parts.zone,
             http,
+            memo: Default::default(),
             inner: Mutex::new(Inner { secrets, access: None, pending: Pending::default(), sticky: None, told_reconnect: false }),
             refreshing: tokio::sync::Mutex::new(()),
         })
