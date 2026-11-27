@@ -94,7 +94,7 @@ fn the_turns_a_parent_ran_on_its_own_are_counted_from_the_end() {
     assert_eq!(auto_turns(&with_owner), 0);
     assert_eq!(auto_turns(&[]), 0);
     // A task's result is delivered by the runner: its session is not woken.
-    let mut task = SessionMeta { id: "t".into(), title: String::new(), created_at: Utc::now(), updated_at: Utc::now(), message_count: 0, origin: SessionOrigin::Task, parent: None, summary: None, summary_upto: None, todo: Vec::new(), planning: false, approved_plan: None };
+    let mut task = SessionMeta { id: "t".into(), title: String::new(), created_at: Utc::now(), updated_at: Utc::now(), message_count: 0, origin: SessionOrigin::Task, parent: None, summary: None, summary_upto: None, todo: Vec::new(), planning: false, approved_plan: None, model: None, reasoning_level: None };
     assert!(!interactive(&task));
     task.origin = SessionOrigin::Chat;
     assert!(interactive(&task));

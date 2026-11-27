@@ -113,3 +113,16 @@ fn an_old_max_output_tokens_stays_in_the_file_and_is_read_by_nothing() {
     s.save(&path).unwrap();
     assert_eq!(Settings::load(&path).unwrap().options, ModelOptionsSerde { reasoning_level: None, max_output_tokens: Some(4321), temperature: Some(0.5) }, "kept through a patch and a save");
 }
+
+#[test]
+fn an_old_reasoning_level_stays_in_the_file_and_is_read_by_nothing() {
+    // picker.md section 2: a conversation chooses its effort from S41 on.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    std::fs::write(&path, r#"{"chatModel": "a::x", "options": {"reasoningLevel": "high"}}"#).unwrap();
+    let mut s = Settings::load(&path).unwrap();
+    assert_eq!(s.options.reasoning_level.as_deref(), Some("high"));
+    s.patch(serde_json::json!({"maxIterations": 12})).unwrap();
+    s.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).unwrap().options, ModelOptionsSerde { reasoning_level: Some("high".into()), max_output_tokens: None, temperature: None }, "kept through a patch and a save");
+}

@@ -175,6 +175,10 @@ pub enum AgentEvent {
     /// The session entered (`active`) or left plan mode (plan-todo.md section 2).
     #[serde(rename_all = "camelCase")]
     PlanUpdated { session_id: String, active: bool },
+    /// The session's meta changed (picker.md section 3): the whole meta, so a window applies it
+    /// without reading anything.
+    #[serde(rename_all = "camelCase")]
+    SessionMetaChanged { session_id: String, meta: crate::session::SessionMeta },
     #[serde(rename_all = "camelCase")]
     SettingsChanged { settings: serde_json::Value },
     /// A change was journaled or its status changed (undo).

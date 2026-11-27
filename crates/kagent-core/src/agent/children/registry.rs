@@ -67,13 +67,14 @@ struct Inner {
 pub(crate) struct Children {
     inner: Mutex<Inner>,
     model_window: Mutex<Option<ModelWindow>>,
+    usable_models: Mutex<Option<UsableModels>>,
 }
 
 impl Default for Children {
     /// Four slots, as `subagents.maxConcurrent` defaults (config.md section 11): the
     /// daemon sets what the owner chose.
     fn default() -> Self {
-        Self { inner: Mutex::new(Inner { max: DEFAULT_MAX_CHILDREN, ..Default::default() }), model_window: Mutex::new(None) }
+        Self { inner: Mutex::new(Inner { max: DEFAULT_MAX_CHILDREN, ..Default::default() }), model_window: Mutex::new(None), usable_models: Mutex::new(None) }
     }
 }
 
@@ -98,6 +99,15 @@ impl Children {
 
     pub(super) fn model_window(&self) -> Option<ModelWindow> {
         self.model_window.lock().unwrap().clone()
+    }
+
+    /// Where a conversation's choice of model is asked of (`None`: taken as it is).
+    pub(crate) fn set_usable_models(&self, source: UsableModels) {
+        *self.usable_models.lock().unwrap() = Some(source);
+    }
+
+    pub(crate) fn usable_models(&self) -> Option<UsableModels> {
+        self.usable_models.lock().unwrap().clone()
     }
 
     pub(super) fn restrict(&self, session_id: &str, restriction: Restriction) {

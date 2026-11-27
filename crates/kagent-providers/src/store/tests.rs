@@ -139,6 +139,33 @@ fn a_model_is_usable_only_when_it_has_the_chat_role_and_is_on_in_a_provider_that
 }
 
 #[test]
+fn unusable_names_the_reason_and_agrees_with_usable() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = small(&dir);
+    s.add_from_template("t", None, None, None, Default::default(), None).unwrap();
+    let r = "t::a";
+    let agrees = |s: &ProviderStore| {
+        for m in [r, "t::zzz", "nope::a", "bad"] {
+            assert_eq!(s.usable(m).is_some(), s.unusable(m).is_none(), "{m}");
+        }
+    };
+    assert_eq!(s.unusable(r), None);
+    agrees(&s);
+    s.update("t", |p| p.enabled = false).unwrap();
+    assert_eq!(s.unusable(r), Some("provider switched off"));
+    agrees(&s);
+    s.update("t", |p| p.enabled = true).unwrap();
+    s.update("t", |p| p.models[0].enabled = false).unwrap();
+    assert_eq!(s.unusable(r), Some("model switched off"));
+    agrees(&s);
+    s.update("t", |p| p.models[0].enabled = true).unwrap();
+    s.patch("t", &patch(r#"{"models":[{"id":"a","roles":["live"]}]}"#), &[]).unwrap();
+    assert_eq!(s.unusable(r), Some("not a chat model"), "a live model");
+    agrees(&s);
+    assert_eq!((s.unusable("t::zzz"), s.unusable("nope::a"), s.unusable("bad")), (Some("unknown model"), Some("unknown model"), Some("unknown model")));
+}
+
+#[test]
 fn inherited_is_what_the_rules_give_and_effective_what_is_sent() {
     let dir = tempfile::tempdir().unwrap();
     let s = small(&dir);

@@ -63,7 +63,8 @@ impl TurnConfig {
             system_prompt,
             max_iterations: s.max_iterations,
             options: kagent_core::model::ModelOptions {
-                reasoning_level: s.options.reasoning_level.clone(),
+                // The effort is the conversation's (picker.md section 4.2); `options.reasoningLevel` is no longer read.
+                reasoning_level: None,
                 max_output_tokens: resolved.as_ref().map(|r| r.config.max_output_tokens),
                 temperature: s.options.temperature,
             },

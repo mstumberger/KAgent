@@ -24,6 +24,7 @@ mod config;
 pub mod hooks;
 pub mod title;
 pub(crate) mod state;
+mod picker;
 mod spawn;
 mod turn;
 
@@ -180,6 +181,8 @@ impl Agent {
         let mut config = (self.config)(turn);
         // A subagent's turn: the model, the iteration limit and the block of its job.
         self.apply_job(session_id, &mut config);
+        // A conversation's own model and effort (picker.md section 4.2).
+        self.apply_choice(session_id, state, &mut config).await;
         if let Some(block) = &input.system_suffix {
             config.system_prompt.push_str(block);
         }

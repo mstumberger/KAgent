@@ -60,6 +60,14 @@ pub struct SessionMeta {
     /// the prompt of every later request of the session. `None` until one is approved.
     #[serde(default)]
     pub approved_plan: Option<crate::plan::ApprovedPlan>,
+    /// The model this conversation chose (picker.md section 2): a ref `<providerId>::<modelId>`,
+    /// or `None` for the default chat model.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The effort of that choice, one of the levels the answering model offers; `None`: the
+    /// provider's own default.
+    #[serde(default)]
+    pub reasoning_level: Option<String>,
 }
 
 #[derive(Clone)]
@@ -101,6 +109,8 @@ impl SessionStore {
             todo: Vec::new(),
             planning: false,
             approved_plan: None,
+            model: None,
+            reasoning_level: None,
         };
         self.save_meta(&meta).await?;
         tokio::fs::write(self.log_path(&meta.id), b"").await?;
@@ -226,6 +236,20 @@ mod tests {
         assert_eq!(store.meta(&meta.id).await.unwrap(), meta);
         let raw: serde_json::Value = serde_json::from_slice(&tokio::fs::read(dir.path().join(format!("{}.meta.json", meta.id))).await.unwrap()).unwrap();
         assert_eq!((raw["planning"].clone(), raw["approvedPlan"].clone()), (serde_json::json!(true), serde_json::json!({ "path": "/data/plans/t-1.md", "text": "1. step" })));
+        // The picker fields (picker.md section 2) round trip, under their JSON names.
+        assert!(meta.model.is_none() && meta.reasoning_level.is_none(), "a new session has no choice");
+        meta.model = Some("anthropic::claude-opus-4-6".into());
+        meta.reasoning_level = Some("high".into());
+        store.save_meta(&meta).await.unwrap();
+        assert_eq!(store.meta(&meta.id).await.unwrap(), meta);
+        let raw: serde_json::Value = serde_json::from_slice(&tokio::fs::read(dir.path().join(format!("{}.meta.json", meta.id))).await.unwrap()).unwrap();
+        assert_eq!((raw["model"].clone(), raw["reasoningLevel"].clone()), (serde_json::json!("anthropic::claude-opus-4-6"), serde_json::json!("high")));
+        // A meta file from before S41 has neither key and loads with `None`.
+        let mut old = raw.clone();
+        old.as_object_mut().unwrap().remove("model");
+        old.as_object_mut().unwrap().remove("reasoningLevel");
+        let old: SessionMeta = serde_json::from_value(old).unwrap();
+        assert!(old.model.is_none() && old.reasoning_level.is_none());
         store.append(&meta.id, &[Message::user("hi"), Message::assistant("yo", vec![])]).await.unwrap();
         let msgs = store.load_messages(&meta.id).await.unwrap();
         assert_eq!(msgs.len(), 2);

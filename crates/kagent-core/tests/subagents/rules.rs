@@ -35,7 +35,7 @@ async fn a_profiles_model_and_iteration_limit_are_applied_and_its_window_is_read
     let r = rig(&[("parent", vec![run_as("job-m", "small"), say("started"), say("after")]), ("job-m", vec![call("probe_a", json!({})), call("probe_a", json!({})), call("probe_a", json!({})), call("probe_a", json!({})), say("never")])], PermissionMode::Ask).await;
     r.access.set_profiles(vec![Profile { name: "small".into(), model: "small::model".into(), max_iterations: 3, prompt: "  Be brief.  ".into(), ..Profile::general() }]);
     // What the daemon reads from its providers: the window of that model.
-    r.agent.set_model_window(Arc::new(|model_ref: &str| (model_ref == "small::model").then_some(ModelInfo { context_tokens: 256, max_output_tokens: Some(256) })));
+    r.agent.set_model_window(Arc::new(|model_ref: &str| (model_ref == "small::model").then_some(ModelInfo { context_tokens: 256, max_output_tokens: Some(256), reasoning_levels: vec![] })));
     turn(&r, "a small model").await;
     wait_turns(&r, &r.session, 2).await;
 
@@ -139,4 +139,24 @@ fn running(command: &str) -> usize {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().parse().unwrap_or(0))
         .unwrap_or(0)
+}
+
+#[tokio::test]
+async fn a_child_of_a_session_with_a_choice_keeps_the_model_of_its_job() {
+    // picker.md section 4.2: the choice of the parent is never the child's.
+    let r = rig(&[("parent", vec![run_as("job-m", "small"), say("started"), run_as("job-d", "plain"), say("started"), say("after")]), ("job-m", vec![say("m done")]), ("job-d", vec![say("d done")])], PermissionMode::Ask).await;
+    r.access.set_profiles(vec![Profile { name: "small".into(), model: "small::model".into(), ..Profile::general() }, Profile { name: "plain".into(), model: String::new(), ..Profile::general() }]);
+    r.agent.set_model_choice(&r.session, Some("picked::big".into()), Some("high".into())).await.unwrap();
+    turn(&r, "two jobs").await;
+    wait_turns(&r, &r.session, 2).await;
+    turn(&r, "again").await;
+    wait_turns(&r, &r.session, 4).await;
+
+    assert!(r.model.of("parent").iter().all(|s| s.model_ref == "picked::big"), "the parent answers with its choice");
+    let job = r.model.of("job-m");
+    assert!(!job.is_empty() && job.iter().all(|s| s.model_ref == "small::model"), "the model of the job");
+    let plain = r.model.of("job-d");
+    assert!(!plain.is_empty() && plain.iter().all(|s| s.model_ref != "picked::big"), "a job without a model gets the default, not the parent's choice: {:?}", plain.iter().map(|s| &s.model_ref).collect::<Vec<_>>());
+    let kid = children(&r).remove(0);
+    assert_eq!(r.store.meta(&kid.id).await.unwrap().model, None, "a child session has no choice");
 }

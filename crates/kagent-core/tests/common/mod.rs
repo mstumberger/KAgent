@@ -30,6 +30,8 @@ pub struct ScriptedModel {
     pub systems: Arc<Mutex<Vec<String>>>,
     /// The model and the output limit of every request, in order.
     pub model_refs: Arc<Mutex<Vec<(String, Option<u64>)>>>,
+    /// The reasoning level of every request, in order.
+    pub levels: Arc<Mutex<Vec<Option<String>>>>,
 }
 
 impl ScriptedModel {
@@ -44,6 +46,7 @@ impl ScriptedModel {
             requests: Arc::new(Mutex::new(Vec::new())),
             systems: Arc::new(Mutex::new(Vec::new())),
             model_refs: Arc::new(Mutex::new(Vec::new())),
+            levels: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -59,6 +62,7 @@ impl ModelClient for ScriptedModel {
         self.requests.lock().unwrap().push(request.messages.clone());
         self.systems.lock().unwrap().push(request.system.clone());
         self.model_refs.lock().unwrap().push((request.model_ref.clone(), request.options.max_output_tokens));
+        self.levels.lock().unwrap().push(request.options.reasoning_level.clone());
         let reply = self.queue.lock().unwrap().remove(0).map_err(anyhow::Error::msg)?;
         let _ = deltas.send(ModelDelta::Text(request.system.clone()));
         Ok(reply)

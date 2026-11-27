@@ -37,8 +37,13 @@ impl Subagents {
         access.set_profile_source(Arc::new(move || folder.profiles()));
         // The window and the output limit of a profile's model: a child's prompt, history
         // and tools are budgeted with them (an unknown ref keeps the chat model's).
+        let known = providers.clone();
         agent.set_model_window(Arc::new(move |model_ref: &str| {
-            providers.resolve(model_ref).ok().map(|r| ModelInfo { context_tokens: r.config.context_window as usize, max_output_tokens: Some(r.config.max_output_tokens) })
+            providers.resolve(model_ref).ok().map(|r| ModelInfo { context_tokens: r.config.context_window as usize, max_output_tokens: Some(r.config.max_output_tokens), reasoning_levels: r.config.reasoning_levels })
+        }));
+        // What a conversation's choice is asked of (picker.md section 4.3).
+        agent.set_usable_models(Arc::new(move |model_ref: &str| {
+            known.usable(model_ref).map(|r| ModelInfo { context_tokens: r.config.context_window as usize, max_output_tokens: Some(r.config.max_output_tokens), reasoning_levels: r.config.reasoning_levels }).ok_or_else(|| known.unusable(model_ref).unwrap_or("unknown model"))
         }));
         // A background task that ends tells the session that started it, as a subagent's
         // parent is told (agents.md section 4).
