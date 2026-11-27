@@ -2729,6 +2729,34 @@ Decisions (the owner may veto):
   scope with none left in `kagentd.service`, and the daemon used 0.12 CPU-s in 20 s
   with the window open (the spin burned about 1.3 CPU-s per second).
 
+### Session 2026-11-27, evening (v0.0.2 item 1: decisions and defects)
+
+One background agent did D1 to D8 and F1 to F9 (stopped by the usage limit, then by the
+owner); the coordinator verified D9 and F10, which were written but unchecked. 674
+workspace tests (658 before), the gated Ollama round trip passes, `tsc` and lint clean.
+
+- Decisions built as the milestone lists them (`milestones/v0.0.2.md` section 3): an
+  approved plan expires when its todos are done or after 24 h; `back` in the owner's
+  tab asks under strict trust; the task form has a timeout and `settings.tasks` a page;
+  five wrong pairing codes make a new code and a 10 minute lock; plan mode starts
+  read-only subagents only; the `Stop` hook is not awaited; a CSP on `web/index.html`.
+- Defects fixed (section 4 and 7): an empty model answer is retried once and then ends
+  with a notice; `title.rs` no longer overwrites the meta; `GROUP_HINTS` knows `agent`;
+  the machine snapshot refreshes (at most every 10 minutes); the audit `fsync` is off
+  the async workers; `search_files` reports an error as one; the prompt names KAgent
+  and the Brain's model and forbids "changed" without a tool; a later owner message
+  replaces an alert's starting task; approval records carry `via`; the theme has `auto`.
+- D9 checked in headless Chrome on a production build: the app raises no violation; a
+  remote `fetch` and a remote frame are blocked (`connect-src 'self'`, `frame-src
+  'none'`). F10: `auto` follows the system in both directions without a reload; a
+  disabled primary button has no colour and no glow in either theme.
+- Not done: the screenshots the brief asked for (the mock of the S40 pass was lost
+  with a reboot; the checks above were made by script). `default voice brain` is
+  decided (`live`) and specified in `specs/voice-control.md`, built with S44.
+- The same evening, by the coordinator: `voice.md` amendment (from voice every
+  `always_ask` call is confirmed in every mode; a repeated changing call within 20 s
+  is refused), after the live model typed into the owner's terminal 25 times.
+
 ## F. Progress
 
 - [x] S0 compile drafts

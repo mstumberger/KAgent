@@ -4,3 +4,4 @@
 /app/src-tauri/target
 __pycache__/
 .idea/
+plans/
