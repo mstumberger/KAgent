@@ -198,6 +198,7 @@ async fn a_restart_reads_the_connection_back() {
         redirect: "http://127.0.0.1:7878/api/calendar/oauth/callback".into(),
         events: tokio::sync::broadcast::channel(8).0,
         clock: std::sync::Arc::new(chrono::Utc::now),
+        zone: super::zone(1),
     })
     .await;
     assert_eq!(again.state(), ConnState::Connected);

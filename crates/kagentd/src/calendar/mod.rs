@@ -7,11 +7,16 @@
 // Until the routes and the tools use all of it (the last commits of S45), parts are unused.
 #![allow(dead_code)]
 
+pub mod google;
+pub mod model;
 pub mod oauth;
 pub mod settings;
+pub mod tools;
 
 #[cfg(test)]
 mod fake;
+#[cfg(test)]
+mod fake_api;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +31,7 @@ use tokio::sync::broadcast;
 
 use kagent_core::protocol::AgentEvent;
 
+use self::model::Zone;
 use self::oauth::{Pending, TokenError};
 use self::settings::CalendarSection;
 use crate::secrets::TokenStore;
@@ -134,6 +140,8 @@ pub struct Parts {
     pub redirect: String,
     pub events: broadcast::Sender<AgentEvent>,
     pub clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
+    /// The machine's offset at an instant (the system's time zone; a test passes a fixed one).
+    pub zone: Zone,
 }
 
 struct Inner {
@@ -156,6 +164,7 @@ pub struct Calendar {
     redirect: String,
     events: broadcast::Sender<AgentEvent>,
     pub(crate) clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
+    pub(crate) zone: Zone,
     pub(crate) http: reqwest::Client,
     inner: Mutex<Inner>,
     /// One refresh at a time.
@@ -184,6 +193,7 @@ impl Calendar {
             redirect: parts.redirect,
             events: parts.events,
             clock: parts.clock,
+            zone: parts.zone,
             http,
             inner: Mutex::new(Inner { secrets, access: None, pending: Pending::default(), sticky: None, told_reconnect: false }),
             refreshing: tokio::sync::Mutex::new(()),
@@ -200,6 +210,7 @@ impl Calendar {
             redirect: REDIRECT.into(),
             events,
             clock: Arc::new(Utc::now),
+            zone: Arc::new(|at| *at.with_timezone(&chrono::Local).offset()),
         })
         .await
     }

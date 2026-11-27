@@ -53,6 +53,12 @@ pub struct Fake {
     pub issued: u32,
     pub revoked: Vec<String>,
     pub seen: Vec<Seen>,
+    /// The calendars of the account (`fake_api::calendars`), and the events of all of them.
+    pub calendars: Vec<Value>,
+    pub events: Vec<(String, Value)>,
+    /// Events per page of a list; 0 means one page.
+    pub page_size: usize,
+    pub next_event: u32,
 }
 
 pub type Shared = Arc<Mutex<Fake>>;
@@ -64,10 +70,11 @@ pub struct FakeGoogle {
 
 impl FakeGoogle {
     pub async fn start() -> Self {
-        let state: Shared = Arc::new(Mutex::new(Fake { refresh_ok: true, ..Default::default() }));
+        let state: Shared = Arc::new(Mutex::new(Fake { refresh_ok: true, calendars: super::fake_api::calendars(), ..Default::default() }));
         let app = Router::new()
             .route("/token", post(token))
             .route("/revoke", post(revoke))
+            .merge(super::fake_api::routes())
             .layer(middleware::from_fn_with_state(state.clone(), log))
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -98,6 +105,25 @@ impl FakeGoogle {
 
     pub fn revoke_grant(&self) {
         self.state.lock().unwrap().refresh_ok = false;
+    }
+
+    /// An event the account already has; the id is made when the JSON has none.
+    pub fn add_event(&self, calendar: &str, mut event: Value) -> String {
+        let mut f = self.state.lock().unwrap();
+        f.next_event += 1;
+        let id = event.get("id").and_then(Value::as_str).map(String::from).unwrap_or_else(|| format!("evt{}", f.next_event));
+        event["id"] = json!(id);
+        event["status"] = json!("confirmed");
+        event["htmlLink"] = json!(format!("https://calendar.google.com/calendar/event?eid={id}"));
+        let calendar = if calendar == "primary" { super::fake_api::OWNER.to_string() } else { calendar.to_string() };
+        f.events.push((calendar, event));
+        id
+    }
+
+    /// The events of a calendar as Google holds them now, deleted ones left out.
+    pub fn events_of(&self, calendar: &str) -> Vec<Value> {
+        let calendar = if calendar == "primary" { super::fake_api::OWNER } else { calendar };
+        self.state.lock().unwrap().events.iter().filter(|(c, e)| c == calendar && e["status"] != "cancelled").map(|(_, e)| e.clone()).collect()
     }
 
     pub fn seen(&self) -> Vec<Seen> {

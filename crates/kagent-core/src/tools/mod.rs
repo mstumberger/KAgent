@@ -69,6 +69,8 @@ pub fn group_of(name: &str) -> &'static str {
         "memory_save" | "memory_search" | "memory_get" | "memory_forget" | "session_search" => "memory",
         // The web tools (tools.md section 20), registered by the daemon like the memory tools.
         "web_fetch" | "web_search" => "web",
+        // Google Calendar (tools.md section 23), registered by the daemon like the web tools.
+        "calendar_events" | "calendar_change" | "place_search" | "calendar_report" => "calendar",
         "package" | "measure" | "undo_change" | "list_changes" => "change",
         "audio_control" | "bluetooth_control" | "wifi" | "display" | "windows" | "notify" | "open" => "desktop",
         // `widget_show` (tools.md section 22) is registered by the daemon like `ui` and `sessions`.
@@ -173,6 +175,17 @@ mod group_tests {
             assert_eq!(super::group_of(name), "web", "{name} is a tool of the web group");
         }
         assert!(crate::context::GROUP_PRIORITY.contains(&"web"), "and the group is among those kept when the window is small");
+    }
+
+    /// The calendar tools (tools.md section 23) are registered the same way, in the daemon.
+    #[test]
+    fn the_calendar_tools_belong_to_the_calendar_group() {
+        for name in ["calendar_events", "calendar_change", "place_search", "calendar_report"] {
+            assert_eq!(super::group_of(name), "calendar", "{name} is a tool of the calendar group");
+        }
+        assert!(crate::context::GROUP_PRIORITY.contains(&"calendar"), "and the group is among those kept when the window is small");
+        assert!(crate::context::hinted_groups("what is on my calendar tomorrow?").contains(&"calendar"));
+        assert!(crate::context::hinted_groups("dodaj dogodek v petek").contains(&"calendar"), "also in Slovenian");
     }
 
     /// `widget_show` (tools.md section 22) is registered the same way.
