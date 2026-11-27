@@ -520,3 +520,47 @@ Spec: `voice-control.md` section 7. Items 1 to 7 are `[auto]`; the last two are 
 9. The owner, by voice: "switch your voice to Puck" (said after its sentence, then the new
    voice), "a bit quieter", "set the Brain to Nemotron", "change the permission mode to
    read-only" (refused, said why); every change is asked out loud first.
+
+## S45 Google Calendar and the morning report
+Spec: `calendar.md` section 9. Items 1 to 8 are `[auto]` (the fake Google, no network); the last is the owner's.
+1. **[auto]** The sign-in: the URL holds the two scopes, the S256 challenge and the
+   loopback redirect and no secret; a callback with an unknown, used or older-than-10-minutes
+   `state` is refused before Google is asked; the exchange stores the token (a 0600 file under
+   `KAGENT_HOME`, one JSON text, no access token); a refresh a minute before the end and on a
+   401; `invalid_grant` gives `reconnect`, one notice, nothing deleted; Disconnect revokes at
+   Google and keeps the client. The first connection switches the module on and adds the group
+   to `toolGroups` and `voice.toolGroups`; a second one leaves the owner's choices alone.
+2. **[auto]** Only the switched-on calendars exist: a calendar that is off is not asked (no
+   request reaches the fake for it), refused by name or id, and the client itself refuses a
+   calendar it was not given; paging reads every page; a timed event is shown in the machine's
+   time zone with the weekday, an all-day event as such, overlaps between timed events, one
+   instance of a series; Google failing is an error, never an empty list.
+3. **[auto]** `calendar_change`: the insert body (location, the Maps link as the first line of
+   the description, reminder, the Meet request, guests with `sendUpdates=all`, `none`
+   without guests); each refusal sends nothing; the three sentences are built from the stored
+   event (the model's wrong title does not reach the card); `add` and `update` ask from voice
+   in `full` and not from chat, `delete` asks everywhere and is destructive; the journal
+   record and the undo of an add, an update and a delete.
+4. **[auto]** Places: the field mask, the key in a header only, the bias to `near` or to
+   `home` (resolved once); without a key, and after a failed call, the web gives the address
+   (`source: "web"`, "I could not check this on the map"); the key is in no error; the drive
+   asks for the no-traffic time, then traffic at the departure.
+5. **[auto]** The report: the text for a day with an overlap, an all-day event and no events,
+   in Slovenian and English; leave-by arithmetic (traffic plus margin); the timer's days and
+   times, once a day, the late start (delivered before noon, skipped after); the spoken report
+   is given once, and only on its day; Telegram is left out when no chat is paired; one
+   notice when the calendar is not connected, not one a day.
+6. **[auto]** No token, no key and no client secret is in a tool result, a view, an error or a
+   log line of a whole session against the fake (`calendar/tests/secrets.rs`); the files
+   `calendar.json` and `maps.secret` are credential files of the token guard.
+7. **[auto]** `scripts/test-live.py`: a waiting morning report reaches the first live session
+   as a `[SAY]` text turn after the opening, once; the `SAY` sentence is in the `live`
+   instruction.
+8. **[auto]** `scripts/test-calendar-web.py`: the Calendar page in headless Chrome, dark and
+   light at 1200x820 and 700x500, in the seven connection states; Connect opens Google's
+   address; the read-only calendar cannot be the default; Telegram is disabled until a chat
+   is paired; Send now shows the text.
+9. The owner, with a real Google account: connect; "what's on today?"; "let's add an event" by
+   voice through the interview with a place; move it; delete it with "confirm"; "Send now";
+   the report spoken the next morning (and on Telegram at its time).
+

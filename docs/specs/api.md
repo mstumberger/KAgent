@@ -168,6 +168,14 @@ for a plan, `preview` holds the plan text.
 | | PUT `/api/memory/:name` | `{description?, type?, content?, reviewed?}` | `MemoryView` |
 | | POST `/api/memory/:name/forget` | | `MemoryView`; marks it `validUntil` today. Core files -> 409, unknown -> 404 |
 | | DELETE `/api/memory/:name` | | 204; core files -> 409 |
+| calendar | GET `/api/calendar` | | `{state: off\|connecting\|connected\|reconnect\|error, account?, calendars: [{id, name, color, writable, on}], hasClientSecret, hasMapsKey, lastReport?: {at, text, sent: [telegram\|spoken]}, error?}`; the calendars are read from Google when connected (a failure is in `error`, the state is the one after the call); never a secret |
+| | PUT `/api/calendar/client` | `{clientId, clientSecret?}` (an empty secret keeps the one stored) | 204; the id goes to `settings.calendar.clientId`, the secret to the keyring; 400 for an empty id or one with spaces |
+| | POST `/api/calendar/connect` | | `{url}` for the page to open in the browser; 400 without a client id and secret |
+| | GET `/api/calendar/oauth/callback` | `?code&state` (or `?error`) | a small HTML page. The one calendar route without the bearer token: loopback peer only (`ConnectInfo`), and a known, unused `state` younger than 10 minutes only; the Host check still applies |
+| | POST `/api/calendar/disconnect` | | 204; revokes the token at Google, deletes it, keeps the settings and the client |
+| | PUT `/api/calendar/maps-key` | `{key}` (`null` forgets it) | 204; 400 for a key that is not 16 to 128 printable characters |
+| | POST `/api/calendar/maps-test` | | `{ok, place?: {name, address}, error?}`: one Places search for "Ljubljana", on the map and not the web |
+| | POST `/api/calendar/report` | `{deliver: boolean}` | `{text, sent: [..]}`: the report for today; with `deliver` also sent to the channels that are on |
 | compaction | POST `/api/sessions/:id/compact` | | `{summary: string, keptMessages: number}`; 400 under 4 stored messages or with nothing before the last user message, 404 unknown session, 502 `summary_failed` |
 | todo, plan | PUT `/api/sessions/:id/todo` | `{items: TodoItem[]}` | `{items: TodoItem[]}`; 400 `invalid_input` without `items` or for a list `todo_write` refuses, 404 unknown session |
 | | POST `/api/sessions/:id/plan` | `{active: boolean}` | `{planning: boolean}`; 400 without a boolean `active`, 404 unknown session |
@@ -254,6 +262,7 @@ body. A refused write is 400 (`invalid_input`) or 409 (`conflict`).
 {"type":"taskRun","taskId":"...","run":{"at":"...","status":"ok","durationSec":42,"sessionId":"...","result":"..."}}
 {"type":"subagentUpdated","sessionId":"...","child":{"id":"...","title":"..."},"status":"running|done|failed|cancelled"}
 {"type":"telegramStatus","status":"off|disabled|unpaired|polling|error","detail":""}
+{"type":"calendarChanged","state":"off|connecting|connected|reconnect|error"}
 ```
 
 `uiCommand` `show` args gain `section` (settings section id). `notice` with level

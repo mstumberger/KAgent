@@ -69,7 +69,7 @@ pub fn group_of(name: &str) -> &'static str {
         "memory_save" | "memory_search" | "memory_get" | "memory_forget" | "session_search" => "memory",
         // The web tools (tools.md section 20), registered by the daemon like the memory tools.
         "web_fetch" | "web_search" => "web",
-        // Google Calendar (tools.md section 23), registered by the daemon like the web tools.
+        // Google Calendar (tools.md section 26), registered by the daemon like the web tools.
         "calendar_events" | "calendar_change" | "place_search" | "calendar_report" => "calendar",
         "package" | "measure" | "undo_change" | "list_changes" => "change",
         "audio_control" | "bluetooth_control" | "wifi" | "display" | "windows" | "notify" | "open" => "desktop",
@@ -177,7 +177,7 @@ mod group_tests {
         assert!(crate::context::GROUP_PRIORITY.contains(&"web"), "and the group is among those kept when the window is small");
     }
 
-    /// The calendar tools (tools.md section 23) are registered the same way, in the daemon.
+    /// The calendar tools (tools.md section 26) are registered the same way, in the daemon.
     #[test]
     fn the_calendar_tools_belong_to_the_calendar_group() {
         for name in ["calendar_events", "calendar_change", "place_search", "calendar_report"] {

@@ -206,6 +206,10 @@ once at load (models.md section 3, item 4) and is saved as 2.
 ```
 User-level (non-priv) undos use `{"kind": "user", "action": "restore_file", "path": "...", "backup": "<data>/changes/<id>.bak"}`
 or `{"kind":"user","action":"command","argv":[...]}`.
+A calendar change (S45, tool `calendar_change`) is recorded with `op` `{"kind":"user","action":"calendar","op":"add|update|delete","calendar","eventId"}` and `undo`
+`{"kind":"user","action":"calendar","step":"delete","calendar","id"}` (of an add),
+`{"..., "step":"patch","calendar","id","fields":{<old values, null where the field did not exist>}}` (of an update) or
+`{"..., "step":"insert","calendar","event":{<the stored copy>}}` (of a delete). The key is `step`, not `op`: a record with an `undo.op` is a root-helper request. `undo_change` asks the handler registered for the `action` (`ToolServices.undo`); the module is that handler for `calendar` and refuses when the calendar is no longer switched on.
 
 ## 8. Alerts (`alerts.jsonl`, S13) - see `alerts.md` for the model.
 
@@ -243,6 +247,9 @@ Retention: delete `flows_5m` older than 14 days hourly. `bucket` = unix time / 3
 | background output | `<data>/task-out/<taskId>.log` |
 | Telegram pairing | `<config>/telegram.json` (0600): `{botUsername, chatId, userId, pairedAt}`; token in Secret Service (`app=kagent, kind=telegram, id=bot`), file fallback `<config>/telegram.secret` (0600) when `KAGENT_HOME` is set |
 | Brave Search key | Secret Service (`app=kagent, kind=search, id=brave`), same file fallback `<config>/search.secret` |
+| Google Calendar connection (S45) | Secret Service (`app=kagent, kind=calendar, id=oauth`), file fallback `<config>/calendar.json` (0600) when `KAGENT_HOME` is set or no keyring answers: one JSON text `{"clientSecret", "refreshToken", "account"}`. The access token is never stored. `calendar.md` section 1 |
+| Google Maps key (S45) | Secret Service (`app=kagent, kind=maps, id=places`), file fallback `<config>/maps.secret` (0600) |
+| calendar state (S45) | `<data>/calendar-state.json`: where `calendar.home` was resolved to (`homeFor`, `homeLatLng`), the language last used (`lastLanguage`), the last morning report (`lastReport: {at, text, sent}`), the day it was delivered or given up (`reportDay`), the one-time "no report" notice (`toldSkip`) and the report that waits for a voice session (`spoken: {day, text}`) |
 
 ### Settings sections added
 
@@ -258,6 +265,8 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
   "browser": {"port": 9333, "binary": "", "backend": "own", "attachProfile": "", "attachTrust": "strict"},
   "tasks": {"onApproval": "deny", "deliver": ["desktop", "session"], "timeoutMin": 30, "maxConcurrent": 2},
   "telegram": {"enabled": false, "notifyAlerts": true, "forwardApprovals": false, "approvalForwardSec": 20, "allowPrivileged": false},
+  "calendar": {"enabled": false, "clientId": "", "calendars": ["primary"], "defaultCalendar": "primary", "defaultDurationMin": 60, "home": "", "travelMarginMin": 10,
+               "report": {"enabled": true, "weekdays": "07:45", "weekends": "09:00", "spoken": true, "telegram": true, "tomorrow": true, "tasks": true, "leaveBy": true}},
   "subagents": {"maxConcurrent": 4},
   "search": {"engine": "duckduckgo", "searxUrl": ""},
   "hooks": {"events": {}}
@@ -276,6 +285,7 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
 | `tasks.onApproval` | `deny` \| `wait`: default policy for unattended runs (`automations.md`) |
 | `tasks.timeoutMin` | 1..1440; `tasks.maxConcurrent` 1..8; `tasks.deliver` only `desktop`, `session`, `telegram` (outside these: 400, and refused on load) |
 | `telegram.*` | `bots.md`; `approvalForwardSec` 5..600 |
+| `calendar.*` | `calendar.md` section 2. `defaultDurationMin` 5..1440; `travelMarginMin` 0..120; `report.weekdays` and `report.weekends` are `HH:MM` or `""`; `defaultCalendar` must be one of `calendars`; an unknown key is refused (`deny_unknown_fields`, also in `report`). `calendar.enabled` and `calendar.clientId` are protected keys of the `settings` tool; `calendars`, `defaultCalendar`, `defaultDurationMin`, `home`, `travelMarginMin` and `report.*` are free. A read-only default is refused when an event is added, not on save. The first successful connection sets `enabled` and adds the group `calendar` to `toolGroups` and `voice.toolGroups` |
 | `subagents.maxConcurrent` | 1..8 |
 | `search.engine` | `duckduckgo` \| `brave` \| `searxng` \| `none` (`web.md`); `search.searxUrl` is empty, or an http or https address without a password (else 400, and refused on load); the Brave key is set with `PUT /api/web/brave-key`, not here |
 | `hooks.events` | `hooks.md` |
