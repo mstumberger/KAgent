@@ -182,7 +182,8 @@ The `calendar` settings section goes through `PUT /api/settings`. Event `calenda
 ## 8. Files
 
 ```
-crates/kagentd/src/calendar/mod.rs       the hub: state, token refresh, settings it saves
+crates/kagentd/src/calendar/mod.rs       the hub: types, state, construction
+crates/kagentd/src/calendar/connection.rs   the client, sign-in and callback, token refresh, disconnect, the settings it saves
 crates/kagentd/src/calendar/oauth.rs     PKCE, state, code exchange, refresh, revoke
 crates/kagentd/src/calendar/google.rs    calendarList, events list/insert/patch/delete; the switched-on rule
 crates/kagentd/src/calendar/model.rs     calendars and events as read from Google, and their text (pure)
