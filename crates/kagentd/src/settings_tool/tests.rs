@@ -126,6 +126,19 @@ async fn every_protected_key_is_refused_with_the_reason() {
     }
     run(&t, json!({"action": "set", "changes": {"permissionMode": "trusted", "persona.address": "Ana"}})).await;
     assert_eq!(h.settings(), before, "a patch with one protected key changes nothing");
+    // A group that holds a protected setting cannot be set as a whole: a key names one
+    // setting. (Found in review: `{"startup": {"autostart": false}}` passed.)
+    for (group, value) in [
+        ("startup", json!({"autostart": false})),
+        ("tasks", json!({"onApproval": "allow"})),
+        ("watchers", json!({"enabled": false})),
+        ("search", json!({"searxUrl": "http://evil.example"})),
+        ("voice", json!({"brain": "routed"})),
+    ] {
+        let out = run(&t, json!({"action": "set", "changes": {group: value}})).await;
+        assert!(out.is_error && out.content.contains("is a group of settings"), "{group}: {}", out.content);
+    }
+    assert_eq!(h.settings(), before, "and nothing changed");
     // And a refused call asks no question: it says why at once.
     let a = t.assess(&json!({"action": "set", "changes": {"permissionMode": "trusted"}}));
     assert!(a.read_only && !a.needs_approval && !a.always_ask);
