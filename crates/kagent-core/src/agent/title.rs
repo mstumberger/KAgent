@@ -84,19 +84,43 @@ pub async fn summarize(model: Arc<dyn ModelClient>, model_ref: &str, text: &str)
     clean_summary(&r.text)
 }
 
-impl super::Agent {
-    /// Ask the model for a short title in the background; the file and the UI get it as
-    /// soon as it is ready, the in-memory meta at its next save.
-    pub(super) fn refine_title(&self, session_id: &str, text: String) {
-        let (model, model_ref) = (self.model.clone(), self.config().model_ref);
-        let (refined, store, events, sid) = (self.refined.clone(), self.store.clone(), self.events.clone(), session_id.to_string());
-        tokio::spawn(async move {
-            let Some(t) = summarize(model, &model_ref, &text).await else { return };
-            refined.lock().unwrap().insert(sid.clone(), t.clone());
-            if let Ok(mut meta) = store.meta(&sid).await {
-                meta.title = t.clone();
+/// Give session `sid` the title `title`. A session in memory is changed under its meta's
+/// lock and saved from there, so the save holds every change made meanwhile (its todo list,
+/// its message count); one that is not loaded is read and saved at once.
+async fn apply_title(sessions: &super::Sessions, store: &crate::session::SessionStore, refined: &Refined, sid: &str, title: &str) {
+    let loaded = sessions.lock().unwrap().get(sid).cloned();
+    match loaded {
+        Some(state) => {
+            let mut meta = state.meta.lock().await;
+            let before = std::mem::replace(&mut meta.title, title.to_string());
+            if let Err(e) = store.save_meta(&meta).await {
+                tracing::warn!(session_id = sid, "the title could not be saved: {e:#}");
+                meta.title = before;
+            }
+        }
+        None => {
+            // Loaded while this ran: the title reaches its meta at the next save.
+            refined.lock().unwrap().insert(sid.to_string(), title.to_string());
+            if let Ok(mut meta) = store.meta(sid).await {
+                meta.title = title.to_string();
                 let _ = store.save_meta(&meta).await;
             }
+            if sessions.lock().unwrap().get(sid).is_none() {
+                refined.lock().unwrap().remove(sid);
+            }
+        }
+    }
+}
+
+impl super::Agent {
+    /// Ask the model for a short title in the background; the meta, the file and the UI
+    /// get it as soon as it is ready.
+    pub(super) fn refine_title(&self, session_id: &str, text: String) {
+        let (model, model_ref) = (self.model.clone(), self.config().model_ref);
+        let (refined, sessions, store, events, sid) = (self.refined.clone(), self.sessions.clone(), self.store.clone(), self.events.clone(), session_id.to_string());
+        tokio::spawn(async move {
+            let Some(t) = summarize(model, &model_ref, &text).await else { return };
+            apply_title(&sessions, &store, &refined, &sid, &t).await;
             let _ = events.send(AgentEvent::SessionUpdated { session_id: sid, title: t });
         });
     }
@@ -108,17 +132,11 @@ impl super::Agent {
             let Ok(msgs) = self.store.load_messages(&meta.id).await else { continue };
             let Some(first) = msgs.iter().find(|m| m.role == Role::User && meaningful(&m.content)) else { continue };
             let Some(q) = quick_title(&first.content) else { continue };
-            let mut m = meta.clone();
-            m.title = q.clone();
-            let _ = self.store.save_meta(&m).await;
-            // A session already loaded keeps its meta in memory: apply there too.
-            if self.sessions.lock().unwrap().contains_key(&meta.id) {
-                self.refined.lock().unwrap().insert(meta.id.clone(), q);
-            }
+            // Never the copy of the list: it is older than what was saved since.
+            apply_title(&self.sessions, &self.store, &self.refined, &meta.id, &q).await;
             self.refine_title(&meta.id, first.content.clone());
         }
     }
-
 }
 
 /// Titles finished in the background, applied to the in-memory session meta at its next

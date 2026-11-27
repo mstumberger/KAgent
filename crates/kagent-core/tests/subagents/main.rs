@@ -274,25 +274,30 @@ async fn the_profile_decides_the_tools_and_explore_is_read_only() {
 }
 
 #[tokio::test]
-async fn a_child_of_a_planning_session_gets_the_plan_restriction() {
-    // plan-todo.md section 2 and agents.md section 2.
-    let r = rig(&[("parent", vec![run("job-never"), say("cannot start one")]), ("job-p", vec![call("probe_c", json!({})), call("probe_a", json!({})), say("found")])], PermissionMode::Full).await;
+async fn a_planning_session_starts_only_read_only_subagents_and_they_get_the_plan_restriction() {
+    // plan-todo.md section 2 and agents.md section 2 (decision of 2026-11-27).
+    let explore = call("agent_run", json!({"description": "job-p", "prompt": "look around", "profile": "explore", "background": false}));
+    let r = rig(&[("parent", vec![run("job-never"), explore, say("planned")]), ("job-p", vec![call("probe_c", json!({})), call("probe_a", json!({})), say("found")])], PermissionMode::Full).await;
     r.agent.set_planning(&r.session, true).await.unwrap();
     let result = turn(&r, "plan something").await;
     assert_eq!(result.status, TurnStatus::Completed, "{:?}", result.error);
-    // `agent_run` is a mutating call that plan mode does not allow (as before this stage):
-    // the model cannot start a subagent from a planning session.
-    let refused = results(&r, &r.session, "agent_run").await.remove(0);
-    assert!(refused.is_error && refused.content.contains(kagent_core::plan::PLAN_DENIED), "{}", refused.content);
-    assert!(children(&r).is_empty());
-
-    // Started all the same (by hand here): the child researches only.
-    let child = r.agent.start_child(ChildRequest { parent: r.session.clone(), description: "job-p".into(), prompt: "look around".into(), profile: Profile::general(), model: None }).await.unwrap();
-    wait_status(&r, &child.id, ChildStatus::Done).await;
-    let mutation = results(&r, &child.id, "probe_c").await.remove(0);
-    assert!(mutation.is_error && mutation.content.contains(kagent_core::plan::PLAN_DENIED), "{}", mutation.content);
-    assert!(!results(&r, &child.id, "probe_a").await[0].is_error, "research goes");
-    let meta = r.store.meta(&child.id).await.unwrap();
+    // The general profile is refused with the reason; explore runs.
+    let mut runs = results(&r, &r.session, "agent_run").await;
+    let refused = runs.remove(0);
+    assert!(refused.is_error && refused.content.contains(kagent_core::plan::PLAN_SUBAGENT_DENIED), "{}", refused.content);
+    assert!(!runs[0].is_error && runs[0].content.contains("found"), "{}", runs[0].content);
+    let kids = children(&r);
+    assert_eq!(kids.len(), 1, "only the read-only one was started");
+    let child = kids[0].id.clone();
+    // The child researches only: plan restriction (and explore) refuse the mutation.
+    assert!(r.agent.permissions().is_planning(&child), "the engine's plan flag is set for the child");
+    assert!(results(&r, &child, "probe_c").await.remove(0).is_error);
+    assert!(!results(&r, &child, "probe_a").await[0].is_error, "research goes");
+    let meta = r.store.meta(&child).await.unwrap();
     let mine = r.model.of("job-p");
     assert!(!meta.planning && !mine[0].system.contains("PLAN MODE"), "the child's own flag stays off: no plan prompt, so no plan card from a subagent");
+
+    // By hand, a general profile is refused the same way.
+    let by_hand = r.agent.start_child(ChildRequest { parent: r.session.clone(), description: "job-x".into(), prompt: "look".into(), profile: Profile::general(), model: None }).await;
+    assert_eq!(by_hand.unwrap_err().to_string(), kagent_core::plan::PLAN_SUBAGENT_DENIED);
 }

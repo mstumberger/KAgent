@@ -1,6 +1,7 @@
 //! Watchers and alerts (docs/specs/alerts.md). Rules produce hits; the manager applies
 //! thresholds, dedupe and cooldown, stores alerts, notifies, and feeds the UI/audit.
 
+mod investigate;
 pub mod rules;
 pub mod sources;
 
@@ -290,10 +291,7 @@ pub mod http {
             Ok(m) => m,
             Err(e) => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": {"code": "internal", "message": e.to_string()}}))).into_response(),
         };
-        let prompt = format!(
-            "KAgent raised an alert. Investigate it with read-only tools first, explain the cause in plain words, then propose a fix (do not change anything without asking).\n\nAlert: {}\nRule: {} (severity {:?}, seen {} times)\nCause: {}\nEvidence: {}\nSuggested: {}",
-            a.title, a.rule, a.severity, a.count, a.cause, a.evidence, a.proposal
-        );
+        let prompt = super::investigate::prompt(&a);
         let _ = st.agent.send(&meta.id, prompt, kagent_core::protocol::Via::Text).await;
         Json(json!({"sessionId": meta.id})).into_response()
     }

@@ -94,7 +94,7 @@ impl BotAgent for DaemonAgent {
     }
 
     fn resolve(&self, request: &str, decision: ApprovalDecision) -> bool {
-        self.agent.broker().resolve(request, decision)
+        self.agent.broker().resolve(request, decision, kagent_core::permission::ApprovalVia::Telegram)
     }
 
     fn pending(&self) -> Vec<ApprovalRequest> {

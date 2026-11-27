@@ -197,7 +197,7 @@ pub fn cancel_calls(st: &AppState, session: &str, ids: &[String], calls: &Calls)
             Some(Running::Tool(token)) => {
                 let deny = ApprovalDecision::Deny { reason: Some(INTERRUPTED.into()) };
                 for card in approve::pending(st, session).iter().filter(|c| &c.call_id == id) {
-                    st.agent.broker().resolve(&card.request_id, deny.clone());
+                    st.agent.broker().resolve(&card.request_id, deny.clone(), kagent_core::permission::ApprovalVia::Voice);
                 }
                 // The card's answer reaches the waiting call first (the broker also
                 // watches the token); then the token stops whatever the tool was running.

@@ -11,7 +11,8 @@ use crate::{memory, prompt, settings, skills};
 pub struct TurnConfig {
     pub settings: Arc<RwLock<settings::Settings>>,
     pub providers: Arc<kagent_providers::ProviderStore>,
-    pub machine: serde_json::Value,
+    /// Refreshed at most every ten minutes (`machine.rs`).
+    pub machine: Arc<crate::machine::MachineSnapshot>,
     pub skills: Arc<skills::SkillHub>,
     pub memory: Arc<memory::MemoryHub>,
     /// (name, group) of every registered tool.
@@ -35,17 +36,25 @@ impl TurnConfig {
         let context_tokens = resolved.as_ref().map(|r| r.config.context_window as usize).unwrap_or(0);
         // The memory block (memory.md section 2), recalled by the words of this turn's message.
         let (memory_block, memory_rule) = self.memory.prompt_parts(&s.memory_config(), &turn.user_text, context_tokens, memory_tools);
+        let machine = self.machine.current();
+        // The Brain as Settings > Models names it (prompt.rs, identity).
+        let brain = match resolved.as_ref() {
+            Some(r) if !r.model.name.trim().is_empty() && r.model.name != r.model.id => format!("{} ({}, {})", r.model.name, r.model.id, r.provider.name),
+            Some(r) => format!("{} ({})", r.model.id, r.provider.name),
+            None => s.chat_model.clone(),
+        };
         let system_prompt = prompt::build(&prompt::PromptInput {
             persona_name: &s.persona.name,
             address: &s.persona.address,
             language: &s.persona.language,
-            machine: &self.machine,
+            machine: &machine,
             tool_names: &enabled,
             skills_index: &self.skills.index(s.skills_config().index_budget_chars),
             memory_block: &memory_block,
             memory_rule,
             permission_mode: &mode,
             now: chrono::Local::now(),
+            brain: &brain,
         });
         // The model's own output limit is the only source: `options.maxOutputTokens` is no longer read (models.md section 6).
         let fallback = self.providers.usable(&s.fallback_model);

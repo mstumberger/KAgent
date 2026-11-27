@@ -17,8 +17,11 @@ use crate::tool::{CallAssessment, Risk, Tool, ToolContext, ToolContract, ToolOut
 
 /// The calls a planning session may make although they are not read-only (tools.md section
 /// 19): the agent's own bookkeeping and its research. The memory and session tools come
-/// with S25.
-pub const PLAN_ALLOWED: [&str; 8] = ["todo_write", "todo_read", "plan_enter", "plan_exit", "load_skill", "memory_search", "memory_get", "session_search"];
+/// with S25. `agent_run` and `agent_stop` since 2026-11-27: `start_child` refuses any
+/// subagent of a planning session that is not read-only (`PLAN_SUBAGENT_DENIED`).
+pub const PLAN_ALLOWED: [&str; 10] = ["todo_write", "todo_read", "plan_enter", "plan_exit", "load_skill", "memory_search", "memory_get", "session_search", "agent_run", "agent_stop"];
+/// Why a planning session may not start a subagent that is not read-only.
+pub const PLAN_SUBAGENT_DENIED: &str = "plan mode: only a read-only subagent (profile explore) may run until the plan is approved";
 /// What a planning session answers to a call that is neither read-only nor in `PLAN_ALLOWED`.
 pub const PLAN_DENIED: &str = "plan mode: research only until the plan is approved";
 /// At most this many bytes in a plan (tools.md section 19: 12 KB).
@@ -60,13 +63,32 @@ pub fn approved_prompt(plan: &str) -> String {
     format!("\nApproved plan, follow it:\n{plan}\n")
 }
 
-/// The plan an owner approved (config.md section 11, `approvedPlan`): where it was saved and
-/// its text.
+/// The plan an owner approved (config.md section 11, `approvedPlan`): where it was saved, its
+/// text and when it was approved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovedPlan {
     pub path: String,
     pub text: String,
+    /// Missing in a meta written before plans expired: such a plan counts as expired.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// How long an approved plan stays in the prompt at most (plan-todo.md section 2).
+pub const PLAN_TTL: chrono::TimeDelta = chrono::TimeDelta::hours(24);
+
+impl ApprovedPlan {
+    /// Whether the plan has run out of time at `now`: 24 h after its approval.
+    pub fn expired_at(&self, now: chrono::DateTime<chrono::Utc>) -> bool {
+        self.approved_at.is_none_or(|t| now - t >= PLAN_TTL)
+    }
+}
+
+/// Whether a todo list stored after the approval ends the plan: it has items and every one
+/// is completed (plan-todo.md section 2).
+pub fn todo_done(items: &[crate::todo::TodoItem]) -> bool {
+    !items.is_empty() && items.iter().all(|i| i.status == crate::todo::TodoStatus::Completed)
 }
 
 /// Write an approved plan to `<dir>/<sessionId>-<n>.md`, `n` being the first number the
@@ -254,9 +276,9 @@ impl Tool for PlanExit {
             preview: Some(plan.to_string()),
         };
         let request_id = request.request_id.clone();
-        let decision = agent.broker().request(request, &ctx.cancel).await;
+        let (decision, via) = agent.broker().request_via(request, &ctx.cancel).await;
         if let Some(audit) = &agent.audit {
-            let data = json!({ "requestId": request_id, "tool": PLAN_TOOL, "summary": PLAN_SUMMARY, "decision": decision.label() });
+            let data = json!({ "requestId": request_id, "tool": PLAN_TOOL, "summary": PLAN_SUMMARY, "decision": decision.label(), "via": via.label() });
             if let Err(e) = audit.append(crate::audit::AuditKind::Approval, &sid, data) {
                 tracing::warn!("audit append failed: {e:#}");
             }

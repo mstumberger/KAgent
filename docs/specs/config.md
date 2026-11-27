@@ -182,11 +182,18 @@ once at load (models.md section 3, item 4) and is saved as 2.
  "prev": "<hash of seq 11>", "hash": "<sha256 hex>"}
 ```
 - `kind`: `toolCall | approval | change | undo | alert | containment | start | stop`.
+- An `approval` record's `data`: `{requestId, tool, summary, decision, via}`; `via` says
+  how the card was answered (v0.0.2): `click` (the web UI or the API, also Cancel plan),
+  `voice`, `telegram`, `rule` (a policy, such as a task's `onApproval: deny`), `timeout`
+  (`approvalTimeoutSec` passed), `cancel` (the turn was stopped while the card waited).
 - `hash = sha256(prev + "\n" + canonical_json(record without hash))`; canonical =
   keys sorted, no whitespace. First record `prev = "0"*64`, kind `start`.
 - Redaction: input fields named `password|apiKey|token|secret|content` are replaced by
   `"<redacted:sha256-prefix>"`; full tool output is not stored (only its sha256).
 - `verify` returns the first broken seq or OK + count.
+- Writing (v0.0.2): the record is built, written as one line and `prev` advanced under
+  one lock, so records written at once still chain; the `fsync` runs on a thread of its
+  own (`audit-sync`, requests that queued up share one), never on the caller's thread.
 
 ## 7. Change journal (`changes/<id>.json`, S8)
 
@@ -299,8 +306,9 @@ when `shell` is empty; `timeoutMs` 100..60000. Unknown keys are rejected.
 ```
 `origin`: `chat | voice | task | alert | telegram | subagent`. `summary` + `summaryUpto`
 come from compaction (`compaction.md`), `approvedPlan` from plan mode (`plan-todo.md`):
-`{"path": "<data>/plans/<sessionId>-<n>.md", "text": "<the plan>"}` once a plan was
-approved; `n` is the first number the session has not used.
+`{"path": "<data>/plans/<sessionId>-<n>.md", "text": "<the plan>", "approvedAt": "<RFC 3339>"}`
+once a plan was approved; `n` is the first number the session has not used. It is
+cleared when the plan expires (`plan-todo.md` section 2).
 
 ### Coding agents (S35-S39; `coders.md`)
 

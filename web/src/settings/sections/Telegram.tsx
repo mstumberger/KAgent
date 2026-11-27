@@ -161,6 +161,11 @@ export default function TelegramSection({ title, description }: SectionProps) {
           {status?.status === "unpaired" && <p className="hint">Ask for a pairing code, then send it as /start &lt;code&gt; to {bot(name)} from the Telegram chat that should talk to KAgent.</p>}
           {status?.status === "disabled" && <p className="hint">Switched off. Turn the Telegram bot on to pair a chat.</p>}
           {status?.status === "off" && <p className="hint">Not configured yet: paste the token of a bot you made with @BotFather.</p>}
+          {status?.pairingLockedUntil && (
+            <p className="hint" role="alert">
+              Five wrong pairing codes were sent: pairing is locked until {new Date(status.pairingLockedUntil).toLocaleTimeString()}. The code below is new.
+            </p>
+          )}
           {code && (
             <p className="tg-code">
               <span className="tg-code-digits">{code.code}</span>

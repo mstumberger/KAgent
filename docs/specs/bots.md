@@ -32,8 +32,12 @@ stays as it is.
 - `/start` from the paired chat answers with the status.
 - Unpair (UI, or deleting the token) forgets the chat; deleting the token leaves
   `enabled` as it is.
-- Nothing limits wrong pairing codes (six digits in ten minutes): the spec names no
-  limit; it is an open question for the owner.
+- Wrong codes (decision of 2026-11-27): after 5 wrong codes the waiting code is replaced
+  by a new one and pairing is locked for 10 minutes. While locked, no code is checked,
+  not even the right one, and the chat is told how many minutes are left. The new code
+  (shown in Settings > Telegram) is good for 10 minutes after the lock ends; a code asked
+  for during the lock is too. `GET /api/telegram` reports `pairingLockedUntil` while it
+  lasts. The count is in memory and starts again after a lock or a pairing.
 
 ## 3. Messages (`kagentd/src/bots/telegram*.rs`, `bots/telegram_api.rs`)
 

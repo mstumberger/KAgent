@@ -112,6 +112,10 @@ impl Agent {
         if parent.origin == SessionOrigin::Subagent {
             anyhow::bail!("a subagent cannot start subagents: do the work with your own tools and end with a complete answer");
         }
+        // Plan mode researches only, so its subagents do too (agents.md section 2).
+        if parent.planning && !req.profile.read_only {
+            anyhow::bail!(crate::plan::PLAN_SUBAGENT_DENIED);
+        }
         // The model of the child: the one the call named, else the profile's; empty = the chat
         // model. One that is not a ref, or that the providers do not know (where they can be
         // asked), is refused here and not at the first request of the child. The local model

@@ -34,6 +34,7 @@ fn agent_over(dir: &Path, mode: PermissionMode) -> (Arc<Agent>, broadcast::Sende
     let mut registry = ToolRegistry::new();
     registry.register(Arc::new(TodoWrite::new(access.clone())));
     registry.register(Arc::new(TodoRead::new(access.clone())));
+    registry.register(Arc::new(crate::tools::terminal::Terminal::new()));
     let (events, _) = broadcast::channel(64);
     let cfg = AgentConfig {
         model_ref: String::new(),
@@ -288,4 +289,23 @@ async fn mode_add_appends_and_a_replace_that_drops_open_items_says_so() {
     assert_eq!(text, "[1] [ ] Open thing");
     let (_, is_error, _) = call(&agent, &id, "todo_write", json!({"mode": "append", "items": []})).await;
     assert!(is_error, "an unknown mode is refused");
+}
+
+/// 2026-11-27, 22:03: in `full` mode the live voice model typed into the owner's only
+/// terminal 25 times without a question. From voice an `always_ask` call is confirmed
+/// first in every mode; a read-only call is not.
+#[tokio::test]
+async fn from_voice_an_always_ask_call_is_confirmed_in_full_mode_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let (agent, _events) = agent_over(dir.path(), PermissionMode::Full);
+    let id = agent.store().create("t").await.unwrap().id;
+    let call = |input: Value| ToolCall { id: "c".into(), name: "terminal".into(), input };
+    let (a, ask) = agent.voice_gate(&id, &call(json!({"action": "send", "target": "konsole", "text": "systemctl --failed"}))).unwrap();
+    assert!(a.always_ask && ask, "typing into a terminal is asked out loud, full mode or not");
+    assert!(a.summary.contains("systemctl --failed"), "the question names what would be typed: {}", a.summary);
+    let (_, ask) = agent.voice_gate(&id, &call(json!({"action": "list"}))).unwrap();
+    assert!(!ask, "listing the terminals changes nothing");
+    let (_, ask) = agent.voice_gate(&id, &ToolCall { id: "c".into(), name: "todo_read".into(), input: json!({}) }).unwrap();
+    assert!(!ask);
+    assert!(agent.voice_gate(&id, &ToolCall { id: "c".into(), name: "nope".into(), input: json!({}) }).is_none());
 }

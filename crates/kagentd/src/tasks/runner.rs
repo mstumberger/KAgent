@@ -121,7 +121,7 @@ impl TaskRunner for AgentRunner {
     }
 
     async fn deny(&self, request_id: &str, reason: &str) -> bool {
-        self.agent.broker().resolve(request_id, ApprovalDecision::Deny { reason: Some(reason.to_string()) })
+        self.agent.broker().resolve(request_id, ApprovalDecision::Deny { reason: Some(reason.to_string()) }, kagent_core::permission::ApprovalVia::Rule)
     }
 
     fn events(&self) -> broadcast::Receiver<AgentEvent> {

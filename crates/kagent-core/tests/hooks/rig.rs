@@ -213,7 +213,7 @@ pub fn answering(r: &Rig, answers: Vec<ApprovalDecision>) -> tokio::task::JoinHa
         let mut cards = Vec::new();
         for decision in answers {
             let request = next_card(&mut events).await;
-            assert!(broker.resolve(&request.request_id, decision));
+            assert!(broker.resolve(&request.request_id, decision, kagent_core::permission::ApprovalVia::Click));
             cards.push(request);
         }
         cards

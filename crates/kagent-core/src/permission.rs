@@ -261,7 +261,35 @@ impl ApprovalDecision {
     }
 }
 
-type Pending = HashMap<String, (ApprovalRequest, oneshot::Sender<ApprovalDecision>)>;
+/// How a card was answered: the `via` of its audit record (config.md section 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalVia {
+    /// The web UI or the API.
+    Click,
+    Voice,
+    Telegram,
+    /// A policy answered it, not a person (a task's `onApproval: deny`).
+    Rule,
+    /// Nobody answered within the approval timeout.
+    Timeout,
+    /// The turn was cancelled while the card waited.
+    Cancel,
+}
+
+impl ApprovalVia {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Click => "click",
+            Self::Voice => "voice",
+            Self::Telegram => "telegram",
+            Self::Rule => "rule",
+            Self::Timeout => "timeout",
+            Self::Cancel => "cancel",
+        }
+    }
+}
+
+type Pending = HashMap<String, (ApprovalRequest, oneshot::Sender<(ApprovalDecision, ApprovalVia)>)>;
 
 /// Holds pending approvals. The UI answers through `resolve`; a cancelled turn or a
 /// timeout resolves the wait as a denial so the loop can always finish.
@@ -280,32 +308,34 @@ impl PermissionBroker {
         self.pending.lock().unwrap().values().map(|(r, _)| r.clone()).collect()
     }
 
-    pub async fn request(
-        &self,
-        request: ApprovalRequest,
-        cancel: &CancellationToken,
-    ) -> ApprovalDecision {
+    pub async fn request(&self, request: ApprovalRequest, cancel: &CancellationToken) -> ApprovalDecision {
+        self.request_via(request, cancel).await.0
+    }
+
+    /// `request`, and how the card was answered.
+    pub async fn request_via(&self, request: ApprovalRequest, cancel: &CancellationToken) -> (ApprovalDecision, ApprovalVia) {
         let (tx, rx) = oneshot::channel();
         let id = request.request_id.clone();
         self.pending.lock().unwrap().insert(id.clone(), (request.clone(), tx));
         let _ = self.events.send(AgentEvent::ApprovalRequested(request));
-        let decision = tokio::select! {
-            r = rx => r.unwrap_or(ApprovalDecision::Deny { reason: Some("approval channel closed".into()) }),
-            _ = cancel.cancelled() => ApprovalDecision::Deny { reason: Some("turn cancelled".into()) },
-            _ = tokio::time::sleep(self.timeout) => ApprovalDecision::Deny { reason: Some("approval timed out".into()) },
+        let (decision, via) = tokio::select! {
+            r = rx => r.unwrap_or((ApprovalDecision::Deny { reason: Some("approval channel closed".into()) }, ApprovalVia::Cancel)),
+            _ = cancel.cancelled() => (ApprovalDecision::Deny { reason: Some("turn cancelled".into()) }, ApprovalVia::Cancel),
+            _ = tokio::time::sleep(self.timeout) => (ApprovalDecision::Deny { reason: Some("approval timed out".into()) }, ApprovalVia::Timeout),
         };
         self.pending.lock().unwrap().remove(&id);
         let _ = self.events.send(AgentEvent::ApprovalResolved {
             request_id: id,
             decision: decision.label().into(),
         });
-        decision
+        (decision, via)
     }
 
-    /// Returns false when the request is unknown (already resolved or expired).
-    pub fn resolve(&self, request_id: &str, decision: ApprovalDecision) -> bool {
+    /// Answer a card, saying how (`via`). Returns false when the request is unknown
+    /// (already resolved or expired).
+    pub fn resolve(&self, request_id: &str, decision: ApprovalDecision, via: ApprovalVia) -> bool {
         match self.pending.lock().unwrap().remove(request_id) {
-            Some((_, tx)) => tx.send(decision).is_ok(),
+            Some((_, tx)) => tx.send((decision, via)).is_ok(),
             None => false,
         }
     }

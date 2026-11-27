@@ -90,6 +90,11 @@ Server -> client only. Each message is one `AgentEvent` (protocol.rs, `type` tag
 toolCallFinished, approvalRequested, approvalResolved, turnFinished, sessionUpdated,
 notice`, plus added variants:
 
+- A model answer with neither text nor a tool call is not stored; the request is sent
+  once more, and a second empty answer ends the turn with `turnFinished` `status:
+  "failed"`, `error: "the model gave no answer (asked twice): try again, or choose
+  another chat model"` (`agent::NO_ANSWER`, v0.0.2).
+
 ```json
 {"type": "alertRaised", "alert": {...Alert}}
 {"type": "alertUpdated", "alert": {...Alert}}
@@ -178,7 +183,7 @@ for a plan, `preview` holds the plan text.
 | | GET `/api/tasks/templates` | | `{templates: [{id, title, what, kind, schedule, scheduleText}]}` |
 | | POST `/api/tasks/templates/:id` | | `{tasks: Task[]}` (201): the task of a template, paused |
 | | GET `/api/tasks/preview?schedule=` | | `{schedule, scheduleText, nextRun}`; 400 when the text does not parse |
-| telegram | GET `/api/telegram` | | `{enabled, configured, status, botUsername, paired, chatId, pairedAt, lastError, pendingCode}`; a missing optional field is `null` |
+| telegram | GET `/api/telegram` | | `{enabled, configured, status, botUsername, paired, chatId, pairedAt, lastError, pendingCode, pairingLockedUntil}`; a missing optional field is `null` |
 | | PUT `/api/telegram` | `{enabled?, notifyAlerts?, forwardApprovals?, approvalForwardSec?, allowPrivileged?}` | same as GET; 400 for any other key |
 | | POST `/api/telegram/token` | `{token}` | `{botUsername}`: calls `getMe`; stores the token in Secret Service only when Telegram knows it: 400 for a wrong shape or a refusal, 502 `telegram_unreachable` without an answer |
 | | DELETE `/api/telegram/token` | | 204; also unpairs |

@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(store.meta(&meta.id).await.unwrap(), meta);
         // The plan fields (plan-todo.md section 2) round trip, under their JSON names.
         meta.planning = true;
-        meta.approved_plan = Some(crate::plan::ApprovedPlan { path: "/data/plans/t-1.md".into(), text: "1. step".into() });
+        meta.approved_plan = Some(crate::plan::ApprovedPlan { path: "/data/plans/t-1.md".into(), text: "1. step".into(), approved_at: None });
         store.save_meta(&meta).await.unwrap();
         assert_eq!(store.meta(&meta.id).await.unwrap(), meta);
         let raw: serde_json::Value = serde_json::from_slice(&tokio::fs::read(dir.path().join(format!("{}.meta.json", meta.id))).await.unwrap()).unwrap();

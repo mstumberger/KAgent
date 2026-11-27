@@ -104,13 +104,29 @@ async fn broker_resolves_and_cancels() {
     while broker.pending().is_empty() {
         tokio::task::yield_now().await;
     }
-    assert!(broker.resolve("r1", ApprovalDecision::AllowOnce));
+    assert!(broker.resolve("r1", ApprovalDecision::AllowOnce, crate::permission::ApprovalVia::Click));
     assert_eq!(waiter.await.unwrap(), ApprovalDecision::AllowOnce);
 
     let cancel = CancellationToken::new();
     cancel.cancel();
-    let d = broker.request(ApprovalRequest { request_id: "r2".into(), ..req }, &cancel).await;
+    let d = broker.request(ApprovalRequest { request_id: "r2".into(), ..req.clone() }, &cancel).await;
     assert!(matches!(d, ApprovalDecision::Deny { .. }));
+
+    // How each card was answered (config.md section 6, `via`).
+    assert_eq!(broker.request_via(ApprovalRequest { request_id: "r3".into(), ..req.clone() }, &cancel).await.1, crate::permission::ApprovalVia::Cancel);
+    let quick = PermissionBroker::new(broadcast::channel(8).0, Duration::from_millis(10));
+    let (d, via) = quick.request_via(ApprovalRequest { request_id: "r4".into(), ..req.clone() }, &CancellationToken::new()).await;
+    assert_eq!((d.label(), via.label()), ("deny", "timeout"));
+    for via in [crate::permission::ApprovalVia::Voice, crate::permission::ApprovalVia::Telegram, crate::permission::ApprovalVia::Rule] {
+        let b2 = broker.clone();
+        let r = ApprovalRequest { request_id: format!("v-{}", via.label()), ..req.clone() };
+        let waiter = tokio::spawn(async move { b2.request_via(r, &CancellationToken::new()).await });
+        while broker.pending().is_empty() {
+            tokio::task::yield_now().await;
+        }
+        assert!(broker.resolve(&format!("v-{}", via.label()), ApprovalDecision::AllowOnce, via));
+        assert_eq!(waiter.await.unwrap(), (ApprovalDecision::AllowOnce, via));
+    }
 }
 
 #[test]

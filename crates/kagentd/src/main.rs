@@ -17,6 +17,7 @@ mod browser;
 mod hooks;
 mod krunner;
 mod live;
+mod machine;
 mod mcp;
 mod memory;
 mod net;
@@ -164,7 +165,8 @@ async fn run() -> anyhow::Result<()> {
     let keyring = secrets::attach(providers.clone()).await;
     tracing::info!("provider keys: {}", if keyring { "Secret Service (desktop keyring)" } else { "providers.json (0600)" });
 
-    let machine = kagent_core::tools::sys::system_snapshot().await;
+    let snapshot = machine::MachineSnapshot::system().await;
+    let machine = snapshot.current();
     let (events, _) = broadcast::channel(1024);
     let audit = std::sync::Arc::new(kagent_core::audit::AuditLog::open(&paths.data.join("audit.jsonl"))?);
     audit.append_start(VERSION).ok();
@@ -279,7 +281,7 @@ async fn run() -> anyhow::Result<()> {
     let turn_config = turn_config::TurnConfig {
         settings: settings_arc.clone(),
         providers: providers.clone(),
-        machine: machine.clone(),
+        machine: snapshot,
         skills: skills.clone(),
         memory: memory.clone(),
         tool_index,

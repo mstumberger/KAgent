@@ -179,7 +179,7 @@ async fn nothing_configured_is_off_and_a_token_keeps_the_bot_switched_off() {
     assert_eq!(r.bots.known().status, PollState::Off);
     assert_eq!(
         r.view(),
-        json!({"enabled": false, "configured": false, "status": "off", "botUsername": null, "paired": false, "chatId": null, "pairedAt": null, "lastError": null, "pendingCode": null}),
+        json!({"enabled": false, "configured": false, "status": "off", "botUsername": null, "paired": false, "chatId": null, "pairedAt": null, "lastError": null, "pendingCode": null, "pairingLockedUntil": null}),
         "off; the answer says whether there is a token, never the token"
     );
     assert_eq!(refusal(r.bots.pairing_code()).2, "no bot token: paste the token of your bot first");

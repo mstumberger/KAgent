@@ -163,7 +163,7 @@ pub(super) fn resolve(st: &AppState, request: &ApprovalRequest, answer: Answer, 
         Answer::Yes => ApprovalDecision::AllowOnce,
         Answer::No => ApprovalDecision::Deny { reason: Some("denied by voice".into()) },
     };
-    if !st.agent.broker().resolve(&request.request_id, decision) {
+    if !st.agent.broker().resolve(&request.request_id, decision, kagent_core::permission::ApprovalVia::Voice) {
         return false;
     }
     tracing::info!("voice {} '{}' for {}: \"{}\"", if answer == Answer::Yes { "approved" } else { "denied" }, request.tool, request.summary, said.trim());

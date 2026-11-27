@@ -154,6 +154,38 @@ async fn a_wrong_an_expired_or_a_used_code_does_not_pair_and_a_second_chat_is_re
     assert!(r.bot.paired().is_none() && !Pairing::path(r.dir.path()).exists());
 }
 
+/// Decision of 2026-11-27 (bots.md section 2): five wrong codes make a new code and lock
+/// pairing for ten minutes; then the new code pairs.
+#[tokio::test]
+async fn five_wrong_codes_make_a_new_code_and_lock_pairing_for_ten_minutes() {
+    let r = with(FakeAgent::default());
+    let old = r.bot.ask_code(now(0));
+    let wrong = if old.code == "000000" { "111111" } else { "000000" };
+    for i in 0..WRONG_CODES - 1 {
+        r.bot.handle(&text(i64::from(i) + 1, CHAT, &format!("/start {wrong}")), now(10)).await;
+    }
+    assert_eq!(r.api.texts().last().map(String::as_str), Some("That pairing code is not right."));
+    assert!(r.bot.pairing_locked_until(now(10)).is_none(), "four wrong codes do not lock");
+    r.bot.handle(&text(10, CHAT, &format!("/start {wrong}")), now(20)).await;
+    assert_eq!(r.api.texts().last().map(String::as_str), Some("Too many wrong pairing codes. Pairing is locked for 10 min; then use the new code shown in Settings > Telegram."));
+    assert_eq!(r.bot.pairing_locked_until(now(20)), Some(now(20) + PAIRING_LOCK));
+    let fresh = r.bot.code(now(20)).expect("a new code waits");
+    assert_eq!(fresh.expires_at, now(20) + PAIRING_LOCK + CODE_TTL, "good for ten minutes after the lock");
+
+    // Locked: not even the right code is looked at.
+    r.bot.handle(&text(11, CHAT, &format!("/start {}", fresh.code)), now(300)).await;
+    assert!(r.api.texts().last().unwrap().starts_with("Too many wrong pairing codes. Pairing is locked for 6 min"), "{:?}", r.api.texts().last());
+    assert!(r.bot.paired().is_none());
+    // The old code is gone even after the lock.
+    if old.code != fresh.code {
+        r.bot.handle(&text(12, CHAT, &format!("/start {}", old.code)), now(621)).await;
+        assert!(r.bot.paired().is_none(), "the code before the lock pairs nothing");
+    }
+    // After the lock, the new code pairs.
+    r.bot.handle(&text(13, CHAT, &format!("/start {}", fresh.code)), now(625)).await;
+    assert_eq!(r.bot.paired().map(|p| p.chat_id), Some(CHAT), "{:?}", r.api.texts());
+}
+
 #[tokio::test]
 async fn free_text_is_a_turn_of_the_chat_session_and_the_answer_replaces_the_placeholder() {
     let r = paired();

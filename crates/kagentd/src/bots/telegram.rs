@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 
 
 use super::format;
-use super::settings::{Pairing, PairingCode};
+use super::settings::{Pairing, PairingCode, CODE_TTL};
 use super::telegram_api::{Clock, Keyboard, Markup, Message, RateLimiter, TelegramApi, Update};
 use super::BotAgent;
 
@@ -20,6 +20,11 @@ const TURNS_PER_MINUTE: usize = 3;
 pub const SESSION_TITLE: &str = "Telegram";
 /// How many sent cards a press may still refer to.
 const CARDS_KEPT: usize = 256;
+/// After this many wrong pairing codes the code is replaced and pairing is locked
+/// (bots.md section 2, decision of 2026-11-27).
+pub const WRONG_CODES: u32 = 5;
+/// How long pairing stays locked after `WRONG_CODES` wrong codes.
+pub const PAIRING_LOCK: Duration = Duration::from_secs(600);
 
 const WORKING: &str = "Working on it...";
 const NO_ANSWER: &str = "The agent gave no answer.";
@@ -93,6 +98,10 @@ struct Inner {
     /// The session of the chat: `None` until its first message and after `/new`.
     session: Option<String>,
     code: Option<PairingCode>,
+    /// Wrong pairing codes since the last lock or pairing.
+    wrong_codes: u32,
+    /// No code is checked before this time.
+    locked_until: Option<SystemTime>,
     turns: RateLimiter,
     /// By session: the turn the chat is waiting for.
     working: HashMap<String, Working>,
@@ -171,9 +180,14 @@ impl Bot {
     }
 
     /// A new pairing code; it replaces the one before.
+    /// While pairing is locked, the code is good for ten minutes from the end of the lock.
     pub fn ask_code(&self, now: SystemTime) -> PairingCode {
-        let code = PairingCode::new(now);
-        self.inner.lock().unwrap().code = Some(code.clone());
+        let mut code = PairingCode::new(now);
+        let mut inner = self.inner.lock().unwrap();
+        if let Some(until) = inner.locked_until.filter(|t| *t > now) {
+            code.expires_at = until + CODE_TTL;
+        }
+        inner.code = Some(code.clone());
         code
     }
 
@@ -184,6 +198,11 @@ impl Bot {
             inner.code = None;
         }
         inner.code.clone()
+    }
+
+    /// Until when pairing is locked after too many wrong codes, while it is.
+    pub fn pairing_locked_until(&self, now: SystemTime) -> Option<SystemTime> {
+        self.inner.lock().unwrap().locked_until.filter(|t| *t > now)
     }
 
     /// The offset of the next `getUpdates`: in memory, so a restart reads what Telegram still holds.
@@ -288,17 +307,36 @@ impl Bot {
         };
         let verdict = {
             let mut inner = self.inner.lock().unwrap();
+            let locked = inner.locked_until.is_some_and(|t| t > now);
             match inner.code.as_ref() {
+                // Locked: no code is looked at, not even the right one.
+                _ if locked => Verdict::Locked(inner.locked_until.unwrap_or(now)),
                 Some(waiting) if waiting.matches(&code, now) => {
                     // One use: it goes the moment it is right.
                     inner.code = None;
+                    inner.wrong_codes = 0;
+                    inner.locked_until = None;
                     Verdict::Right
                 }
                 Some(waiting) if waiting.expired(now) => {
                     inner.code = None;
                     Verdict::Expired
                 }
-                Some(_) => Verdict::Wrong,
+                Some(_) => {
+                    inner.wrong_codes += 1;
+                    if inner.wrong_codes >= WRONG_CODES {
+                        // The guesses so far count for nothing: a new code, good from the end of the lock.
+                        let until = now + PAIRING_LOCK;
+                        inner.wrong_codes = 0;
+                        inner.locked_until = Some(until);
+                        let mut fresh = PairingCode::new(now);
+                        fresh.expires_at = until + CODE_TTL;
+                        inner.code = Some(fresh);
+                        Verdict::Locked(until)
+                    } else {
+                        Verdict::Wrong
+                    }
+                }
                 None => Verdict::NoCode,
             }
         };
@@ -316,6 +354,11 @@ impl Bot {
                 tracing::info!(chat, "telegram: a wrong pairing code");
                 self.say(chat, "That pairing code is not right.").await;
             }
+            Verdict::Locked(until) => {
+                let minutes = until.duration_since(now).unwrap_or_default().as_secs().div_ceil(60).max(1);
+                tracing::warn!(chat, "telegram: pairing is locked after {WRONG_CODES} wrong codes");
+                self.say(chat, &format!("Too many wrong pairing codes. Pairing is locked for {minutes} min; then use the new code shown in Settings > Telegram.")).await;
+            }
             Verdict::Expired => self.say(chat, "That pairing code has expired. Ask for a new one in Settings > Telegram.").await,
             Verdict::NoCode => self.say(chat, "No pairing code is waiting. Click \"Show pairing code\" in Settings > Telegram.").await,
         }
@@ -326,6 +369,8 @@ impl Bot {
 enum Verdict {
     Right,
     Wrong,
+    /// Too many wrong codes: nothing is checked until this time.
+    Locked(SystemTime),
     Expired,
     /// No code was asked for.
     NoCode,
