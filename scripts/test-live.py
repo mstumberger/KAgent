@@ -14,7 +14,8 @@ Checks (voice.md section 10):
                session holds the turn; a stop phrase gives cancelled; a pending card
                answered by voice gives handled; the transcript is not stored twice; a
                call the server cancelled gets its reply as a [SAY] text turn.
-  cancellation toolCallCancellation for a call waiting on a card denies that card.
+  confirmation a live call that needs approval is asked out loud first (no card) and runs
+               after a spoken yes, its card answered by voice.
   auto mode    the tools declared to the live model.
 
 Usage: python3 scripts/test-live.py   (builds kagentd first)
@@ -260,20 +261,24 @@ async def routed(ws, conn, got):
     await until_message(ws, got, is_say, "the [SAY] text turn")
 
 
-async def cancel_waiting(ws, conn, got):
-    """live mode: the server cancels a tool call that waits on a card."""
+async def confirm_by_voice(ws, conn, got):
+    """live mode (voice.md section 12): a call that needs approval is asked out loud first,
+    raises no card, and runs after the owner's spoken yes, its card answered by voice."""
+    await call(ws, "c4", "system_info", {})
+    await until_message(ws, got, response("c4"), "the needs_confirmation answer of c4")
+    state["cards_after_c4"] = len(api("GET", "/api/state")["pendingApprovals"])
+    await hear(ws, "yes")
+    await asyncio.sleep(0.3)
     await call(ws, "c5", "system_info", {})
-    await wait_api(lambda s: s["pendingApprovals"], "the approval card of c5")
-    await send(ws, {"toolCallCancellation": {"ids": ["c5"]}})
-    await wait_api(lambda s: not s["pendingApprovals"], "the card of c5 denied")
-    await asyncio.sleep(0.5)
+    await until_message(ws, got, response("c5"), "the result of c5")
+    await asyncio.sleep(0.3)
 
 
 async def quiet(ws, conn, got):
     """Nothing is said: the test reads the setup and stops."""
 
 
-SCRIPTS = {"legacy": legacy, "routed": routed, "cancel": cancel_waiting, "auto": quiet, "nochat": quiet}
+SCRIPTS = {"legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
 
 
 async def fake_gemini(ws):
@@ -459,18 +464,21 @@ async def main():
                 and not any(c == SPOKEN for _, c, _, _ in stored),
         })
 
-        # ---------------------------------------------------------------- cancellation of a live tool call
+        # ---------------------------------------------------------------- spoken confirmation of a live tool call
         api("PUT", "/api/settings", {"voice": {"brain": "live"}})
-        session = api("POST", "/api/sessions", {"title": "cancel test"})["id"]
+        session = api("POST", "/api/sessions", {"title": "confirm test"})["id"]
         state["setups"].clear(); state["recv"].clear(); state["tool_responses"].clear()
-        await live_session(session, "cancel", wait_script)
+        await live_session(session, "confirm", wait_script)
         stored = messages(session)
-        # voice.md section 10, check 5
-        checks["toolCallCancellation for a call waiting on a card denies the card"] = (
-            any(role == "tool" and "cancelled: the user interrupted" in c for role, c, _, _ in stored)
-            and "c5" not in state["tool_responses"] and not api("GET", "/api/state")["pendingApprovals"])
-        # The words of a cancelled call are not spoken: nothing waits for its result.
-        checks["live: no result is sent for a call the server cancelled"] = "c5" not in state["tool_responses"]
+        asked = state["tool_responses"].get("c4", {})
+        # voice.md section 12
+        checks["live: a call that needs approval is asked out loud first, with no card"] = (
+            asked.get("status") == "needs_confirmation" and "Say yes to go ahead, or no." in asked.get("say", "")
+            and state.get("cards_after_c4") == 0)
+        checks["live: after a spoken yes the same call runs, its card answered by voice"] = (
+            state["tool_responses"].get("c5", {}).get("status") == "ok"
+            and any(role == "tool" and "denied" not in c for role, c, _, _ in stored)
+            and not api("GET", "/api/state")["pendingApprovals"])
 
         # ---------------------------------------------------------------- auto mode: the tool set
         api("PUT", "/api/settings", {"voice": {"brain": "auto"}})

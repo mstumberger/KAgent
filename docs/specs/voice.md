@@ -191,3 +191,39 @@ Talk to the widget in `routed` mode: a question that needs a tool ("what is my C
 temperature"), a follow-up that depends on the first answer, and "stop". The reply is
 spoken word for word; barge-in keeps the thinking running; the follow-up is answered
 with the earlier context.
+
+## 12. Spoken confirmation in `live` and `auto` (2026-11-27)
+
+Why: on 2026-11-27 the owner asked "How can we fix it?" in a `live` session and the live
+model called `system_power reboot` at once. The instruction's destructive sentence was
+ignored, the card appeared on the screen and a click allowed it. The owner wants to be
+told what will happen and to confirm by voice, in every permission mode.
+
+- `live/tool_call.rs`: before a declared tool runs, `Agent::approval_needed(session,
+  call)` asks the permission engine (no hooks, nothing runs). When it would ask, the call
+  does not run and raises no card. `live/confirm.rs` answers the model with
+  `{"status": "needs_confirmation", "say": "I want to do this: <summary>.[ This cannot be
+  undone; unsaved work may be lost.] Say confirm|yes to go ahead, or no.", "output": ...}`.
+  `confirm` is asked for root and destructive calls, `yes` for the others.
+- One question per session at a time, keyed by tool and exact arguments, good for 90 s.
+  Only the owner's own speech after the question answers it (`approve::classify_for`
+  with `strong` for root and destructive: a bare "yes" or a question never confirms a
+  reboot). The status line says "confirmed by voice" or "refused by voice".
+- The model calls the same tool with the same arguments again. Confirmed: the call runs
+  through `execute_call` and its card is answered by voice as soon as it appears
+  ("confirmed by voice before the call"). Refused: `{"status": "denied"}`. Not answered
+  yet, or other arguments: the question is asked (again).
+- The live and auto instructions get the `CONFIRM` sentence: say the `say` text word for
+  word, call again only after a confirmation, and never call an action that changes
+  the system because of a question.
+- `routed` is unchanged: the brain turn's cards are answered by voice as in section 2.
+- `full` still lets `always_ask` tools through without a card (hooks.md, browser.md),
+  so in `full` a voice `terminal send` runs without a question; destructive and root
+  calls ask.
+- Tests: `confirm.rs` (the reboot of 2026-11-27 asked and run only after "confirm"; one
+  confirmation runs one call; "no" refuses; an answer older than 90 s is asked again),
+  `instruction.rs` (the `CONFIRM` sentence in `live` and `auto`, not in `routed`).
+- `scripts/test-live.py`: the check "toolCallCancellation for a call waiting on a card"
+  of section 10 no longer has a case in `live` (a live call never waits on a card now)
+  and is replaced by two checks: the first call is asked out loud with no card, and
+  after a spoken yes the same call runs with its card answered by voice. Still 34.
