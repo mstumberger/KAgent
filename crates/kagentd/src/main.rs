@@ -378,7 +378,7 @@ async fn run() -> anyhow::Result<()> {
 
     let notifier = notify::Notifier::new();
     let bots = bots::Bots::daemon(agent.clone(), alerts.clone(), providers.clone(), settings_arc.clone(), &paths, events.clone()).await;
-    let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone()).await;
+    let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone(), web.clone()).await;
     let _ = calendar_cell.set(calendar.clone());
     calendar::change::register_undo(&calendar, &services);
     let state = Arc::new(AppState {

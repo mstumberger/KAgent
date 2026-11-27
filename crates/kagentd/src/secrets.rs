@@ -138,6 +138,8 @@ pub struct Slot {
 }
 
 pub const TELEGRAM: Slot = Slot { kind: TELEGRAM_KIND, id: TELEGRAM_ID, label: "KAgent Telegram bot", file: TELEGRAM_SECRET };
+/// The Google Maps key of the places lookup (calendar.md section 2).
+pub const MAPS: Slot = Slot { kind: "maps", id: "places", label: "KAgent Google Maps key", file: "maps.secret" };
 /// The calendar's OAuth record (calendar.md section 1): client secret and refresh token, one JSON text.
 pub const CALENDAR: Slot = Slot { kind: "calendar", id: "oauth", label: "KAgent Google Calendar", file: "calendar.json" };
 
