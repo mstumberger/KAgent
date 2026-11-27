@@ -105,8 +105,10 @@ pub fn update(store: &ProviderStore, settings: &Settings, id: &str, body: &Value
 /// models with role `chat`, `live` those with role `live`. Enabled models only.
 pub fn model_lists(store: &ProviderStore) -> Value {
     let mut out: BTreeMap<&str, Vec<Value>> = [("chat", Vec::new()), ("fast", Vec::new()), ("live", Vec::new()), ("vision", Vec::new())].into_iter().collect();
+    let names: BTreeMap<String, String> = store.providers().providers.into_iter().map(|(id, p)| (id, p.name)).collect();
     for (pid, model, config) in store.enabled_models() {
-        let view = || json!({"id": model.id, "name": model.name, "ref": format!("{pid}::{}", model.id), "config": config});
+        let provider_name = names.get(&pid).cloned().unwrap_or_else(|| pid.clone());
+        let view = || json!({"id": model.id, "name": model.name, "ref": format!("{pid}::{}", model.id), "providerId": pid, "providerName": provider_name, "config": config});
         if model.roles.iter().any(|r| r == "chat") {
             for role in ["chat", "fast", "vision"] {
                 out.get_mut(role).expect("a list above").push(view());
