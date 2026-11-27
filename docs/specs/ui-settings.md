@@ -8,15 +8,23 @@ become sections there, never new main tabs.
 
 ## 1. Main navigation
 
-- Header tabs, in order: `chat`, `voice`, `tasks`, `alerts`, `changes`, `security`,
-  `system`, `settings`. Text labels as today; `settings` also gets a gear icon
-  (`Icon.tsx`).
-- `providers` and `tools` stop being tabs. `#view=providers`, `#view=tools` and
+From S42 (`sidebar.md`) the navigation is the left sidebar, not a row of tabs.
+
+- The views, in order: `chat`, `voice`, `tasks`, `alerts`, `changes`, `security`,
+  `system`, `settings`. `chat` is the session list itself; the other seven are the rows
+  at the bottom of the sidebar (Voice, Tasks, Alerts with its badge, Changes, Security,
+  System, Settings), each with an icon and the open one `aria-current="page"`.
+- `providers` and `tools` are not views. `#view=providers`, `#view=tools` and
   `ui show {view: "providers"}` / `{view: "tools"}` open `settings` at the sections
   `models` and `tools`.
-- The tab list is defined once, in `web/src/nav.ts` (`VIEWS`), and used by `App.tsx`
-  and `diag.ts`. The daemon's allow-list (`ui.rs`, `VIEWS`) holds the same ids.
-- The widget layout (`views/Overlay.tsx`) is unchanged.
+- The list is defined once, in `web/src/nav.ts` (`VIEWS`), and used by `App.tsx`, the
+  sidebar and `diag.ts`. The daemon's allow-list (`ui.rs`, `VIEWS`) holds the same ids.
+- The header is a 36 px title bar (amendment of 2026-11-27): the sidebar toggle,
+  "KAgent", the notice line (until S43 gives it toasts), Stop all (only while a turn
+  runs), the voice chip and, in KAgent's own window, the window controls. The permission
+  mode and the theme are at the foot of the sidebar, above Settings.
+- The widget layout (`views/Overlay.tsx`) has no header and no sidebar; it has a Sessions
+  button that opens the list as a sheet (section 12).
 
 ## 2. Settings screen (`web/src/settings/SettingsPage.tsx`)
 
@@ -37,7 +45,7 @@ become sections there, never new main tabs.
 | Group | id | Title | Content | Stage |
 |---|---|---|---|---|
 | Basics | `general` | General | Persona (name, address, language); startup (start with session, greeting); start as widget (`startWidget`); root helper status and privilege method | S19 |
-| Basics | `appearance` | Appearance | Theme: auto (follows the system's light or dark setting; the default when the browser has no choice stored), dark or light. The header toggle stays and picks dark or light. The page carries the theme in use as `data-theme` and the choice as `data-theme-pref` (`web/src/theme.ts`; v0.0.2) | S19 |
+| Basics | `appearance` | Appearance | Theme: auto (follows the system's light or dark setting; the default when the browser has no choice stored), dark or light. The switch at the foot of the sidebar goes through light, dark and auto. The page carries the theme in use as `data-theme` and the choice as `data-theme-pref` (`web/src/theme.ts`; v0.0.2) | S19 |
 | Basics | `models` | Models | The Providers page as it is (provider list, catalog, models, roles) plus "Roles" (fallback, vision, fast) and "Advanced" (reasoning level, max output tokens, temperature, max iterations, approval timeout) | S19 |
 | Basics | `voice` | Voice | Live model, voice, pause media; brain and context from S26 | S19 |
 | Basics | `browser` | Browser | Backend, port, binary; attach controls from S27 | S19 |
@@ -187,3 +195,44 @@ Spec: `picker.md`. (The number is 11, not 10: S45 took 10.)
 - Verified by `scripts/test-picker-web.py` (with `scripts/picker_web_lib.py`): a real daemon behind
   a proxy that mocks the model and session routes, headless Chrome, dark and light at 1200x820,
   700x500 and the widget size 340x460, screenshots in `/tmp/kagent-s41-shots/`.
+
+## 12. The left sidebar (S42)
+
+Spec: `sidebar.md` (its section 5 is this section; the amendment of 2026-11-27 wins where
+they differ). The number is 12, not 11: S41 took 11.
+
+- Frame: `App.tsx` has `header`, then `.shell` with `components/Sidebar.tsx` and `main`. The
+  sidebar is 240 px expanded or a 48 px rail from 900 px of width (remembered:
+  localStorage `kagent.sidebar` = `{view, collapsed, closed}`); below 900 px it is a
+  drawer over `main` inside `.shell` (280 px at most, z-index 15, a scrim, Escape and a
+  click on the scrim close it, the focus goes into it and back to the toggle). The toggle
+  is the first control of the header (`aria-expanded`, `aria-controls="sidebar"`).
+- From the top: New session; Search sessions (title or folder; Escape clears; the result
+  is flat, each row with its folder's name first); Projects | Recent; the list; the views;
+  and, above Settings, the foot. The list scrolls and the rest does not; in a window under
+  620 px high the views tighten and the sidebar scrolls before the list shrinks away.
+- Projects: Pinned, a section per folder (name, count, chevron; closed ones are
+  remembered; a `+` on hover and focus starts a session in that folder), then This
+  machine. Recent: Today, Yesterday, Previous 7 days, Previous 30 days, Older (calendar
+  days, local time). A row is a 32 px button (pin, title, "N agents", a pulsing dot while
+  a turn runs) with a `...` button (hover, focus, the open row) and a right click that
+  open the same menu (`components/Menu.tsx`): Pin or Unpin, Attach or Change folder...,
+  Detach folder, Delete. "Attach folder..." is a popup (`AttachMenu.tsx`): a path field and
+  the projects of `GET /api/projects`; a refusal shows under the field.
+- Keys: Up, Down, Home and End move among the headings of folders and the rows; Enter and
+  Space act; the `+` and the `...` come after their heading or row in the tab order.
+- `/project <path>` in the composer attaches a folder (`/project` alone detaches); the
+  notice says the result or the daemon's refusal.
+- Foot: the permission mode as a full-width row (dot, name, chevron) with its menu above it,
+  and the theme as an icon button (light, dark, auto, in that order). In the rail: the dot
+  (the mode in its title, its menu on the right) and the theme icon.
+- Widget: the Sessions sheet holds New session, the search, the switch, the list and the
+  seven views (no foot: the widget keeps its own permission select). A view expands the
+  window and opens it.
+- Files: `components/Sidebar.tsx`, `sidebar/` (`SessionList`, `SessionRow`, `AttachMenu`,
+  `sections.ts`, `store.ts`, `prefs.ts`, `useNarrow.ts`), `sidebar.css`, `sidebar-foot.css`,
+  `Menu.tsx`, `ThemeSwitch.tsx`; the session types moved to `sessionApi.ts`, and the daemon's
+  events and the start of the window to `storeEvents.ts`.
+- Verified by `scripts/test-sidebar-web.py` (with `scripts/picker_web_lib.py`): 162 checks in
+  headless Chrome, dark and light at 1200x820, 700x500 and 340x460, screenshots in
+  `/tmp/kagent-s42-shots/`.

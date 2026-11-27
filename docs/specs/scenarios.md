@@ -520,6 +520,43 @@ lists under "Tests".
 Items 4 to 7 are `scripts/test-picker-web.py` (103 checks, with the keyboard and mouse rules
 of `picker.md` section 5.3). Item 8 is the owner's.
 
+## S42 left sidebar and projects
+Spec: `sidebar.md` section 7 and its amendment of 2026-11-27. Items 1 to 4 are `[auto]`.
+1. **[auto]** `project_api.rs`: each refusal of section 3 with its message (the shape of the
+   body, a relative path, a folder that is not there, KAgent's own folder, both filters, the
+   404, the two 409); `~` is expanded and the canonical path (a link is resolved) is stored;
+   detach; pin and unpin; the event when something changed and none when nothing did;
+   `GET /api/projects` (the markers, `agentsMd`, the roots); the list of a folder.
+2. **[auto]** `agent/project.rs` and `tests/project.rs`: the block with and without
+   `AGENTS.md`; the cut at 4000 characters; a link to a credential file gives none; a missing
+   file and a folder named `AGENTS.md` give none; a session without a folder has no block.
+3. **[auto]** Scripted model: every request of a session with a folder carries the block and
+   one without does not; a folder attached or detached between turns is in the next turn only;
+   a child of a session with a folder has the folder in its meta and the block after its job's
+   block. (`coder_run` and `start_coder` are phase 5, not in the tree: `coders.md` says it.)
+4. **[auto]** The fields round-trip under `project` and `pinned`; a meta from before S42 loads
+   with `None` and `false`.
+5. Headless Chrome (dark and light, 1200x820): no tab row; the sidebar lists the seven views
+   and a click opens one; Projects | Recent; pinned on top, a group per folder, This machine
+   last; the rail; the state, the view and the closed folders survive a reload.
+6. Headless at 700x500: the sidebar is a drawer; the toggle, Escape and a click on the scrim
+   close it; the focus comes back to the toggle; a row and a view close it.
+7. Headless: Attach folder lists the projects and attaches one with one PUT; a typed path that
+   is not a folder shows the daemon's message and stays; Detach folder and `/project` alone
+   detach; `/project <path>` attaches; New session in this project sends one POST with
+   `project`; pin and unpin move the row; the search finds a title and a folder; the keyboard.
+8. Headless, in the widget (340x460): the sessions sheet opens; a session opens from it and the
+   sheet closes; a view expands the window; the row menu works in the sheet.
+9. Headless, the amendment: the header is 36 px and holds exactly the toggle, KAgent, Stop all,
+   the voice chip and the window controls; the permission mode changes from the foot of the
+   sidebar in the full, the collapsed and the drawer state; the theme button goes through
+   light, dark and auto; the keyboard order is the toggle, Stop all, the voice chip (the window
+   controls in the app window), then the sidebar.
+10. The owner, live: attach a folder that has an `AGENTS.md` and ask "what are the rules of
+    this project": the answer quotes them.
+
+Items 5 to 9 are `scripts/test-sidebar-web.py` (162 checks).
+
 ## S44 settings by voice and the voice rules
 Spec: `voice-control.md` section 7. Items 1 to 7 are `[auto]`; the last two are the owner's.
 1. **[auto]** `settings get` masks the secrets; `models` lists the refs and the jobs
