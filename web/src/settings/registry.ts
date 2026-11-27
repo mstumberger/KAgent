@@ -17,6 +17,7 @@ import Subagents from "./sections/Subagents";
 import Hooks from "./sections/Hooks";
 import TasksSection from "./sections/Tasks";
 import Telegram from "./sections/Telegram";
+import CalendarSection from "./sections/Calendar";
 
 export type SectionGroup = "Basics" | "Agent capabilities" | "Channels";
 
@@ -156,6 +157,15 @@ export const SECTIONS: Section[] = [
     keywords: ["tasks", "automations", "schedule", "timeout", "time limit", "deliver", "approval", "max concurrent", "cron"],
     icon: "bell",
     component: TasksSection,
+  },
+  {
+    id: "calendar",
+    title: "Calendar",
+    group: "Agent capabilities",
+    description: "Google Calendar: what KAgent may see and add, places for events, and the morning report.",
+    keywords: ["calendar", "google", "events", "meeting", "schedule", "oauth", "maps", "places", "morning report", "koledar"],
+    icon: "calendar",
+    component: CalendarSection,
   },
   {
     id: "hooks",

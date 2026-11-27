@@ -157,6 +157,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/telegram/pairing-code", post(crate::bots::http::pairing_code))
         .route("/telegram/pairing", delete(crate::bots::http::unpair))
         .route("/telegram/test", post(crate::bots::http::test_message))
+        .route("/calendar", get(crate::calendar::http::get))
+        .route("/calendar/client", put(crate::calendar::http::put_client))
+        .route("/calendar/connect", post(crate::calendar::http::connect))
+        .route("/calendar/disconnect", post(crate::calendar::http::disconnect))
+        .route("/calendar/maps-key", put(crate::calendar::http::put_maps_key))
+        .route("/calendar/maps-test", post(crate::calendar::http::maps_test))
+        .route("/calendar/report", post(crate::calendar::http::report))
         .route("/web/brave-key", get(crate::web::http::get_key).put(crate::web::http::put_key).delete(crate::web::http::delete_key))
         .route("/agents", get(crate::subagents::http::list))
         .route("/agents/{name}", put(crate::subagents::http::put_profile).delete(crate::subagents::http::delete))
@@ -167,7 +174,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/widgets/{session}/{id}", get(crate::widgets::get_widget))
         .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
 
+    // The one calendar route without the bearer token: Google sends the owner's browser here
+    // (calendar.md section 1). It takes a known `state` and a loopback peer only.
     let app = Router::new()
+        .route("/api/calendar/oauth/callback", get(crate::calendar::http::callback))
         .nest("/api", api_routes)
         .route("/ws", any(ws::ws_handler))
         .route("/live", any(crate::live::ws_live));
@@ -205,7 +215,7 @@ pub async fn serve(state: Arc<AppState>) -> anyhow::Result<()> {
     } else {
         println!("open http://127.0.0.1:7878/ (the token is in KAgent's config folder, file `token`)");
     }
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).with_graceful_shutdown(shutdown_signal()).await?;
     Ok(())
 }
 

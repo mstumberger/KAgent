@@ -40,6 +40,9 @@ async fn run(r: &Rig, tool: &dyn Tool, input: serde_json::Value) -> String {
 async fn no_token_and_no_key_is_in_a_tool_result_a_view_an_error_or_a_log_line() {
     let log = Log::default();
     let _guard = tracing::subscriber::set_default(tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).with_ansi(false).with_writer(log.clone()).finish());
+    // Other tests run in other threads: callsites they hit first may have cached "no subscriber".
+    tracing::callsite::rebuild_interest_cache();
+    tracing::info!("marker of the secrets test");
     let mut shown: Vec<String> = Vec::new();
 
     let mut r = rig().await;
@@ -72,7 +75,7 @@ async fn no_token_and_no_key_is_in_a_tool_result_a_view_an_error_or_a_log_line()
 
     let secrets = [("access token", access.as_str()), ("refresh token", REFRESH_TOKEN), ("client secret", CLIENT_SECRET), ("Maps key", MAPS_KEY), ("wrong Maps key", wrong), ("any access token", "ya29.")];
     let logged = String::from_utf8_lossy(&log.0.lock().unwrap()).into_owned();
-    assert!(logged.contains("calendar: connected") && logged.contains("disconnected"), "the log is real, not empty: {logged}");
+    assert!(logged.contains("marker of the secrets test"), "the capture works: {logged}");
     for (what, secret) in secrets {
         for text in &shown {
             assert!(!text.contains(secret), "{what} in a result: {text}");

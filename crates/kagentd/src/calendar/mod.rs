@@ -4,11 +4,9 @@
 //! only) and the settings it saves. `oauth.rs` speaks to Google's sign-in and `settings.rs`
 //! holds the section.
 
-// Until the routes and the tools use all of it (the last commits of S45), parts are unused.
-#![allow(dead_code)]
-
 pub mod change;
 pub mod google;
+pub mod http;
 pub mod model;
 pub mod oauth;
 pub mod places;

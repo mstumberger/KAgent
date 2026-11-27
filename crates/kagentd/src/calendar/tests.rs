@@ -4,6 +4,7 @@
 mod change;
 mod connection;
 mod google;
+mod http;
 mod places;
 mod report;
 mod secrets;
