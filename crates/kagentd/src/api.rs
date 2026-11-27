@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use kagent_core::agent::SendOutcome;
 use kagent_core::permission::ApprovalDecision;
-use kagent_core::protocol::{AgentEvent, Via};
+use kagent_core::protocol::Via;
 use kagent_core::tools;
 
 use crate::server::{bad_request, not_found, ApiResult, HttpError};
@@ -21,7 +21,7 @@ mod providers;
 pub use providers::{
     add_provider, delete_provider, fetch_models, list_models, list_providers, provider_order, provider_templates, test_provider, update_provider,
 };
-pub(crate) use providers::named_models;
+pub(crate) use providers::{check_model_roles, named_models};
 
 fn ok_json(v: Value) -> Response {
     (StatusCode::OK, Json(v)).into_response()
@@ -51,43 +51,10 @@ pub async fn get_state(State(st): State<Arc<AppState>>) -> ApiResult<Response> {
 }
 
 pub async fn put_settings(State(st): State<Arc<AppState>>, Json(patch): Json<Value>) -> ApiResult<Response> {
-    // A model must have the role of the job it is given (models.md section 4).
-    providers::check_model_roles(&st.providers, &patch)?;
-    let wants_autostart = patch.get("startup").and_then(|v| v.get("autostart")).and_then(Value::as_bool);
-    {
-        let mut s = st.settings.write().unwrap();
-        s.patch(patch).map_err(bad_request)?;
-        st.agent.permissions().set_mode(s.permission_mode);
-        st.agent.permissions().set_rules(s.rules.clone());
-        st.agent.permissions().set_overrides(crate::settings::parse_overrides(&s.tool_overrides));
-        st.agent.set_tool_groups(Some(s.tool_groups.clone()));
-        *st.services.desktop.write().unwrap() = s.desktop_prefs();
-        if let Some(q) = s.extra.get("watchers").and_then(|w| w.get("quietHours")).and_then(Value::as_str) {
-            st.alerts.set_quiet_hours(q);
-        }
-        s.save(&crate::paths::Paths::resolve().settings()).map_err(internal)?;
-        if let Some(want) = wants_autostart {
-            if want != s.startup.autostart {
-                return Err(bad_request("startup.autostart patch did not apply"));
-            }
-        }
-    }
-    // At most `subagents.maxConcurrent` subagents run at once (agents.md section 2).
-    let max_children = st.settings.read().unwrap().subagents_config().max_concurrent;
-    st.agent.set_max_concurrent_children(max_children as usize).await;
-    // Apply the systemd user unit change outside the settings lock (spawns
-    // systemctl; slow paths must never hold the lock).
-    if let Some(want) = wants_autostart {
-        tokio::task::spawn_blocking(move || crate::startup::apply_requested(want));
-    }
-    let settings = st.settings.read().unwrap().clone();
-    let _ = st.events.send(AgentEvent::SettingsChanged {
-        settings: serde_json::to_value(&settings).unwrap_or(Value::Null),
-    });
-    Ok(ok_json(serde_json::to_value(settings).unwrap_or(Value::Null)))
+    Ok(ok_json(crate::settings_apply::apply(&st, patch).await?))
 }
 
-fn internal(e: anyhow::Error) -> HttpError {
+pub(crate) fn internal(e: anyhow::Error) -> HttpError {
     HttpError(StatusCode::INTERNAL_SERVER_ERROR, "internal", format!("{e:#}"))
 }
 
