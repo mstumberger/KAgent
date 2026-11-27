@@ -46,6 +46,14 @@ and section G for owner actions).
 | `docs/specs/agents.md` | subagents and background tasks (S31) |
 | `docs/specs/hooks.md` | hooks (S32) |
 | `docs/specs/widgets.md` | inline HTML widgets (S33) |
+| `docs/specs/voice-control.md` | the `settings` tool, voice and volume by voice, calls from voice (S44) |
+| `docs/specs/calendar.md` | Google Calendar, places, the morning report (S45) |
+| `docs/specs/notices.md` | notices as toasts (with S43) |
+| `docs/specs/vision.md` | images in chat, "look at my screen" in voice (S46) |
+| `docs/specs/local-models.md` | recommended local models and their download (S47) |
+| `docs/specs/screen-watch.md` | screen watch (S48) |
+| `docs/milestones/v0.0.2.md` | the current milestone: scope, order, open items |
+| `GLOSSARY.md` | the project's words (Owner, Brain, Watcher, Screen watch...) |
 | `docs/PLAN.md` | product background; read only when a stage says so |
 | `plasmoid/org.kde.kagent.voice/` | KDE Plasma 6 widget (QML): voice waveform from `/api/voice/levels`, alert badge |
 | `app/` | Tauri shell (separate cargo workspace; needs GTK/WebKit dev headers) |

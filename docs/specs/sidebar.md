@@ -504,3 +504,23 @@ Scenarios: `scenarios.md` S42.
 - `coders.md` section 2 (the child inherits the folder) and section 4 (the default
   `project` of `coder_run`).
 - `scenarios.md`: S42 (section 7).
+
+## Amendment 2026-11-27: the header becomes a title bar (owner's decision)
+
+Milestone v0.0.2, item 5. This overrides the header layout of section 5 where they
+differ.
+
+- The header keeps only: the sidebar toggle, "KAgent", Stop all, the voice chip (and
+  the screen watch chip of `screen-watch.md`), and the window controls. Its height
+  drops to 36 px; it stays the drag area of the frameless window.
+- The permission picker and the theme switch move to the foot of the sidebar, above
+  the Settings entry: the permission picker as a full-width row (its dot, the mode's
+  name, the same menu, the same `PUT /api/settings`), the theme as an icon button
+  beside it (light, dark, auto). In the collapsed rail: the permission dot (its
+  `title` is the mode; a click opens the menu to the right) and the theme icon.
+- The notice line of the header goes (`notices.md`: toasts).
+- The widget layout (340 px) is unchanged: it has no header and no sidebar; the
+  permission picker stays in its sheet.
+- Headless check, added to the S42 scenarios: the header holds exactly those five
+  things; the permission mode changes from the sidebar foot in the full and the
+  collapsed state; the keyboard order is toggle, Stop all, voice chip, then the sidebar.
