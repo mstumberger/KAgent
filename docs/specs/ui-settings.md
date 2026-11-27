@@ -37,7 +37,7 @@ become sections there, never new main tabs.
 | Group | id | Title | Content | Stage |
 |---|---|---|---|---|
 | Basics | `general` | General | Persona (name, address, language); startup (start with session, greeting); start as widget (`startWidget`); root helper status and privilege method | S19 |
-| Basics | `appearance` | Appearance | Theme: dark or light (the header toggle stays) | S19 |
+| Basics | `appearance` | Appearance | Theme: auto (follows the system's light or dark setting; the default when the browser has no choice stored), dark or light. The header toggle stays and picks dark or light. The page carries the theme in use as `data-theme` and the choice as `data-theme-pref` (`web/src/theme.ts`; v0.0.2) | S19 |
 | Basics | `models` | Models | The Providers page as it is (provider list, catalog, models, roles) plus "Roles" (fallback, vision, fast) and "Advanced" (reasoning level, max output tokens, temperature, max iterations, approval timeout) | S19 |
 | Basics | `voice` | Voice | Live model, voice, pause media; brain and context from S26 | S19 |
 | Basics | `browser` | Browser | Backend, port, binary; attach controls from S27 | S19 |
@@ -48,10 +48,12 @@ become sections there, never new main tabs.
 | Agent capabilities | `memory` | Memory | `memory.md` section 7 | S25 |
 | Agent capabilities | `agents` | Subagents | Profiles and concurrency (`agents.md`) | S31 |
 | Agent capabilities | `tools` | Tools and permissions | Permission mode, always-allow rules, per-tool overrides, tool groups for chat and for MCP, the contracts table (today's Tools view) | S19 |
+| Agent capabilities | `tasks` | Automations | The defaults of `settings.tasks`: approval policy, delivery, time limit (`timeoutMin`), runs at once (`maxConcurrent`) | v0.0.2 |
 | Agent capabilities | `hooks` | Hooks | `hooks.md` section 7 | S32 |
 | Channels | `telegram` | Telegram | `bots.md` section 7 | S29 |
 
-- Automations have no section: the Tasks tab is their screen (`automations.md`).
+- The tasks themselves are in the Tasks tab (`automations.md`); the `tasks` section holds
+  only the defaults of `settings.tasks` (decision of 2026-11-27).
 - The registry is `web/src/settings/registry.ts`:
   `SECTIONS: {id, title, group, description, keywords, component}[]`. The menu, the
   deep-link check and the render switch all come from it. A new section is one file

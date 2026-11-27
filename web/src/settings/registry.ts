@@ -15,6 +15,7 @@ import Memory from "./sections/Memory";
 import Tools from "./sections/Tools";
 import Subagents from "./sections/Subagents";
 import Hooks from "./sections/Hooks";
+import TasksSection from "./sections/Tasks";
 import Telegram from "./sections/Telegram";
 
 export type SectionGroup = "Basics" | "Agent capabilities" | "Channels";
@@ -52,8 +53,8 @@ export const SECTIONS: Section[] = [
     id: "appearance",
     title: "Appearance",
     group: "Basics",
-    description: "Dark or light.",
-    keywords: ["theme", "dark", "light", "colours"],
+    description: "Dark, light, or as the system is set.",
+    keywords: ["theme", "dark", "light", "auto", "system", "colours"],
     icon: "contrast",
     component: Appearance,
   },
@@ -146,6 +147,15 @@ export const SECTIONS: Section[] = [
     keywords: ["subagent", "agent", "profile", "background", "parallel", "explore", "task", "max concurrent"],
     icon: "talk",
     component: Subagents,
+  },
+  {
+    id: "tasks",
+    title: "Automations",
+    group: "Agent capabilities",
+    description: "What a scheduled task does when it does not say: approvals, where the result goes, its time limit, and how many run at once.",
+    keywords: ["tasks", "automations", "schedule", "timeout", "time limit", "deliver", "approval", "max concurrent", "cron"],
+    icon: "bell",
+    component: TasksSection,
   },
   {
     id: "hooks",

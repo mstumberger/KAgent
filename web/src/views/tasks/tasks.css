@@ -63,6 +63,14 @@
 .task-policy select {
   min-width: 190px;
 }
+.task-timeout-row {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.task-timeout {
+  width: 80px;
+}
 
 /* ---- the history of a row */
 .task-history {
