@@ -1,5 +1,5 @@
 // What the tickets view knows about states, priorities and how a list is grouped (tickets.md section 6).
-import type { Priority, Ticket, TState } from "./api";
+import type { Link, Priority, Ticket, TState } from "./api";
 
 /** The columns of the board, in order. */
 export const STATES: TState[] = ["backlog", "todo", "in_progress", "in_review", "done", "dropped"];
@@ -74,4 +74,15 @@ export function storeMode(mode: Mode) {
   } catch {
     // no storage: not remembered
   }
+}
+
+/** `from` and `to` of the first range or commit link; none for a ticket without one. */
+export function rangeOf(links: Link[]): { from: string; to?: string } | null {
+  const range = links.find((l) => l.kind === "range");
+  if (range) {
+    const [from, to] = range.value.split("..");
+    return to === undefined ? { from } : { from, to };
+  }
+  const commit = links.find((l) => l.kind === "commit");
+  return commit ? { from: `${commit.value}^`, to: commit.value } : null;
 }

@@ -1,0 +1,55 @@
+/* The diff view (diff.md section 5): tokens of styles/base.css, so dark and light both work. A sign in the gutter carries the
+   meaning of a line; the colour only adds to it. */
+.diffview { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--rim); border-radius: 10px; background: var(--glass); overflow: hidden; font-size: 12.5px; }
+.dv-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--rim); }
+.dv-bar .spacer, .dv-filehead .spacer { flex: 1; }
+.dv-switch { display: inline-flex; border: 1px solid var(--rim); border-radius: 8px; overflow: hidden; }
+.dv-switch button { border: 0; border-radius: 0; background: transparent; padding: 4px 10px; }
+.dv-switch button[aria-pressed="true"] { background: color-mix(in srgb, var(--ice) 18%, transparent); }
+.dv-pos { color: var(--dim); }
+.dv-plus { color: var(--ok); }
+.dv-minus { color: var(--bad); }
+.dv-empty { padding: 14px; color: var(--dim); }
+.dv-body { display: flex; min-height: 0; flex: 1; max-height: 70vh; }
+.dv-tree { width: 220px; flex-shrink: 0; overflow: auto; border-right: 1px solid var(--rim); padding: 6px 4px; }
+.dv-tree ul { list-style: none; margin: 0; padding-left: 12px; }
+.dv-tree > ul { padding-left: 0; }
+.dv-dir { color: var(--dim); padding: 2px 6px; font-size: 12px; }
+.dv-file { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; padding: 3px 6px; text-align: left; border-radius: 6px; }
+.dv-file[aria-current="true"] { background: color-mix(in srgb, var(--ice) 14%, transparent); }
+.dv-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-counts { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.dv-mark { font-family: ui-monospace, monospace; font-size: 11px; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid currentColor; flex-shrink: 0; }
+.dv-mark.st-added { color: var(--ok); }
+.dv-mark.st-deleted { color: var(--bad); }
+.dv-mark.st-modified { color: var(--ice); }
+.dv-mark.st-renamed { color: var(--signal); }
+.dv-files { flex: 1; min-width: 0; overflow: auto; }
+.dv-filebox { border-bottom: 1px solid var(--rim); }
+.dv-filehead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--glass-2); position: sticky; top: 0; z-index: 1; }
+.dv-path { font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-summary { padding: 8px 12px; color: var(--dim); }
+.dv-hunkhead { padding: 2px 10px; color: var(--dim); background: color-mix(in srgb, var(--ice) 6%, transparent); font-family: ui-monospace, monospace; font-size: 11.5px; }
+.dv-gap { display: flex; align-items: center; gap: 10px; padding: 3px 12px; color: var(--dim); background: var(--glass-2); font-size: 12px; }
+.dv-gap button { padding: 1px 8px; font-size: 12px; }
+.dv-hint { opacity: 0.8; }
+.dv-block { font-family: ui-monospace, monospace; }
+.dv-row { display: grid; align-items: stretch; }
+.dv-block.side .dv-row { grid-template-columns: 44px minmax(0, 1fr) 44px minmax(0, 1fr); }
+.dv-block.unified .dv-row { grid-template-columns: 44px 44px minmax(0, 1fr); }
+.dv-num { text-align: right; padding: 0 6px; color: var(--dim); user-select: none; font-size: 11.5px; border: 0; background: transparent; border-radius: 0; font-family: inherit; }
+button.dv-open { cursor: pointer; }
+button.dv-open:hover { color: var(--ice); text-decoration: underline; }
+.dv-text { white-space: pre-wrap; word-break: break-all; padding: 0 6px; display: flex; gap: 6px; min-width: 0; }
+.dv-sign { width: 8px; flex-shrink: 0; color: var(--dim); }
+.dv-code { flex: 1; min-width: 0; }
+.dv-text.empty { background: color-mix(in srgb, var(--dim) 8%, transparent); }
+.dv-text.k-add { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.dv-text.k-del { background: color-mix(in srgb, var(--bad) 16%, transparent); }
+.dv-text.k-add .dv-sign { color: var(--ok); }
+.dv-text.k-del .dv-sign { color: var(--bad); }
+.dv-intra { color: inherit; border-radius: 2px; }
+.k-add .dv-intra { background: color-mix(in srgb, var(--ok) 42%, transparent); }
+.k-del .dv-intra { background: color-mix(in srgb, var(--bad) 42%, transparent); }
+.dv-row.current { outline: 2px solid var(--ice); outline-offset: -2px; }
+@media (max-width: 900px) { .dv-tree { width: 150px; } }
