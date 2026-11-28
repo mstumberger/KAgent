@@ -24,6 +24,14 @@ source of truth for names, input schemas, per-call assessment and output format.
   privileged, concurrency_safe, risk, summary, rule_key`. Columns below:
   RO = `CallAssessment::as_read_only()`; MUT = mutating (needs approval, not
   concurrency safe); PRIV = privileged (always asks, never satisfied by a rule).
+- **Origin of a call** (`permission::Origin`, v0.0.3): `chat`, `voice` (`voice-control.md`
+  section 4) or `agent`, a call of an outside coding agent through `kagentd mcp`
+  (`POST /api/tools/:name/call`, session `mcp`). For `agent` the engine decides in this
+  order: a `deny` override refuses; a read-only call runs (an `ask` override asks); read-only
+  mode refuses; plan mode and `destructive` as for any call; then every other call ASKS, in
+  every mode including `trusted` and `full`. No stored rule, session allowance or `allow`
+  override satisfies it. Its card has `canRemember: false`, its summary starts
+  "Outside agent (MCP): ", and its audit record has `origin: "agent"` (`config.md` section 6).
 - **Privileged execution** goes only through the root helper (`priv-ops.md`), never
   through `exec(...).privileged(true)` with arbitrary argv. Exception: `shell` with
   `sudo=true` (PRIV, always asks, shows the exact command).

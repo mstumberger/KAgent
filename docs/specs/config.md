@@ -59,6 +59,10 @@ All writes of JSON config are atomic (tmp + rename) and keep mode 0600.
 - `permissionMode`: `read-only | ask | trusted`. `privilege`: `sudo | pkexec | none`.
 - `toolOverrides`: tool -> `allow | ask | deny` (applied after mode, before rules;
   never relaxes PRIV/always_ask).
+- `mcpToolGroups`: the tool groups `kagentd mcp` lists and `POST /api/tools/:name/call` runs
+  (empty: the five above). The check applies to every call of that route, whatever the body
+  says (v0.0.3). Whatever the group, a call of an outside agent that is not read-only asks in
+  every permission mode and is satisfied by no stored rule (`tools.md` section 0).
 - `desktop.editor`: `""` (auto) or `vscode|kate|kwrite|idea|pycharm|webstorm|phpstorm|clion|studio|zed`
   (spoken names like "VS Code" accepted); unknown names rejected with 400.
   `desktop.projectRoots`: folders whose children are projects; empty = built-in list.
@@ -193,6 +197,9 @@ them, they are in the message line.
  "prev": "<hash of seq 11>", "hash": "<sha256 hex>"}
 ```
 - `kind`: `toolCall | approval | change | undo | alert | containment | start | stop`.
+- A `toolCall` record's `data` carries `origin` (v0.0.3): `chat`, `voice` or `agent` (a call
+  of an outside agent through MCP, session `mcp`). The `approval` record's `via` is as
+  before; the card of an `agent` call has a summary that starts "Outside agent (MCP): ".
 - An `approval` record's `data`: `{requestId, tool, summary, decision, via}`; `via` says
   how the card was answered (v0.0.2): `click` (the web UI or the API, also Cancel plan),
   `voice`, `telegram`, `rule` (a policy, such as a task's `onApproval: deny`), `timeout`

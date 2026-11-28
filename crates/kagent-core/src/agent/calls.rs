@@ -101,6 +101,12 @@ impl Agent {
         self.execute_call_from(session_id, turn_id, call, cancel, privilege, origin).await
     }
 
+    /// One call of an outside agent (the MCP server): `Origin::Agent` (permission.rs), its card is never
+    /// rememberable and says where the call comes from, and its audit record carries the origin.
+    pub async fn execute_agent_call(&self, session_id: &str, call: &ToolCall, cancel: &CancellationToken, privilege: PrivilegeMethod) -> (Message, ToolCallStatus) {
+        self.execute_call_from(session_id, session_id, call, cancel, privilege, Origin::Agent).await
+    }
+
     pub(super) async fn execute_call_from(
         &self,
         session_id: &str,
@@ -113,7 +119,7 @@ impl Agent {
         let started = Instant::now();
         let Some(tool) = self.tools.get(&call.name) else {
             let msg = format!("unknown tool '{}'. Available: {}", call.name, self.tool_names_for(session_id));
-            return self.finish(session_id, turn_id, call, ToolCallStatus::Error, msg, started, "unknown tool".into());
+            return self.finish(session_id, turn_id, call, ToolCallStatus::Error, msg, started, "unknown tool".into(), origin);
         };
         if !self.tool_enabled(&call.name) {
             let msg = format!(
@@ -122,7 +128,7 @@ impl Agent {
                 crate::tools::group_of(&call.name),
                 self.tool_names_for(session_id)
             );
-            return self.finish(session_id, turn_id, call, ToolCallStatus::Denied, msg, started, "disabled tool".into());
+            return self.finish(session_id, turn_id, call, ToolCallStatus::Denied, msg, started, "disabled tool".into(), origin);
         }
         let contract = tool.contract().clone();
         let input = normalize_input(&contract.input_schema, call.input.clone());
@@ -134,7 +140,7 @@ impl Agent {
         // What a subagent's profile takes (agents.md section 2): enforced here, when the
         // call runs, so a tool the model remembered from elsewhere is refused too.
         if let Some(reason) = self.child_refusal(session_id, &call.name, &assessment) {
-            return self.finish(session_id, turn_id, &call, ToolCallStatus::Denied, format!("not executed: {reason}"), started, assessment.summary);
+            return self.finish(session_id, turn_id, &call, ToolCallStatus::Denied, format!("not executed: {reason}"), started, assessment.summary, origin);
         }
         let _ = self.events.send(AgentEvent::ToolCallStarted {
             session_id: session_id.into(),
@@ -145,12 +151,12 @@ impl Agent {
             summary: assessment.summary.clone(),
         });
         if cancel.is_cancelled() {
-            return self.finish(session_id, turn_id, &call, ToolCallStatus::Cancelled, "cancelled by user before running".into(), started, assessment.summary);
+            return self.finish(session_id, turn_id, &call, ToolCallStatus::Cancelled, "cancelled by user before running".into(), started, assessment.summary, origin);
         }
         let issues = validate_schema(&contract.input_schema, &call.input);
         if !issues.is_empty() {
             let msg = format!("invalid input for {}: {}. Fix the arguments and call again.", call.name, issues.join("; "));
-            return self.finish(session_id, turn_id, &call, ToolCallStatus::Error, msg, started, assessment.summary);
+            return self.finish(session_id, turn_id, &call, ToolCallStatus::Error, msg, started, assessment.summary, origin);
         }
 
         // Hooks (hooks.md sections 1 and 4): `PreToolUse` after the schema check and before
@@ -165,7 +171,7 @@ impl Agent {
                 }
                 HookRefusal::Invalid(msg) => (ToolCallStatus::Error, msg),
             };
-            return self.finish(session_id, turn_id, &call, status, msg, started, assessment.summary);
+            return self.finish(session_id, turn_id, &call, status, msg, started, assessment.summary, origin);
         }
 
         let requested_timeout = call.input.get("timeout_ms").and_then(Value::as_u64);
@@ -190,7 +196,7 @@ impl Agent {
             Ok(()) => {}
             Err(reason) => {
                 let status = if cancel.is_cancelled() { ToolCallStatus::Cancelled } else { ToolCallStatus::Denied };
-                return self.finish(session_id, turn_id, &call, status, format!("not executed: {reason}"), started, assessment.summary);
+                return self.finish(session_id, turn_id, &call, status, format!("not executed: {reason}"), started, assessment.summary, origin);
             }
         }
 
@@ -215,7 +221,7 @@ impl Agent {
             None => content,
         };
         let (is_error, duration_ms) = (status != ToolCallStatus::Ok, started.elapsed().as_millis() as u64);
-        let done = self.finish(session_id, turn_id, &call, status, content.clone(), started, assessment.summary);
+        let done = self.finish(session_id, turn_id, &call, status, content.clone(), started, assessment.summary, origin);
         // Hooks (hooks.md section 1): `PostToolUse` after the tool returned.
         self.post_tool_hook(session_id, &call, &content, is_error, duration_ms).await;
         done
@@ -253,13 +259,14 @@ impl Agent {
             tool: call.name.clone(),
             kind: ApprovalKind::Tool,
             input: call.input.clone(),
-            summary: assessment.summary.clone(),
+            // An outside agent's call says so on its card (permission.md: origin `agent`).
+            summary: if origin == Origin::Agent { format!("{}{}", crate::permission::AGENT_SUMMARY_PREFIX, assessment.summary) } else { assessment.summary.clone() },
             reason,
             risk: assessment.risk,
             privileged: assessment.privileged,
             destructive: assessment.destructive,
-            // A hook that asks is asked every time: there is nothing to remember.
-            can_remember: !assessment.always_ask && !assessment.privileged && !assessment.destructive && hook_ask.is_none(),
+            // A hook that asks is asked every time, and so is an outside agent's call: there is nothing to remember.
+            can_remember: !assessment.always_ask && !assessment.privileged && !assessment.destructive && hook_ask.is_none() && origin != Origin::Agent,
             rule_key: assessment.rule_key.clone(),
             preview,
         };
@@ -317,6 +324,7 @@ impl Agent {
         content: String,
         started: Instant,
         summary: String,
+        origin: Origin,
     ) -> (Message, ToolCallStatus) {
         if let Some(audit) = &self.audit {
             let output_sha256: String = {
@@ -328,6 +336,7 @@ impl Agent {
             let data = serde_json::json!({
                 "callId": call.id,
                 "turnId": turn_id,
+                "origin": origin.label(),
                 "tool": call.name,
                 "input": crate::audit::redact_input(&call.input),
                 "status": format!("{status:?}").to_lowercase(),

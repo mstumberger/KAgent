@@ -79,7 +79,7 @@ export default function Security() {
   };
   const runReport = async () => {
     setReport("running...");
-    const r = await api.post<{ output: string }>("/api/tools/security_report/call", { input: {}, sessionId: "ui" });
+    const r = await api.post<{ output: string }>("/api/ui/tools/security_report/call", { input: {} });
     setReport(r.output);
   };
 

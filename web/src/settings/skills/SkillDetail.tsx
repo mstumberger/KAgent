@@ -82,7 +82,7 @@ export default function SkillDetail({ skill, existing, onChanged, onPatch, onSel
 
   const openFolder = () =>
     run("Open folder", async () => {
-      const r = await api.post<{ status: string; output: string }>("/api/tools/open/call", { input: { target: view.path }, sessionId: "ui" });
+      const r = await api.post<{ status: string; output: string }>("/api/ui/tools/open/call", { input: { target: view.path } });
       if (r.status !== "ok") throw new Error(r.output);
     });
 

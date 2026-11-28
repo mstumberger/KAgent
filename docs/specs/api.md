@@ -48,7 +48,8 @@ type AuditRecord = /* config.md section 6 */;
 | PUT `/api/providers/order` | `{order: string[]}` | 204 |
 | GET `/api/models` | | `{chat: ModelView[], fast: ModelView[], live: ModelView[], vision: ModelView[]}` (enabled only) |
 | GET `/api/tools` | | `ToolView[]` |
-| POST `/api/tools/:name/call` | `{input, sessionId?: string /*default "mcp"*/}` | `{status: ToolCallStatus, output: string, durationMs}` (runs `Agent::execute_call`, approvals included; used by MCP) |
+| POST `/api/tools/:name/call` | `{input}` (v0.0.3: a `sessionId` in the body is ignored) | `{status: ToolCallStatus, output: string, durationMs}`: the MCP entry. Runs `Agent::execute_agent_call`: session `mcp`, origin `agent` (every call that is not read-only asks, in every mode; the card is not rememberable and its summary starts "Outside agent (MCP): "); 403 `not_allowed` when the tool's group is not in `settings.mcpToolGroups`, always |
+| POST `/api/ui/tools/:name/call` | `{input}` (v0.0.3) | the same answer: a tool the owner's window runs itself (Security report, "Open" of a skill file). Session `ui`, origin `chat`, no group filter |
 | GET `/api/sessions` | | `SessionMeta[]` newest first |
 | POST `/api/sessions` | `{title?, model?, reasoningLevel?}` (the last two from S41, section 8) | `SessionMeta` (201) |
 | GET `/api/sessions/:id` | | `{meta: SessionMeta, messages: Message[]}` |

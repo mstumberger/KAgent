@@ -171,6 +171,11 @@ impl PermissionEngine {
         if call.destructive {
             return Decision::Ask { reason: "potentially destructive: needs your explicit confirmation".into() };
         }
+        // An outside agent's call asks in every mode: before `full`, before an override `allow` and before any
+        // remembered rule (a rule of the owner's was made for the owner's own chat).
+        if origin == Origin::Agent {
+            return Decision::Ask { reason: "a call from an outside agent (MCP) always asks".into() };
+        }
         let voice_asks = origin == Origin::Voice && call.always_ask;
         if mode == PermissionMode::Full && !call.privileged && ovr != Some(ToolOverride::Ask) && !voice_asks {
             return Decision::Allow { reason: "full control".into() };
@@ -211,16 +216,31 @@ impl PermissionEngine {
     }
 }
 
-/// Where a call comes from: the chat, or voice (a live tool call, or a call inside a turn
-/// that was sent with `Via::Voice`).
+/// Where a call comes from: the chat, voice (a live tool call, or a call inside a turn
+/// that was sent with `Via::Voice`), or an outside agent (the MCP server).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Origin {
     #[default]
     Chat,
     Voice,
+    /// A coding agent outside KAgent, through `kagentd mcp`: every call that is not read-only asks, in every
+    /// mode, and no remembered rule satisfies it (tools.md, the per-call assessment).
+    Agent,
 }
 
+/// What the card of an outside agent's call starts with.
+pub const AGENT_SUMMARY_PREFIX: &str = "Outside agent (MCP): ";
+
 impl Origin {
+    /// The word of the audit record.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::Voice => "voice",
+            Self::Agent => "agent",
+        }
+    }
+
     pub fn of_via(via: crate::protocol::Via) -> Self {
         if via == crate::protocol::Via::Voice { Self::Voice } else { Self::Chat }
     }

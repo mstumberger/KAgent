@@ -76,6 +76,32 @@ fn overrides() {
     assert!(matches!(e.evaluate("s", "shell", &call(false, true, false)), Decision::Deny { .. }));
 }
 
+#[test]
+fn a_call_of_an_outside_agent_asks_in_every_mode_and_no_rule_satisfies_it() {
+    let ask = |e: &PermissionEngine, c: &CallAssessment| matches!(e.evaluate_from("mcp", "systemd", c, Origin::Agent), Decision::Ask { .. });
+    let mutating = call(false, true, false);
+    for mode in [PermissionMode::Ask, PermissionMode::Trusted, PermissionMode::Full] {
+        let e = PermissionEngine::new(mode, vec![]);
+        assert!(ask(&e, &mutating), "{mode:?} without a rule");
+        e.add_rule(AllowRule { tool: "systemd".into(), prefix: "systemctl restart".into() });
+        e.add_session_rule("mcp", AllowRule { tool: "systemd".into(), prefix: "systemctl restart".into() });
+        assert!(ask(&e, &mutating), "{mode:?} with a matching rule and a session allowance");
+        e.set_overrides([("systemd".to_string(), ToolOverride::Allow)].into());
+        assert!(ask(&e, &mutating), "{mode:?} with an override allow");
+        // The chat of the same engine is as before.
+        let chat = e.evaluate("mcp", "systemd", &mutating);
+        assert_eq!(matches!(chat, Decision::Allow { .. }), true, "{mode:?}: the chat is allowed by the rule");
+        // A call that needs no approval is not read-only either: it asks too.
+        assert!(ask(&e, &call(false, false, false)), "{mode:?}: not read-only, no approval needed");
+        // Read-only calls run; a deny override and read-only mode still refuse.
+        assert!(matches!(e.evaluate_from("mcp", "systemd", &call(true, false, false), Origin::Agent), Decision::Allow { .. }));
+        e.set_overrides([("systemd".to_string(), ToolOverride::Deny)].into());
+        assert!(matches!(e.evaluate_from("mcp", "systemd", &mutating, Origin::Agent), Decision::Deny { .. }));
+    }
+    let e = PermissionEngine::new(PermissionMode::ReadOnly, vec![]);
+    assert!(matches!(e.evaluate_from("mcp", "systemd", &mutating, Origin::Agent), Decision::Deny { .. }));
+}
+
 #[tokio::test]
 async fn broker_resolves_and_cancels() {
     let (tx, _rx) = broadcast::channel(16);

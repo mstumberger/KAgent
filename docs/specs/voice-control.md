@@ -85,6 +85,8 @@ turn sent with `Via::Voice` (the Brain turn of `routed` and `auto`).
 
 - For such a call `always_ask` asks in every permission mode, `full` included
   (`PermissionEngine::evaluate` takes the origin; `Agent` passes it from the turn).
+  The origin has a third value since v0.0.3, `agent` (an outside coding agent through MCP):
+  every non-read-only call asks, in every mode (`tools.md` section 0).
   Chat in `full` is unchanged.
 - In `live` and `auto` the question is spoken (`voice.md` section 12). In a Brain turn
   the card appears and is answered by voice (`voice.md` section 2).

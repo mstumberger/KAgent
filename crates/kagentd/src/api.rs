@@ -285,25 +285,86 @@ pub async fn undo_change(State(st): State<Arc<AppState>>, Path(id): Path<String>
 
 // ---------------------------------------------------------------- direct tool calls (MCP, S12)
 
-/// Run one tool through the full agent path (validation, permission, approval card,
-/// audit, journal). Used by `kagentd mcp`; MCP-disabled groups are refused here.
+/// The session of every call that comes in over MCP: the route is the MCP entry, never a field of the body.
+pub const MCP_SESSION: &str = "mcp";
+/// The session of a call the owner's own window makes (`POST /api/ui/tools/:name/call`).
+pub const UI_SESSION: &str = "ui";
+
+/// The group check of the MCP entry: the same whatever the body says.
+pub(crate) fn mcp_gate(name: &str, groups: &[String]) -> Result<(), HttpError> {
+    let group = tools::group_of(name);
+    if groups.iter().any(|g| g == group) {
+        return Ok(());
+    }
+    Err(HttpError(StatusCode::FORBIDDEN, "not_allowed", format!("tool group '{group}' is not exposed over MCP (settings.mcpToolGroups)")))
+}
+
+/// The call of the MCP entry: its id carries the session `mcp`; a `sessionId` in the body is not read.
+pub(crate) fn mcp_call(name: String, body: &Value) -> kagent_core::protocol::ToolCall {
+    kagent_core::protocol::ToolCall { id: format!("{MCP_SESSION}_{}", uuid::Uuid::new_v4().simple()), name, input: body.get("input").cloned().unwrap_or(json!({})) }
+}
+
+/// Run one tool for an outside agent through the full agent path (validation, permission, approval card,
+/// audit, journal). Used by `kagentd mcp`. The session is always `mcp`, the origin always `agent` (every
+/// call that is not read-only asks, whatever the mode and the rules), and a tool group that is not in
+/// `settings.mcpToolGroups` is refused: `sessionId` in the body is ignored.
 pub async fn call_tool(
     State(st): State<Arc<AppState>>,
     Path(name): Path<String>,
     Json(body): Json<Value>,
 ) -> ApiResult<Response> {
-    let group = tools::group_of(&name);
-    let session = body.get("sessionId").and_then(Value::as_str).unwrap_or("mcp").to_string();
-    if session == "mcp" && !mcp_groups(&st).iter().any(|g| g == group) {
-        return Err(HttpError(StatusCode::FORBIDDEN, "not_allowed", format!("tool group '{group}' is not exposed over MCP (settings.mcpToolGroups)")));
-    }
+    mcp_gate(&name, &mcp_groups(&st))?;
+    let call = mcp_call(name, &body);
+    let privilege = st.settings.read().unwrap().privilege_method();
+    let started = std::time::Instant::now();
+    let (msg, status) = st.agent.execute_agent_call(MCP_SESSION, &call, &CancellationToken::new(), privilege).await;
+    Ok(ok_json(json!({"status": status, "output": msg.content, "durationMs": started.elapsed().as_millis() as u64})))
+}
+
+/// A tool the owner's window runs itself (the Security report, "Open" of a skill's file): session `ui`, the
+/// origin of the chat, no group filter. It has its own path so that `call_tool` can be the MCP entry alone.
+pub async fn call_tool_ui(
+    State(st): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(body): Json<Value>,
+) -> ApiResult<Response> {
     let call = kagent_core::protocol::ToolCall {
-        id: format!("{session}_{}", uuid::Uuid::new_v4().simple()),
+        id: format!("{UI_SESSION}_{}", uuid::Uuid::new_v4().simple()),
         name,
         input: body.get("input").cloned().unwrap_or(json!({})),
     };
     let privilege = st.settings.read().unwrap().privilege_method();
     let started = std::time::Instant::now();
-    let (msg, status) = st.agent.execute_call(&session, &session, &call, &CancellationToken::new(), privilege).await;
+    let (msg, status) = st.agent.execute_call(UI_SESSION, UI_SESSION, &call, &CancellationToken::new(), privilege).await;
     Ok(ok_json(json!({"status": status, "output": msg.content, "durationMs": started.elapsed().as_millis() as u64})))
+}
+
+#[cfg(test)]
+mod mcp_tests {
+    use super::*;
+
+    fn groups(list: &[&str]) -> Vec<String> {
+        list.iter().map(|g| g.to_string()).collect()
+    }
+
+    #[test]
+    fn the_mcp_entry_ignores_the_session_of_the_body() {
+        let call = mcp_call("system_info".into(), &json!({"input": {"a": 1}, "sessionId": "s1"}));
+        assert!(call.id.starts_with("mcp_") && !call.id.contains("s1"), "{}", call.id);
+        assert_eq!(call.input, json!({"a": 1}));
+        assert_eq!(mcp_call("x".into(), &json!({})).input, json!({}));
+    }
+
+    #[test]
+    fn a_group_that_is_not_exposed_is_refused_whatever_the_body_says() {
+        // The gate takes no body at all: `sessionId: "ui"` or any other id cannot skip it.
+        let open = groups(&["system"]);
+        assert!(mcp_gate("system_info", &open).is_ok());
+        let group = tools::group_of("terminal");
+        assert_ne!(group, "system", "the test needs a tool of another group");
+        let e = mcp_gate("terminal", &open).err().expect("refused");
+        assert_eq!((e.0, e.1), (StatusCode::FORBIDDEN, "not_allowed"));
+        assert!(e.2.contains(group) && e.2.contains("mcpToolGroups"), "{}", e.2);
+        assert!(mcp_gate("terminal", &groups(&[])).is_err(), "an empty list exposes nothing here (the default list is applied by mcp_groups)");
+    }
 }
