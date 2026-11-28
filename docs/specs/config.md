@@ -381,6 +381,7 @@ so a meta file from before loads.
 | `reasoningLevel` | one of the levels the answering model offers (`effective.reasoningLevels`), or `null`: nothing is sent and the provider's own default applies |
 | `project` | (S42) the folder attached to the conversation: an absolute canonical path, or `null` |
 | `pinned` | (S42) the session stands in the section "Pinned" of the sidebar; default `false` |
+| `imagesNoticeShown` | (v0.0.3) the composer showed "Images are sent to <provider>." in this session; default `false` |
 
 - The session of a subagent never has either: the route refuses it and the child is made
   with none. Voice, tasks, alerts and Telegram keep the default unless the session has a choice.

@@ -200,6 +200,19 @@ async fn pin_and_unpin_with_their_refusals_and_the_event_only_on_a_change() {
 }
 
 #[tokio::test]
+async fn the_images_notice_is_remembered_in_the_meta_once() {
+    let mut r = rig().await;
+    assert!(!r.agent.store().meta(&r.id).await.unwrap().images_notice_shown);
+    assert!(set_images_notice(&r.agent, &r.id).await.ok().unwrap().images_notice_shown);
+    assert_eq!(events(&mut r), 1);
+    assert!(set_images_notice(&r.agent, &r.id).await.ok().unwrap().images_notice_shown);
+    assert_eq!(events(&mut r), 0, "no event the second time");
+    assert!(r.agent.store().meta(&r.id).await.unwrap().images_notice_shown, "stored");
+    let e = refusal(set_images_notice(&r.agent, "no-such").await);
+    assert_eq!((e.0, e.1), (StatusCode::NOT_FOUND, "not_found"));
+}
+
+#[tokio::test]
 async fn a_create_with_a_folder_checks_it_first_and_stores_it_canonical() {
     let r = rig().await;
     let store = r.agent.store();

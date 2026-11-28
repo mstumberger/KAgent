@@ -77,6 +77,10 @@ pub struct SessionMeta {
     /// The session stands in the section "Pinned" of the sidebar; never a child.
     #[serde(default)]
     pub pinned: bool,
+    /// The composer told the owner once where images of this conversation go ("Images are sent
+    /// to <provider>.", vision.md section 2); a reload does not show the line again.
+    #[serde(default)]
+    pub images_notice_shown: bool,
 }
 
 #[derive(Clone)]
@@ -122,6 +126,7 @@ impl SessionStore {
             reasoning_level: None,
             project: None,
             pinned: false,
+            images_notice_shown: false,
         };
         self.save_meta(&meta).await?;
         tokio::fs::write(self.log_path(&meta.id), b"").await?;

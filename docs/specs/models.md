@@ -151,7 +151,9 @@ was true for any model the providers know.)
 
 `PUT /api/settings`: a model without role `chat` cannot become `chatModel`,
 `fastModel`, `fallbackModel` or `visionModel` (400); the check that a live model
-cannot answer text stays.
+cannot answer text stays. A `visionModel` also needs `supportsImage` in its resolved config
+(400, the message says to switch on "Accepts images" in the model's dialog); the `settings`
+tool goes through the same check.
 
 ## 5. Fallback
 

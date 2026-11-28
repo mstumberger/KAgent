@@ -47,8 +47,8 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
                 let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, response)]));
             };
             if is_screen {
-                // Refused before it is asked: a locked screen, and KAgent's own approval cards.
-                if let Some(why) = look::refusal(look::is_locked().await, st.agent.broker().pending().len()) {
+                // Refused before it is asked: a locked screen, and an approval card of this session that waits.
+                if let Some(why) = look::refusal(look::is_locked().await, look::open_cards(st.agent.broker().pending().iter().map(|a| a.session_id.as_str()), &session)) {
                     return refuse("denied", json!({"status": "error", "output": why}));
                 }
                 // Asked out loud once per voice session, whatever the permission mode: the frame leaves the machine.

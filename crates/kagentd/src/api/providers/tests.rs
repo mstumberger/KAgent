@@ -132,9 +132,17 @@ fn a_model_without_the_chat_role_cannot_take_a_text_job() {
 
     // With the chat role every text job is open to it.
     s.patch("nvidia", &roles(json!(["chat", "live"])), &[]).unwrap();
-    for key in ["chatModel", "fastModel", "fallbackModel", "visionModel"] {
+    for key in ["chatModel", "fastModel", "fallbackModel"] {
         ok(check_model_roles(&s, &json!({key: r})));
     }
+    // v0.0.3 A4: a vision model must also accept images (its resolved config).
+    let image = |on: bool| serde_json::from_value::<ProviderPatch>(json!({"models": [{"id": m, "config": {"supportsImage": on}}]})).unwrap();
+    s.patch("nvidia", &image(false), &[]).unwrap();
+    is(&refused(check_model_roles(&s, &json!({"visionModel": r}))), StatusCode::BAD_REQUEST, "invalid_input", "Accepts images");
+    ok(check_model_roles(&s, &json!({"chatModel": r})));
+    s.patch("nvidia", &image(true), &[]).unwrap();
+    ok(check_model_roles(&s, &json!({"visionModel": r})));
+    ok(check_model_roles(&s, &json!({"visionModel": ""})));
     // A Gemini live model: the live job, never a text one (the check of before).
     with_provider(&s, "gemini");
     let live_ref = "gemini::gemini-3.8-live";

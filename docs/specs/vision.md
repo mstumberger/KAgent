@@ -45,7 +45,13 @@ For a turn whose message has images:
   their description.
 - Privacy: an image goes where the conversation goes (the Brain's provider, or the
   vision model's). The composer says so once per session when that provider is not
-  local: "Images are sent to <provider>."
+  local: "Images are sent to <provider>." The daemon remembers it in the session's meta
+  (`imagesNoticeShown`, set by `PUT /api/sessions/:id/images-notice` when a message with
+  images is sent while the line was shown), so a reload does not show it again.
+- `visionModel`: only a model whose resolved config has `supportsImage`. `PUT /api/settings`
+  (and the `settings` tool, which goes through the same check) refuses another with 400
+  "<ref> cannot read images; switch on "Accepts images" in the model's dialog (Settings ->
+  Models), or pick another".
 - Subagents, tasks and Telegram: a Telegram photo sent to the bot becomes an image of
   that message (`bots.md` forward path, same limits). Tasks and subagents carry none.
 
@@ -61,6 +67,13 @@ For a turn whose message has images:
   (rememberable for the session). From voice: asked out loud once per session ("I want
   to look at your active window. Say yes to go ahead, or no."); the yes covers later
   looks in the same voice session.
+- A live look is refused while an approval card of the SAME session waits (another
+  conversation's card is not on this screen's session), and while the screen is locked.
+- The retry sentence of the live instruction says "look again with screen": the live
+  `screen` has `target` only, no `window`.
+- The test seams `KAGENT_FAKE_SCREENSHOT`, `KAGENT_FAKE_LOCKED` and `KAGENT_FAKE_WINDOW`
+  (`kagentd/src/seams.rs`) are honoured in debug builds only; a release build ignores them
+  with one warning in the log. The scripts that use them run `target/debug/kagentd`.
 - `routed`: unchanged; the Brain calls `screen` and its answer is read aloud.
 - The instruction of `live` and `auto` gets: "To see the screen call `screen`; never
   describe the screen without having looked in this turn."
@@ -100,5 +113,6 @@ web/src/components/CommandInput.tsx, web/src/components/Attachments.tsx, Message
 The decisions are in `IMPLEMENTATION.md` section E, session 2026-11-28 (S46). What differs from the
 text above: `ImageRef` also has `description` and `readBy`; the file folder holds an `<id>.json` for
 each image; the re-encode keeps PNG up to 8192 distinct colours; the live `screen` has its own spec
-(`target` only); a look is refused while any approval card waits, and while the screen is locked.
+(`target` only); a look is refused while an approval card of the same session waits (v0.0.3: it was any
+session's), and while the screen is locked.
 

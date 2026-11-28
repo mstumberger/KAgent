@@ -28,6 +28,8 @@ export interface SessionMeta {
   project?: string | null;
   /** The session stands in the section "Pinned" of the sidebar. */
   pinned?: boolean;
+  /** The line "Images are sent to <provider>." was shown in this conversation (vision.md section 2). */
+  imagesNoticeShown?: boolean;
 }
 
 /** One item of a session's todo list (api.md section 6). */
@@ -65,6 +67,10 @@ export function putProject(id: string, path: string | null): Promise<SessionMeta
 }
 
 /** Pin or unpin a session; the answer is the meta. */
+export function putImagesNotice(id: string): Promise<SessionMeta> {
+  return api.put(`/api/sessions/${id}/images-notice`, {});
+}
+
 export function putPin(id: string, pinned: boolean): Promise<SessionMeta> {
   return api.put(`/api/sessions/${id}/pin`, { pinned });
 }

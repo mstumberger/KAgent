@@ -112,6 +112,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/model", put(crate::model_api::put_model))
         .route("/sessions/{id}/project", put(crate::project_api::put_project))
         .route("/sessions/{id}/pin", put(crate::project_api::put_pin))
+        .route("/sessions/{id}/images-notice", put(crate::project_api::put_images_notice))
         .route("/projects", get(crate::project_api::get_projects))
         .route("/approvals/{id}", post(api::resolve_approval))
         .route("/stop-all", post(api::stop_all))

@@ -95,6 +95,12 @@ pub async fn set_pinned(agent: &Arc<Agent>, id: &str, body: &Value) -> Result<Se
     agent.set_pinned(id, pinned).await.map_err(internal)
 }
 
+/// The line "Images are sent to <provider>." was shown in session `id`: remembered once.
+pub async fn set_images_notice(agent: &Arc<Agent>, id: &str) -> Result<SessionMeta, HttpError> {
+    agent.store().meta(id).await.map_err(|_| not_found(format!("session {id} not found")))?;
+    agent.set_images_notice_shown(id).await.map_err(internal)
+}
+
 /// Give a session that was just created its folder (`path` is what `check` answered): the
 /// field is set and the meta saved once more. No event: nobody lists the session yet.
 pub async fn create_in(sessions: &SessionStore, mut meta: SessionMeta, path: PathBuf) -> Result<SessionMeta, HttpError> {
@@ -155,6 +161,10 @@ pub async fn put_project(State(st): State<Arc<AppState>>, Path(id): Path<String>
 
 pub async fn put_pin(State(st): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
     Ok(Json(set_pinned(&st.agent, &id, &body).await?).into_response())
+}
+
+pub async fn put_images_notice(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
+    Ok(Json(set_images_notice(&st.agent, &id).await?).into_response())
 }
 
 pub async fn get_projects(State(st): State<Arc<AppState>>) -> ApiResult<Response> {

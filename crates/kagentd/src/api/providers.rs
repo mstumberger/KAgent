@@ -129,7 +129,8 @@ pub fn chat_model_valid(store: &ProviderStore, chat_model: &str) -> bool {
 
 /// The role check of `PUT /api/settings`: a live model cannot answer text turns, and
 /// the reverse (as before); a model without role `chat` cannot become `chatModel`,
-/// `fastModel`, `fallbackModel` or `visionModel` (models.md section 4). A reference
+/// `fastModel`, `fallbackModel` or `visionModel` (models.md section 4); a `visionModel` also needs
+/// `supportsImage` in its resolved config (vision.md section 2). A reference
 /// the providers do not know is not refused here.
 pub fn check_model_roles(store: &ProviderStore, patch: &Value) -> Result<(), HttpError> {
     for key in ["chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel"] {
@@ -148,6 +149,10 @@ pub fn check_model_roles(store: &ProviderStore, patch: &Value) -> Result<(), Htt
         if !m.model.roles.iter().any(|x| x == "chat") {
             let roles = if m.model.roles.is_empty() { "no role".to_string() } else { m.model.roles.join(", ") };
             return Err(bad_request(format!("{r} is not a chat model (its roles: {roles}); give it the chat role in its model settings, or pick another")));
+        }
+        // A vision model must read images itself (vision.md section 2): "supportsImage" of its resolved config.
+        if key == "visionModel" && !m.config.supports_image {
+            return Err(bad_request(format!("{r} cannot read images; switch on \"Accepts images\" in the model's dialog (Settings -> Models), or pick another")));
         }
     }
     Ok(())

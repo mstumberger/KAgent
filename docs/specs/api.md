@@ -286,6 +286,7 @@ their rows. Spec of S41: `picker.md`.
 | POST `/api/sessions` | `{title?, model?, reasoningLevel?, project?}` (`project` from S42) | `SessionMeta` (201) |
 | PUT `/api/sessions/:id/project` | `{path: string\|null}` (S42) | `SessionMeta` |
 | PUT `/api/sessions/:id/pin` | `{pinned: boolean}` (S42) | `SessionMeta` |
+| PUT `/api/sessions/:id/images-notice` | (no body; v0.0.3, `vision.md` section 2) | `SessionMeta` with `imagesNoticeShown: true`; 404 for an unknown session; `sessionMetaChanged` on the first call only |
 | GET `/api/sessions?project=<path>` | (S42) | the top-level sessions of that folder, newest first, as the plain list |
 | GET `/api/projects` | (S42) | `{roots: string[], projects: [{path, name, agentsMd: boolean}]}` |
 | GET `/api/models` | | as `models.md` section 4; each model of every list also has `providerId` and `providerName` |

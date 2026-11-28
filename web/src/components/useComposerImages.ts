@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, type ProviderView } from "../api";
 import { isLocalUrl, providerLineTold, useAttachments } from "../images";
+import { useStore } from "../store";
 import { notify } from "./toasts";
 
 /** The provider an image of this conversation goes to: the Brain's when it reads images, else the vision model's. */
@@ -17,7 +18,8 @@ export function useComposerImages(sessionId: string | null, answering: string, m
   const provider = imageProvider(answering, models, visionModel);
   // What the providers said for one provider; the line itself is derived while rendering.
   const [said, setSaid] = useState<{ provider: string; text: string | null } | null>(null);
-  const waiting = attachments.items.length > 0 && !!sessionId && !providerLineTold(sessionId);
+  const remembered = useStore().metas[sessionId ?? ""]?.imagesNoticeShown ?? false;
+  const waiting = attachments.items.length > 0 && !!sessionId && !remembered && !providerLineTold(sessionId);
   useEffect(() => {
     if (!waiting || !provider) return;
     let live = true;
