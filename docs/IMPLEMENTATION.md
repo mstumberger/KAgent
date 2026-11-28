@@ -3289,6 +3289,53 @@ One commit per item on branch `v0.0.3`. Decisions:
   42 -> 44 (two checks for the noise rule). `scripts/test-loop-web.py` is new (21). Web: screen-watch 62,
   local-models 58, vision 117, work 233, sidebar 168, picker 107, calendar 60.
 
+### Session 2026-11-28 (v0.0.3: the model chooser, and usage and limits)
+
+Specs: `docs/specs/chooser.md` and `docs/specs/usage.md` (from `plans/providers-and-quota.md` section 3 and
+`plans/provider-usage.md` sections 1, 2, 4, 5, stages U1 and U2). Eight commits on `v0.0.3`, in the order of the brief.
+
+- **One rule for "local"**: `is_local_url` moved from the screen watch (`screen_watch/vision.rs`, which re-exports it) to
+  `kagent_providers::local`, so the vision refusal, the provider view and the chooser share it. `GET /api/providers` rows gain
+  `local`, `GET /api/models` rows `local` and `free`. `free` is the id suffix `-free` only: no provider reports a price yet.
+- **The chooser** (`web/src/components/chooser/`): the search box keeps the focus and `aria-activedescendant` names the cursor
+  row, so typing searches and no row is in the tab order. The provider that is shown first is that of the answering model, not
+  only of the chosen one (the Default row). A "Default"/"none" row sits above the columns (Arrow Up from the first row reaches
+  it); a value the list does not hold is a disabled "kept" row with its reason. Recent is a pseudo-provider and lives in
+  `localStorage` (`kagent.chooser.recent`, 5 refs). The task form has no model field, so nothing changed there. The Defaults
+  card offers only models that read images for `visionModel`; a vision model that cannot is kept as the current row.
+- **Picker suite 107 -> 106**: the checks of the flat list (headings, roving tab index, "a typed letter jumps", "Space picks",
+  the hover index, the row order of the gone model) are rewritten for the chooser, not removed: a heading check became a provider
+  check, the typed-letter pair became "typing searches", Home/End/Up/Down act on providers and the Default row. The others pass
+  unchanged; `ROW(name)` opens the model's provider first. The menu is 520 px wide now (it was 260 to 360).
+- **Counters (U1)**: `usage/store.rs`, one table, three windows in local time, pruned at 13 months. The source of a call is a
+  `tokio::task_local` (`kagent_core::model::CALL_SOURCE`) that `spawn_turn` sets from the turn's `Via` (Text, Telegram, Watch and
+  Note are `chat`); a call outside a turn is `other`. Chosen over a field on `ModelRequest` because the request is built in six
+  places. The live voice socket does not use the providers client, so a live model is not counted (the UI says so). A failed
+  request is not counted. `ProvidersClient::with_usage(sink)` is the only change to the client's signature.
+- **Limits (U2)**: parsers in `kagent-providers/src/usage/` take a `Headers` map that holds only the rate-limit headers and
+  `retry-after` (so a key or cookie cannot reach the module), and are pure. A limit needs `limit` and `remaining` as whole numbers
+  with `0 < limit` and `remaining <= limit`; an unreadable reset drops the family. 429 bodies are read by shape (Google
+  `QuotaFailure` + `RetryInfo`; the OpenAI message with "Limit n, Used m" and "try again in"; `insufficient_quota`; any other 429
+  gives only `retry-after`). A Gemini daily quota gets no reset time (the `retryDelay` is for the next try, and the day's end is
+  midnight Pacific, which the daemon has no time zone table for). Limits are in memory (`usage/limits.rs`): dropped at their reset,
+  or ten minutes after they were seen when no reset is known. Not built: the limit learnt from the first 429 and corrected at each
+  (providers-and-quota.md section 4), quota endpoints (U4), skipping to the fallback (U3), the reserve for unattended work.
+- **Known limits** are the typed section `settings.usage.knownLimits` (free for the `settings` tool), counted from the counters
+  (all models and sources of the provider, the current minute, day or month of local time), `source: "kagent"`.
+- **Events**: `usageChanged {provider}` at once when the set of levels changes, else at most every 30 s per provider (shared by the
+  counters and the limits). The window reads `GET /api/usage` on each.
+- **UI**: the ring sits on the composer's trigger (card above), on each provider in the chooser, on the widget's chip and in its
+  sheet (no card there). A click on a ring is its own (it does not pick the provider or open the menu). The 90 % line lives in an
+  external store (`usageLine.ts`), not in component state: it is announced once per limit, forgotten when the limit falls under
+  90 %. The row bar reads the live usage, falling back to `tightestLimit` of the provider row.
+- **Fixtures** of the header and error parsers are written from the providers' documentation, marked "from documentation, not
+  recorded" in each test, and must be checked against real answers (Anthropic's `anthropic-ratelimit-*`, OpenAI/Groq's
+  `x-ratelimit-*` in each reset format, Gemini's 429, OpenAI's `rate_limit_exceeded` and `insufficient_quota`, Anthropic's
+  `rate_limit_error`).
+- Counts: `cargo test --workspace` 1008 -> 1054 (3 ignored); `KAGENT_IT=1` the same, with the real Ollama. `scripts/test-live.py`
+  44/44. New: `scripts/test-chooser-web.py` (112) and `scripts/test-usage-web.py` (105). Web: loop 21, screen-watch 62,
+  local-models 58, vision 117, work 233, sidebar 168, picker 106, calendar 60.
+
 ## F. Progress
 
 - [x] S0 compile drafts

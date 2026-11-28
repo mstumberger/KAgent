@@ -249,9 +249,9 @@ Over the page with `settings/dialog.tsx` (`wide`). Title "Edit model" or "Add mo
 ### 7.6 Defaults (`Defaults.tsx`, replaces `Roles.tsx`)
 
 - One `GroupCard`, "Defaults": Default chat model, Fallback, Fast, Vision. Four
-  dropdowns (7.8) over the models with role `chat` (the list of the Roles card today;
-  an empty value for none).
-- A dropdown whose model cannot be used keeps its option and shows why under it: "provider
+  fields that open the model chooser (`chooser.md`: providers first, search and chips) over the models with role `chat` (the list
+  of the Roles card today; an empty value for none). Vision offers only models whose resolved config has `supportsImage` (v0.0.3).
+- A field whose model cannot be used keeps it as the current row and shows why under it: "provider
   switched off", "model switched off" or "unknown model".
 - Temperature, as today. The reasoning level left the card in S41: the effort is chosen per
   conversation in the composer (`picker.md`).

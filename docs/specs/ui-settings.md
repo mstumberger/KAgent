@@ -278,3 +278,14 @@ default. The chip is `components/WatchChip.tsx` (`watch.css`): see `screen-watch
 the chip from the daemon at load and from the event, the countdown, the popover and its updates, paused, each end state, Stop, every
 view, the widget, the card in both themes at 1200x820 and 340x460, each save, the refusal and its link; screenshots in
 `/tmp/kagent-s48-shots/`.
+
+## 15. The model chooser and usage (v0.0.3)
+
+Specs: `chooser.md`, `usage.md`. Settings -> Models: the four fields of the Defaults card and the model of the subagent profile
+form are chooser fields (`components/chooser/ChooserField.tsx`); each provider row in the list has a thin bar with the
+percentage of its tightest limit (none when it has no limit), and the provider card has a "Usage" block after its form
+(`sections/models/UsageBlock.tsx`): its limits as bars, today's and this month's requests and tokens through KAgent, per model,
+the time the last limit was seen, and the known-limit fields (a total, a unit and a window per row; Add limit, Remove, Save
+limits: one `PUT /api/settings {"usage": ...}`). A local provider shows "no limits" and its counters only. Verified by
+`scripts/test-chooser-web.py` (112 checks) and `scripts/test-usage-web.py` (105 checks); screenshots in
+`/tmp/kagent-v003-chooser-shots/`.

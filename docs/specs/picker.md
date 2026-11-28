@@ -197,6 +197,11 @@ name is hidden and the button is 28 x 28 px with the text in its `title`.
 
 ### 5.2 The menu (`components/ModelMenu.tsx`)
 
+> v0.0.3: the list of this menu, and of the widget's sheet, is the model chooser (`chooser.md`): providers on the left, that
+> provider's models on the right, a search box and filter chips, a "Default" row above them, and a limits ring on the trigger and
+> on each provider (`usage.md` section 7). The effort row and "Manage models" below it are as described here; the flat list, its
+> provider headings and its roving focus are replaced by the chooser's keys (`chooser.md` section 4).
+
 A popup in the house style (5.8): above the trigger, its left edge on the trigger's;
 at least 260 px and at most `min(360px, 100vw - 32px)` wide; at most `min(420px, 60vh)`
 high, the list scrolls from 280 px. From the top:

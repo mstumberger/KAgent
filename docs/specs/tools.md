@@ -602,3 +602,11 @@ Refusals are errors that say what to do: a second `start` names the running goal
 Local models and the model it recommends; `screenWatch.enabled` off names the card; a goal over 200 characters, minutes outside
 1..120 or `everySec` outside 5..60; an active window that is KAgent itself ("click the window to watch first, or use target
 monitor"). Registered by the daemon like `local_models` (a cell the watch fills); `group_of` maps it to `desktop`.
+
+## 29. Usage (group `agent`; v0.0.3)
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `usage` | RO | `{provider?: string}` (an id or a name, any case) | text for the model per provider: each limit as "Requests per day 47 of 50 (94 %, nearly out), resets 09:00." (a limit that is KAgent's own count says "counted by KAgent: other apps using this key are not included"; one known only to be out has no numbers), "No limits: a local provider." or "No limit known: ...", today's and this month's requests and tokens through KAgent, and the busiest models. An unknown provider is `not_done("no provider named x", "call usage without a provider to list them (providers: ...)")` (`agent-loop.md` section B). Live voice is not counted (`usage.md` section 6) |
+
+Registered by the daemon like `local_models` (it finds the usage module once it exists) and listed in `group_of` with `settings`.
