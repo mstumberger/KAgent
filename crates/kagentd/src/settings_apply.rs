@@ -47,6 +47,8 @@ pub fn patch_and_save(
 /// Apply a settings patch all or nothing; returns the stored settings.
 pub async fn apply(st: &Arc<AppState>, patch: Value) -> Result<Value, HttpError> {
     let wants_autostart = patch.get("startup").and_then(|v| v.get("autostart")).and_then(Value::as_bool);
+    // A read-only calendar cannot be the default (calendar.md section 2): refused here, where the account can be asked.
+    st.calendar.check_default(&patch).await.map_err(bad_request)?;
     let path = crate::paths::Paths::resolve().settings();
     patch_and_save(&st.settings, &st.providers, &path, patch, |s| {
         st.agent.permissions().set_mode(s.permission_mode);
