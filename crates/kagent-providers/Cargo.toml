@@ -9,6 +9,7 @@ kagent-core = { path = "../kagent-core" }
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+chrono.workspace = true
 futures.workspace = true
 regex.workspace = true
 reqwest.workspace = true

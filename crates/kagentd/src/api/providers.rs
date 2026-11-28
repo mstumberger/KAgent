@@ -251,7 +251,7 @@ pub async fn test_provider(State(st): State<Arc<AppState>>, Path(id): Path<Strin
         .or_else(|| provider.models.first().map(|m| m.id.clone()))
         .ok_or_else(|| bad_request("provider has no models; pass modelId"))?;
     let start = std::time::Instant::now();
-    let client = kagent_providers::ProvidersClient::new(st.providers.clone());
+    let client = kagent_providers::ProvidersClient::new(st.providers.clone()).with_usage(st.usage.clone());
     let cancel = CancellationToken::new();
     let request = kagent_core::model::ModelRequest {
         model_ref: format!("{id}::{mid}"),

@@ -6,6 +6,7 @@ mod cli;
 mod bots;
 mod calendar;
 mod local_models;
+mod usage;
 mod background_api;
 mod compact_api;
 mod rounded;
@@ -91,6 +92,8 @@ pub struct AppState {
     pub calendar: Arc<calendar::Calendar>,
     /// Recommended local models and their downloads (local-models.md).
     pub local_models: Arc<local_models::LocalModels>,
+    /// The counters and limits of the providers (usage.md): behind `/api/usage` and the `usage` tool.
+    pub usage: Arc<usage::UsageHub>,
     /// The screen watch (screen-watch.md): the one watch, its tool and its routes.
     pub screen_watch: Arc<screen_watch::ScreenWatch>,
     pub skills: Arc<skills::SkillHub>,
@@ -184,6 +187,8 @@ async fn run() -> anyhow::Result<()> {
     let snapshot = machine::MachineSnapshot::system().await;
     let machine = snapshot.current();
     let (events, _) = broadcast::channel(1024);
+    // Usage and limits (usage.md): the providers client reports every answer to the hub.
+    let usage = usage::UsageHub::open(&paths.data, providers.clone(), events.clone());
     let audit = std::sync::Arc::new(kagent_core::audit::AuditLog::open(&paths.data.join("audit.jsonl"))?);
     audit.append_start(VERSION).ok();
     // One skills library for the prompt, `load_skill` and the skills API, rescanned between turns.
@@ -323,7 +328,7 @@ async fn run() -> anyhow::Result<()> {
         services: Some(services.clone()),
         hooks: Some(hooks.clone()),
         audit: Some(audit.clone()),
-        model: Arc::new(kagent_providers::ProvidersClient::new(providers.clone())),
+        model: Arc::new(kagent_providers::ProvidersClient::new(providers.clone()).with_usage(usage.clone())),
         tools: Arc::new(registry),
         permissions: engine,
         broker,
@@ -422,6 +427,7 @@ async fn run() -> anyhow::Result<()> {
         bots,
         calendar,
         local_models,
+        usage,
         screen_watch,
         skills: skills.clone(),
         memory,

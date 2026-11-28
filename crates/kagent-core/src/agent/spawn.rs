@@ -26,7 +26,8 @@ impl Agent {
         let (this, sid) = (self.clone(), session_id.to_string());
         tokio::spawn(async move {
             let via = input.via;
-            let result = this.run_turn(&sid, &turn_id, input, &state, &cancel, &cell).await;
+            // The calls of the turn are counted under who started it (usage.md section 2).
+            let result = crate::model::CALL_SOURCE.scope(crate::model::CallSource::of_via(via), this.run_turn(&sid, &turn_id, input, &state, &cancel, &cell)).await;
             // Hooks (hooks.md section 4): `Stop` after `TurnFinished`, not awaited: the turn
             // ends now; what the hooks add waits for a later turn.
             this.spawn_stop_hooks(&sid, &turn_id, via, result.status, result.error.clone());
