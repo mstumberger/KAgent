@@ -23,6 +23,7 @@ pub mod services;
 pub mod sessions;
 pub mod shell;
 pub mod tasktools;
+pub mod workflow;
 pub mod terminal;
 pub mod sys;
 pub mod timeline;
@@ -67,6 +68,8 @@ pub fn group_of(name: &str) -> &'static str {
         "agent_run" | "agent_wait" | "agent_stop" | "agent_list" | "agent_tell" | "task_output" | "task_stop" => "agent",
         // Settings by chat or voice (tools.md section 19a, voice-control.md).
         "settings" | "local_models" | "usage" | "tickets" => "agent",
+        // Workflow runs (tools.md section 31, workflows.md section 5).
+        "workflow_run" | "workflow_status" | "workflow_stop" | "workflow_answer" | "report_progress" | "ask" => "agent",
         // Memory and earlier conversations (tools.md section 18).
         "memory_save" | "memory_search" | "memory_get" | "memory_forget" | "session_search" => "memory",
         // The web tools (tools.md section 20), registered by the daemon like the memory tools.
@@ -155,7 +158,7 @@ mod group_tests {
     /// the loop over `builtin_registry` above does not see them.
     #[test]
     fn the_agent_tools_belong_to_the_agent_group() {
-        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell", "task_output", "task_stop", "settings", "local_models", "usage", "tickets"] {
+        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell", "task_output", "task_stop", "settings", "local_models", "usage", "tickets", "workflow_run", "workflow_status", "workflow_stop", "workflow_answer", "report_progress", "ask"] {
             assert_eq!(super::group_of(name), "agent", "{name} is a tool of the agent group");
         }
         assert!(crate::context::GROUP_PRIORITY.contains(&"agent"), "and the group is among those kept when the window is small");

@@ -118,6 +118,11 @@ impl Engine {
         self.cfg.lock().unwrap().clone()
     }
 
+    /// The definition of a workflow by name.
+    pub fn definition(&self, name: &str) -> Result<Definition, String> {
+        (self.definitions)(name)
+    }
+
     pub fn set_differ(&self, differ: Differ) {
         *self.differ.lock().unwrap() = differ;
     }

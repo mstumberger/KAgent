@@ -6,6 +6,7 @@ mod common;
 mod mailbox;
 mod rig;
 mod restart;
+mod tools;
 
 use std::sync::Arc;
 

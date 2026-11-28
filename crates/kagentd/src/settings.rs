@@ -326,6 +326,7 @@ impl Settings {
         self.section::<crate::screen_watch::ScreenWatchSection>("screenWatch")?.validate()?;
         self.section::<crate::subagents::SubagentsSection>("subagents")?.validate()?;
         self.section::<crate::hooks::config::HooksSection>("hooks")?.validate()?;
+        self.section::<crate::runs::WorkflowsSection>("workflows")?.validate()?;
         self.section::<crate::usage::settings::UsageSection>("usage")?.validate()
     }
 

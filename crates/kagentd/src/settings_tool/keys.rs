@@ -37,6 +37,8 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "startup.autostart",
     "watchers.enabled",
     "watchers.disabled",
+    // workflows.md section 3.4: how many runs of agents that change files go on unattended.
+    "workflows",
 ];
 
 fn under(key: &str, prefix: &str) -> bool {
@@ -87,6 +89,7 @@ pub fn full_view(s: &Settings) -> Value {
         ("subagents", section::<crate::subagents::SubagentsSection>(s, "subagents")),
         ("hooks", section::<crate::hooks::config::HooksSection>(s, "hooks")),
         ("usage", section::<crate::usage::settings::UsageSection>(s, "usage")),
+        ("workflows", section::<crate::runs::WorkflowsSection>(s, "workflows")),
     ];
     for (key, v) in sections {
         m.insert(key.into(), v);

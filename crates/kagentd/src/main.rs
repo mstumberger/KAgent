@@ -50,6 +50,7 @@ mod skills_import;
 mod skills_sources;
 mod skills_sources_api;
 mod startup;
+mod runs;
 mod subagents;
 mod voice_levels;
 mod watch;
@@ -97,6 +98,8 @@ pub struct AppState {
     pub local_models: Arc<local_models::LocalModels>,
     /// The counters and limits of the providers (usage.md): behind `/api/usage` and the `usage` tool.
     pub usage: Arc<usage::UsageHub>,
+    /// Workflow runs (workflows.md): the engine, the definitions, behind `/api/runs` and the `workflow_*` tools.
+    pub runs: Arc<runs::Runs>,
     /// The tickets of the projects (tickets.md): behind `/api/tickets` and the `tickets` tool.
     pub tickets: Arc<tickets::Tickets>,
     /// The screen watch (screen-watch.md): the one watch, its tool and its routes.
@@ -238,6 +241,9 @@ async fn run() -> anyhow::Result<()> {
     // and its profiles through this handle; the tasks use the daemon's one registry.
     let agent_access = kagent_core::tools::agents::AgentAccess::default();
     agent_access.register(&mut registry);
+    // Workflow runs (workflows.md): the tools reach the engine through this handle.
+    let workflow_access = kagent_core::tools::workflow::WorkflowAccess::default();
+    workflow_access.register(&mut registry);
     let background = kagent_core::tools::background::Background::shared();
     registry.register(Arc::new(kagent_core::tools::tasktools::TaskOutput::new(background.clone())));
     registry.register(Arc::new(kagent_core::tools::tasktools::TaskStop::new(background)));
@@ -374,6 +380,16 @@ async fn run() -> anyhow::Result<()> {
         events.clone(),
     )
     .await;
+    // Workflow runs (workflows.md): the engine over <data>/runs, the definitions of <config>/workflows.
+    let project_check: kagent_core::tools::workflow::ProjectCheck = {
+        let settings = settings_arc.clone();
+        Arc::new(move |path: &str| {
+            let roots = settings.read().unwrap().desktop_prefs().project_roots;
+            let wanted = std::fs::canonicalize(path).ok()?;
+            kagent_core::tools::xdg::projects(&roots).into_iter().filter_map(|p| std::fs::canonicalize(p).ok()).find(|p| *p == wanted).map(|p| p.to_string_lossy().to_string())
+        })
+    };
+    let runs = runs::Runs::start(agent.clone(), workflow_access, subagents.profiles.clone(), paths.data.join("runs"), paths.config.join("workflows"), settings_arc.read().unwrap().workflows_config().max_runs, project_check);
     // Compaction (compaction.md section 1) reads its settings before every model request.
     let (settings_for_compaction, providers_for_compaction) = (settings_arc.clone(), providers.clone());
     agent.set_compaction_source(Arc::new(move || {
@@ -444,6 +460,7 @@ async fn run() -> anyhow::Result<()> {
         local_models,
         usage,
         tickets,
+        runs,
         screen_watch,
         skills: skills.clone(),
         memory,
