@@ -25,6 +25,37 @@ const THINKING: { id: VoiceBrain; label: string; hint: string }[] = [
 /** Over this many ms of median wait for the Brain, the line becomes a warning (voice-control.md section 3). */
 const SLOW_MS = 4000;
 
+const IDLE_DEFAULT = 10;
+
+/** Minutes without speech after which a session that started by itself ends (1 to 120); saved when it is left or Enter is pressed. */
+function IdleMinutes({ value, disabled, onSave }: { value: number; disabled: boolean; onSave: (minutes: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const minutes = Number(text);
+  const ok = Number.isInteger(minutes) && minutes >= 1 && minutes <= 120;
+  const commit = () => {
+    if (ok && minutes !== value) onSave(minutes);
+  };
+  return (
+    <>
+      <input
+        type="number"
+        min={1}
+        max={120}
+        step={1}
+        aria-label="Stop listening after minutes without speech"
+        value={text}
+        disabled={disabled}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+      />
+      {!ok && <span className="ui-inline-bad">A whole number from 1 to 120.</span>}
+    </>
+  );
+}
+
 const readLook = (): OrbTheme => normalizeTheme(localStorage.getItem(ORB));
 
 // The Voice tab and the `ui` tool change the look through this event.
@@ -65,6 +96,8 @@ export default function VoiceSection({ title, description }: SectionProps) {
   const voice = settings?.voice;
   const brain = voice?.brain ?? "live";
   const liveGroups = voice?.toolGroups ?? DEFAULT_GROUPS;
+  const listenOnStart = voice?.listenOnStart ?? false;
+  const idleMinutes = voice?.listenOnStartIdleMinutes ?? IDLE_DEFAULT;
   const setLook = (t: OrbTheme) => {
     localStorage.setItem(ORB, t);
     window.dispatchEvent(new Event("kagent-orb"));
@@ -130,6 +163,18 @@ export default function VoiceSection({ title, description }: SectionProps) {
         </Row>
         <Row label="Pause media" hint="Music and videos pause while a voice session is open.">
           <Toggle label="Pause media" checked={voice?.pauseMedia ?? true} onChange={(v) => void save("voice", { pauseMedia: v })} />
+        </Row>
+      </GroupCard>
+      <GroupCard title="At start" description="Done by itself after login.">
+        <Row label="Listen on start" hint="Opens KAgent's window and starts a voice session after login.">
+          <Toggle label="Listen on start" checked={listenOnStart} onChange={(v) => void save("voice", { listenOnStart: v })} />
+        </Row>
+        <p className="hint ui-note">The microphone turns on by itself after login. The chip in the title bar and the tray icon show it; say 'stop listening' or click the chip to end it.</p>
+        <Row label="Stop after" hint="Minutes without you speaking, 1 to 120. Only for a session that started by itself.">
+          <IdleMinutes key={idleMinutes} value={idleMinutes} disabled={!listenOnStart} onSave={(m) => void save("voice", { listenOnStartIdleMinutes: m })} />
+        </Row>
+        <Row label="Say the greeting out loud" hint={listenOnStart ? "The greeting of the notification is also said at the start of that session, once." : "Needs Listen on start."}>
+          <Toggle label="Say the greeting out loud" checked={settings?.startup?.greeting?.spoken ?? false} disabled={!listenOnStart} onChange={(v) => void save("startup", { greeting: { spoken: v } })} />
         </Row>
       </GroupCard>
       <GroupCard title="Thinking" description="Who understands what you say and acts on it. A change applies to the next voice session.">
