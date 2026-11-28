@@ -150,6 +150,8 @@ impl Agent {
             input: call.input.clone(),
             summary: assessment.summary.clone(),
         });
+        // A subagent's progress (steering.md section 2).
+        self.live_start(session_id, &call.name, &call.input, &assessment.summary);
         if cancel.is_cancelled() {
             return self.finish(session_id, turn_id, &call, ToolCallStatus::Cancelled, "cancelled by user before running".into(), started, assessment.summary, origin);
         }
@@ -356,6 +358,7 @@ impl Agent {
                 tracing::warn!("audit append failed: {e:#}");
             }
         }
+        self.live_end(session_id, &call.name, &summary, status);
         let _ = self.events.send(AgentEvent::ToolCallFinished {
             session_id: session_id.into(),
             turn_id: turn_id.into(),

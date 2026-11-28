@@ -9,7 +9,7 @@ use super::*;
 use crate::protocol::Role;
 
 fn view(status: ChildStatus) -> ChildView {
-    ChildView { id: "c1".into(), title: "disk usage".into(), profile: "disk-audit".into(), status, started_at: None, ended_at: None }
+    ChildView::new("c1".into(), "disk usage".into(), "disk-audit".into(), status)
 }
 
 #[test]

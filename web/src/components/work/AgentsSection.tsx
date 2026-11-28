@@ -39,6 +39,12 @@ export default function AgentsSection({ sessionId, pane }: { sessionId: string; 
               <span className={`agent-status status-${c.status}`}>{c.status}</span>
               <span className="work-line-note work-time">{c.status === "queued" ? "waiting" : elapsedOf(c, now)}</span>
             </button>
+            {c.lastAction && (
+              <div className="agent-doing" data-action-status={c.lastAction.status} title={c.lastAction.summary}>
+                <span>{c.lastAction.status === "running" ? "Doing" : "Last"}: {c.lastAction.summary}</span>
+                {(c.files?.length ?? 0) > 0 && <span className="agent-files">{c.files?.length} {c.files?.length === 1 ? "file" : "files"}</span>}
+              </div>
+            )}
             {live && (
               <button type="button" className="danger work-stop" aria-label={`Stop ${c.title}`} onClick={() => void stopSubagent(sessionId, c.id)}>
                 Stop

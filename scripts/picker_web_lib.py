@@ -224,6 +224,11 @@ def diff_route(method, path, body):
     return None
 
 
+def set_detail(child, **fields):
+    """Change the detail the mock answers for a worker while the page runs (steering.md)."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__detail", data=json.dumps({"child": child, "fields": fields}).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
 def folder_refusal(path):
     """The 400 message of the daemon for a folder it would refuse (sidebar.md section 3)."""
     if not (path.startswith("/") or path.startswith("~/")):
@@ -360,6 +365,9 @@ class Mock(BaseHTTPRequestHandler):
             if "text" in body:
                 OUTPUT[body["id"]] = body["text"]
             return self.send(200, {"ok": True})
+        if path == "/__detail":
+            CFG.setdefault("details", {}).setdefault(body["child"], {}).update(body["fields"])
+            return self.send(200, {"ok": True})
         if path == "/__usage":
             # The limits change while the page runs (usage.md): the view of GET /api/usage the mock answers.
             CFG["usage"] = body
@@ -459,6 +467,16 @@ class Mock(BaseHTTPRequestHandler):
             if CFG.get("refuse"):
                 return self.send(409, {"error": {"code": "refused", "message": CFG["refuse"]}})
             return self.send(200, {"status": "started", "turnId": "t1"})
+        md = re.fullmatch(r"/api/sessions/([^/]+)/subagents/([^/]+)", path)
+        if md and method == "GET":
+            # What the worker pane draws (steering.md section 2): `reset(details={child id: {...}})`; the calls are in CALLS.
+            CALLS.append(f"GET {path}")
+            d = (CFG.get("details") or {}).get(md.group(2))
+            m = SESSIONS.get(md.group(2))
+            if not d and m and m.get("origin") == "subagent" and m.get("parent") == md.group(1):
+                # A worker the test did not describe: its job and nothing else.
+                d = {"child": {"id": m["id"], "title": m["title"], "profile": "general", "status": "running"}, "job": m["title"], "todo": [], "transcript": []}
+            return self.send(200, d) if d else self.send(404, {"error": {"code": "not_found", "message": f"no subagent '{md.group(2)}' belongs to session {md.group(1)}"}})
         ms = re.fullmatch(r"/api/sessions/([^/]+)/subagents/([^/]+)/stop", path)
         if ms and method == "POST":
             CALLS.append(f"POST {path}")

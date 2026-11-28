@@ -139,14 +139,14 @@ impl Agent {
         self.permissions.set_planning(&id, parent.planning);
         let restriction = Restriction { groups: (!req.profile.tool_groups.is_empty()).then(|| req.profile.tool_groups.clone()), read_only: req.profile.read_only, child: true };
         self.children.restrict(&id, restriction);
-        let view = ChildView { id: id.clone(), title: description.into(), profile: req.profile.name.clone(), status: ChildStatus::Queued, started_at: None, ended_at: None };
+        let view = ChildView::new(id.clone(), description.into(), req.profile.name.clone(), ChildStatus::Queued);
         let job = Job {
             model_ref: model.to_string(),
             max_iterations: req.profile.max_iterations,
             block: subagent_block(description, &req.profile),
             text: Some(job_text(&digest, prompt)),
         };
-        let (run_now, view) = self.children.insert(Child { parent: req.parent.clone(), view, job, started: None, end: watch::channel(None).0 });
+        let (run_now, view) = self.children.insert(Child { parent: req.parent.clone(), view, job, started: None, end: watch::channel(None).0, last_emit: None });
         if run_now {
             self.launch_child(&id).await;
         } else {
@@ -156,7 +156,7 @@ impl Agent {
         Ok(self.children.get(&id).map_or(view, |(_, view, _, _)| view))
     }
 
-    fn child_event(&self, parent: &str, view: &ChildView) {
+    pub(crate) fn child_event(&self, parent: &str, view: &ChildView) {
         let _ = self.events.send(AgentEvent::SubagentUpdated { session_id: parent.into(), child: view.clone(), status: view.status });
     }
 
@@ -240,6 +240,20 @@ impl Agent {
         }
         // Idle: a new turn. Running: steering at its next model request.
         Ok(matches!(self.send(session_id, text.to_string(), Via::Agent).await?, SendOutcome::Started { .. }))
+    }
+
+    /// A tool call of `session_id` started: a child tells where it is (steering.md section 2).
+    pub(crate) fn live_start(&self, session_id: &str, name: &str, input: &serde_json::Value, summary: &str) {
+        if let Some((parent, view)) = self.children.note_call(session_id, name, input, summary) {
+            self.child_event(&parent, &view);
+        }
+    }
+
+    /// The call ended.
+    pub(crate) fn live_end(&self, session_id: &str, name: &str, summary: &str, status: crate::protocol::ToolCallStatus) {
+        if let Some((parent, view)) = self.children.note_result(session_id, name, summary, status) {
+            self.child_event(&parent, &view);
+        }
     }
 
     /// The children of `parent`, in the order they were started.

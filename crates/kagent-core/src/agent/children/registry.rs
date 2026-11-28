@@ -50,7 +50,17 @@ pub(super) struct Child {
     pub(super) started: Option<Instant>,
     /// `Some` once the child ended; a late subscriber sees it at once.
     pub(super) end: watch::Sender<Option<End>>,
+    /// When the progress of its tool calls was last announced (at most every `PROGRESS_EVERY`).
+    pub(super) last_emit: Option<Instant>,
 }
+
+/// The summary of a call without the name of the job `named` put in front of it.
+fn plain(title: &str, summary: &str) -> String {
+    summary.strip_prefix(&format!("subagent \"{title}\": ")).unwrap_or(summary).to_string()
+}
+
+/// Progress of a running tool call is announced at most this often per child; the end of a call never waits.
+const PROGRESS_EVERY: std::time::Duration = std::time::Duration::from_millis(500);
 
 #[derive(Default)]
 struct Inner {
@@ -243,5 +253,36 @@ impl Children {
 
     pub(super) fn set_max(&self, max: usize) {
         self.lock().max = max;
+    }
+
+    /// A tool call of `session` started: when it is a running child, its last action and files are updated. The child to
+    /// announce (`None` for a session that is no child, and while the last announcement is younger than 500 ms).
+    pub(crate) fn note_call(&self, session: &str, name: &str, input: &serde_json::Value, summary: &str) -> Option<(String, ChildView)> {
+        let mut inner = self.lock();
+        let child = inner.children.get_mut(session)?;
+        let summary = plain(&child.view.title, summary);
+        child.view.last_action = Some(live::LastAction { tool: name.into(), summary, status: live::ActionStatus::Running, at: Utc::now() });
+        if let Some((path, changed)) = live::touched(name, input) {
+            live::add_touch(&mut child.view.files, path, changed);
+        }
+        if child.last_emit.is_some_and(|at| at.elapsed() < PROGRESS_EVERY) {
+            return None;
+        }
+        child.last_emit = Some(Instant::now());
+        Some((child.parent.clone(), child.view.clone()))
+    }
+
+    /// The call of `session` ended with `status` (also a call refused before it ran): always announced.
+    pub(crate) fn note_result(&self, session: &str, name: &str, summary: &str, status: crate::protocol::ToolCallStatus) -> Option<(String, ChildView)> {
+        let mut inner = self.lock();
+        let child = inner.children.get_mut(session)?;
+        let summary = plain(&child.view.title, summary);
+        let now = live::ActionStatus::of(status);
+        match child.view.last_action.as_mut() {
+            Some(a) if a.tool == name && a.status == live::ActionStatus::Running => a.status = now,
+            _ => child.view.last_action = Some(live::LastAction { tool: name.into(), summary, status: now, at: Utc::now() }),
+        }
+        child.last_emit = Some(Instant::now());
+        Some((child.parent.clone(), child.view.clone()))
     }
 }

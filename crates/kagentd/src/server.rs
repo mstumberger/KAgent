@@ -191,6 +191,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/agents", get(crate::subagents::http::list))
         .route("/agents/{name}", put(crate::subagents::http::put_profile).delete(crate::subagents::http::delete))
         .route("/sessions/{id}/subagents/{child}/stop", post(crate::subagents::http::stop))
+        .route("/sessions/{id}/subagents", get(crate::subagents::steer_http::list))
+        .route("/sessions/{id}/subagents/{child}", get(crate::subagents::steer_http::get))
         .route("/hooks", get(crate::hooks::http::list).post(crate::hooks::http::create))
         .route("/hooks/{id}", put(crate::hooks::http::update).delete(crate::hooks::http::delete))
         .route("/hooks/{id}/test", post(crate::hooks::http::test))

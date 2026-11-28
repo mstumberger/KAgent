@@ -49,6 +49,29 @@ export interface ChildView {
   status: ChildStatus;
   startedAt?: string;
   endedAt?: string;
+  /** The latest tool call of the worker (steering.md section 2). */
+  lastAction?: { tool: string; summary: string; status: "running" | "done" | "error" | "refused"; at: string };
+  /** The files its tool calls named. */
+  files?: { path: string; changed: boolean }[];
+  /** The owner's messages to it, with receipts (steering.md section 3). */
+  steering?: Steering[];
+}
+
+export interface Steering {
+  id: string;
+  text: string;
+  interrupt: boolean;
+  state: "queued" | "delivered";
+  at: string;
+  deliveredAt: string | null;
+}
+
+/** `GET /api/sessions/:id/subagents/:child`: what the worker pane draws (steering.md section 2). */
+export interface WorkerDetail {
+  child: ChildView;
+  job: string;
+  todo: { content: string; status: "pending" | "in_progress" | "completed" }[];
+  transcript: { role: "assistant" | "user" | "tool"; kind: "text" | "call" | "result" | "steer"; text: string; status?: string }[];
 }
 
 /** `settings.subagents` (config.md section 11). */
@@ -70,4 +93,6 @@ export const agentsApi = {
   remove: (name: string) => api.del<void>(`/api/agents/${encodeURIComponent(name)}`),
   /** The Stop button of an Agents card: a running subagent is cancelled and a queued one never starts. */
   stop: (sessionId: string, childId: string) => api.post<{ status: ChildStatus }>(`/api/sessions/${sessionId}/subagents/${childId}/stop`, {}),
+  /** What a worker is doing: its job, its todo list and the tail of its transcript. */
+  detail: (sessionId: string, childId: string) => api.get<WorkerDetail>(`/api/sessions/${sessionId}/subagents/${childId}`),
 };

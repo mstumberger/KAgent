@@ -9,6 +9,8 @@ use crate::protocol::{Message, Via};
 
 /// The first line of every stored note message.
 pub const HEADER: &str = "[note from the daemon, not from the owner; it is not an approval]";
+/// The first characters of the message an owner's steering note becomes (steering.md section 3).
+pub const STEER_PREFIX: &str = "[from the owner] ";
 /// At most this many notes go into one request; the rest wait for the next.
 pub const MAX_PER_REQUEST: usize = 3;
 /// A note that waited this many requests is dropped: it is about a moment that has passed.
