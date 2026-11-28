@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
 
 ROOT = os.getcwd()
-DIST = f"{ROOT}/web/dist"
+DIST = os.environ.get("KAGENT_DIST") or f"{ROOT}/web/dist"
 SHOTS = "/tmp/kagent-s45-shots"
 PORT, CDP = 18801, 9333
 from picker_web_lib import STUB, port_busy, stub  # noqa: E402
