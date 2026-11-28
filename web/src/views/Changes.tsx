@@ -4,6 +4,7 @@ import { api, type Change } from "../api";
 import DiffView from "../components/diff/DiffView";
 import type { Diff, Texts } from "../components/diff/model";
 import { useStore } from "../store";
+import { Page, PageHeader } from "../components/page/Page";
 
 /** `GET /api/changes/:id/diff` (diff.md section 3). */
 interface ChangeDiff {
@@ -56,13 +57,11 @@ export default function Changes() {
   };
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <h2>Changes</h2>
-        <span className="hint">Every change KAgent made, newest first. Undo restores the recorded previous state.</span>
-      </div>
+    <Page wide>
+      <PageHeader title="Changes" description="Every change KAgent made, newest first. Undo restores the recorded previous state." />
       {msg && <pre className="banner">{msg}</pre>}
       {changes.length === 0 && <div className="empty">No changes yet.</div>}
+      <div className="scroll-x">
       <table className="table">
         <thead>
           <tr>
@@ -116,6 +115,7 @@ export default function Changes() {
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </Page>
   );
 }

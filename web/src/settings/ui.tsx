@@ -4,9 +4,9 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useSettingPatch } from "./useSettingPatch";
 
 /** The frame of a page: a fixed header (title, description, actions, save result) over the scrolling body. */
-export function SectionPage({ title, description, actions, children }: { title: string; description: string; actions?: ReactNode; children: ReactNode }) {
+export function SectionPage({ title, description, actions, wide = false, children }: { title: string; description: string; actions?: ReactNode; wide?: boolean; children: ReactNode }) {
   return (
-    <div className="ui-section-page">
+    <div className={`ui-section-page${wide ? " wide" : ""}`}>
       <header className="ui-section-head">
         <div className="ui-section-head-inner">
           <div className="ui-section-text">

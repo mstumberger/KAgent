@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, type Alert } from "../api";
 import { openSession, refreshSessions, refreshState, setView, useStore } from "../store";
+import { Page, PageHeader } from "../components/page/Page";
 
 export default function Alerts() {
   const s = useStore();
@@ -27,13 +28,15 @@ export default function Alerts() {
   };
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <h2>Alerts</h2>
-        <label className="inline">
-          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> show acknowledged
-        </label>
-      </div>
+    <Page>
+      <PageHeader
+        title="Alerts"
+        actions={
+          <label className="inline">
+            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> show acknowledged
+          </label>
+        }
+      />
       {alerts.length === 0 && <div className="empty">No {all ? "" : "open "}alerts. KAgent watches the journal, services, disks, temperatures, SSH, persistence and (if configured) your router.</div>}
       {alerts.map((a) => (
         <div key={a.id} className={`alert-card sev-${a.severity} st-${a.status}`}>
@@ -56,6 +59,6 @@ export default function Alerts() {
           </div>
         </div>
       ))}
-    </div>
+    </Page>
   );
 }

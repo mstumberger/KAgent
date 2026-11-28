@@ -8,6 +8,7 @@ import { errorMessage, rel, tasksApi, type Task, type TaskTemplate } from "./tas
 import TaskForm from "./tasks/TaskForm";
 import TaskHistory from "./tasks/TaskHistory";
 import "./tasks/tasks.css";
+import { Page, PageHeader } from "../components/page/Page";
 
 /** The pill of a row: what the task is doing. */
 function stateOf(t: Task): { label: string; cls: string } {
@@ -147,8 +148,8 @@ export default function Tasks() {
   };
 
   return (
-    <div className="page tasks-page">
-      <h2>Tasks</h2>
+    <Page className="tasks-page">
+      <PageHeader title="Tasks" />
       <TaskForm
         onAdded={(list) => {
           setTasks(list);
@@ -184,6 +185,6 @@ export default function Tasks() {
           {showDone && <ul className="task-list finished">{finished.map(row)}</ul>}
         </>
       )}
-    </div>
+    </Page>
   );
 }

@@ -140,6 +140,7 @@ export default function Memory({ title, description }: SectionProps) {
     <SectionPage
       title={title}
       description={description}
+      wide
       actions={
         <button className="primary" disabled={creating} onClick={startNew}>
           New memory
