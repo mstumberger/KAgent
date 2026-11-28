@@ -3363,6 +3363,44 @@ Stages I1, I2 and I3 of `plans/tickets-and-steering.md` (local). Eight commits o
 - **Not built**: workflow runs as tickets, related work, "went off", align on change, the Jira mirror, comments on diff lines, Approve,
   Revert hunk. Untracked files are not part of a working-tree diff.
 
+### 2026-11-28 - R1 to R3: reliable web search and the reader (`plans/web-reader.md`, local)
+
+Seven commits on `v0.0.3`. The owner's decisions of the plan (section 5) were taken as its defaults: no stealth of any kind, the reader has
+its own profile and never his, search through the reader is DuckDuckGo. Decisions:
+
+- **Settings**: `search.engines` (an ordered list, `null` by default) is the chain and `search.engine` stays as the old single setting:
+  while `engines` is `null` the chain is that engine plus `duckduckgo` and `reader` without repeats, so an old file loads and means
+  something (no file is rewritten). The new section `web` holds `reader` (default on) and `readerSites`. Both `search.engines` and `web` are
+  protected keys (where queries go, where pages are read from). The plan's names `web.searchEngines` and `web.readerSites` became these two.
+- **Chain** (`web/chain.rs`): cache 15 min and 50 entries of up to 10 hits (a smaller `limit` cuts them); pacing is a slot per engine
+  (DuckDuckGo 3 s, the reader 5 s, Brave 1 s, SearXNG none) that a request waits for up to 20 s, longer is "busy" and the engine is skipped
+  without a cooldown; cooldowns 5 min, doubled per failure in a row, at most 1 h, reset by a success; a missing key or address and a reader that
+  is off skip the engine with no cooldown; "no results" is an answer and stops the chain. The burst refusal (4th search within 10 s) counts per
+  session id, because a tool call carries no turn id. The clock is a trait with a fake whose `sleep` advances it. `web_search` and `web_fetch`
+  timeouts are 45 s now (a queue wait plus a request; a challenge wait plus a read). One prompt row: "never send several web searches at once"
+  (enforced by the burst refusal; the rules table has 22 rows, 6 enforced).
+- **Reader** (`web/reader/`): the browser is the first of the `browser` tool's list on `PATH`; started headless with
+  `--remote-debugging-port=0` on 127.0.0.1 (the port is read from `DevToolsActivePort` of the profile), in its own systemd scope under
+  systemd, closed by `Browser.close` (it writes the cookies) and ended after 3 s if it does not. The CDP client got `send` and `recv` so the
+  reader can answer events; it uses one tab and leaves it on `about:blank`. The egress guard inside the browser is `Fetch.enable` with `*`:
+  every request is judged by the same `Egress::admit` (decision kept per origin for one read), only http, https, `data:`, `blob:` and `about:` go;
+  a refused main document ends the read as `refused` or `redirect to a blocked address stopped`. The test has a control: the same page with no
+  guard reaches the second loopback server. Said plainly in the spec: the browser resolves names itself (no pinning, DNS rebinding is not covered)
+  and WebSocket connections do not pass `Fetch`; the first address is also checked before the browser starts.
+- **Fetch fallback**: a 403, 429 or 503, a challenge page (`challenge::is_challenge`: titles, markup markers and words, only on short pages) or an empty
+  shell (under 200 characters of text, under 3 links, a `<script>`) go to the reader; `render: true` and `web.readerSites` go first. A reader that cannot run
+  adds one line to the plain answer. The reader and its pure challenge check were built in the second reader commit, the guard in the third.
+- **Human check**: the reader waits 20 s; then `not done: this site asks for a human check` and a notice with an action. `AgentEvent::Notice` has a new
+  optional `action {label, path, body}` (notices.md): the window posts it and closes the toast on success, shows a refusal as its own notice.
+  `POST /api/web/reader/open` closes the headless browser and starts the same browser, visible, on the same profile; when it exits the host goes on
+  `<data>/reader-sites.json`. Forget clears that host's cookies through CDP (it starts the headless browser to do it); Clear profile deletes the folder.
+- **No stealth**: no flag, script or user-agent change; a test lists the arguments and refuses the usual stealth ones.
+- **Not verified**: no real site and no real search engine was contacted. A visible window was tested with a stand-in script, not a real display. The reader's
+  scope under systemd was tested as argv only (`in_scope_named`), not under a real unit. A browser the daemon leaves running after a crash is not found again.
+- **Test library**: `picker_web_lib.py` has a `ROUTES` hook, and its stand-in answers empty views for `/api/agents`, `/api/tools`, `/api/usage`, `/api/screen-watch`,
+  `/api/sentinel`, `/api/doctor`, `/api/net`, `/api/system` and `/api/local-models`: a 404 is a console error, and it failed the chooser, screen-watch and
+  calendar suites while the owner's daemon held port 7878.
+
 ## F. Progress
 
 - [x] S0 compile drafts

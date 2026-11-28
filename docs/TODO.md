@@ -160,3 +160,4 @@ first three are done first.
   headless browser of KAgent's own (its own profile, read-only) reads pages that
   need JavaScript or a session, and when a site asks for a human check the owner
   passes it once in a visible window. Browser attach stays for acting and testing.
+  Built: R1-R3 on `v0.0.3` (the search chain, the reader, the human check and Settings -> Web); see `docs/IMPLEMENTATION.md` section E.

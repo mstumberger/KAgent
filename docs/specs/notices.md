@@ -22,6 +22,11 @@ and the title bar of S42 has no room for it.
 - `kind` defaults by level: `error` and `warn` are `error`, `info` is `info`. The loop
   sends `recovery` with the same `key` when a provider that failed answers again
   ("Gemini answers again").
+- `action`: `{label, path, body}`, optional: a button of the toast. Pressing it posts `body` to `path` of
+  the daemon's API (a path under `/api/`); the toast closes when the answer is a success, and a refusal
+  is shown as a notice of its own (`<label> failed: <message>`) while the toast stays. The reader's human
+  check uses it: label "Open it", path `/api/web/reader/open`, body `{url}`, key `reader:check:<host>`
+  (`web.md` section 9).
 - `sessionId` when the notice belongs to a turn. An old client ignores the new fields.
 - The page's own failures (`store.ts` `set({notice})`: "Todo list not saved") become
   local notices with `kind: "error"` and no key.

@@ -215,6 +215,10 @@ for a plan, `preview` holds the plan text.
 | web | GET `/api/web/brave-key` | | `{configured}`; never the key |
 | | PUT `/api/web/brave-key` | `{key}` | `{configured: true}`; 400 for a key that is not 16 to 128 printable ASCII characters without a space |
 | | DELETE `/api/web/brave-key` | | 204 |
+| | GET `/api/web/reader` | | `{enabled, browser, running, windowOpen, profile, warmed: [{host, at}]}`; `browser` is the path of the browser the reader would run, `null` when none is installed (`web.md` section 9) |
+| | POST `/api/web/reader/open` | `{url}` | `{host}`: opens the reader's profile in a visible window on `url`; when the window closes, the host is warmed. 400 for a URL the egress rules refuse (shape, local names and addresses); 409 `busy` while a page is read or a window is open; 409 `no_browser` |
+| | DELETE `/api/web/reader/sites/:host` | | 204; clears that site's cookies from the reader's profile and takes it off the list; 409 `busy`, 409 `no_browser` |
+| | DELETE `/api/web/reader/profile` | | 204; closes the reader's browser, deletes its profile and empties the list; 409 `busy` |
 | subagents | GET `/api/agents` | | `{agents: AgentProfileView[], invalid: [{file: string, reason: string}]}` |
 | | PUT `/api/agents/:name` | `{description, model?, toolGroups?, maxIterations?, prompt}` | `AgentProfileView` (201 when it creates, 200 when it changes; a field left out keeps its value); built-in names -> 409; an invalid name, a missing description, an unknown tool group, `maxIterations` outside 1..80 or a model the providers do not know -> 400 |
 | | DELETE `/api/agents/:name` | | 204 |

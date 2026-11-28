@@ -64,6 +64,8 @@ card sentence and the destructive one); their rows say so.
 | 20 | voice | same changing call twice | repeated action | enforced `live::confirm::Repeats::first` (was "never type the same text twice") |
 | 21 | voice | never say that something was done, looked up or sent | routed model's claims | guidance (speech) |
 
+Row 22 (R1, web.md section 3.1): chat prompt, "never send several web searches at once", a burst of searches, enforced `web::chain::Chain::allow_search` (the table in `prompt/rules.rs` has it; `rules_counts` is now 6 enforced).
+
 21 rows: 5 enforced, 2 new checks (the noise check and the `message` check, each in one row or two prompts), 14 guidance. `rules_counts` asserts it.
 
 ### A.2 Voice: an action after a noise fragment
