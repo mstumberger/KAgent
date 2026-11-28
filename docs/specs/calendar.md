@@ -57,7 +57,9 @@ KAgent talks to Google's APIs directly with the owner's own OAuth client.
 
 - `calendars`: the ids the agent and the report may see; every other calendar of the
   account does not exist for them (enforced in the client, not only in the page).
-  `defaultCalendar` must be one of them and writable.
+  `defaultCalendar` must be one of them and writable. A save (`PUT /api/settings`, and the `settings` tool) that names a read-only calendar as
+  `defaultCalendar` is refused with 400 "calendar \"<name>\" is read-only: choose a calendar you can
+  write to as the default" when the account is connected and lists it; adding an event keeps its own check.
 - `home`: a free address; resolved once to coordinates when it is saved with a Maps key
   (stored as `homeLatLng`); without a key it is kept as text and `leaveBy` is off.
 - The Maps API key is not in settings: keyring, `kind=maps`. `weekdays`/`weekends` are

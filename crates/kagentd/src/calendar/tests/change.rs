@@ -281,3 +281,19 @@ async fn an_undo_of_a_calendar_that_is_switched_off_does_not_reach_it() {
     assert!(!ok && said.contains("not switched on"), "{said}");
     assert_eq!(r.fake.events_of(WORK).len(), 1);
 }
+
+/// v0.0.3 A7: a read-only calendar is refused as the default when the setting is saved.
+#[tokio::test]
+async fn a_read_only_default_is_refused_when_it_is_saved() {
+    let r = rig().await;
+    // Not connected: nothing can be told yet, the check of `add` stays.
+    assert!(r.cal.check_default(&json!({"calendar": {"defaultCalendar": HOLIDAYS}})).await.is_ok());
+    r.ready(&["primary"]).await;
+    let refused = r.cal.check_default(&json!({"calendar": {"defaultCalendar": HOLIDAYS}})).await.unwrap_err();
+    assert!(refused.contains("Holidays in Slovenia") && refused.contains("read-only"), "{refused}");
+    for ok in [json!({"calendar": {"defaultCalendar": WORK}}), json!({"calendar": {"defaultCalendar": FAMILY}}), json!({"calendar": {"defaultCalendar": "primary"}}), json!({"calendar": {"defaultCalendar": "unknown"}}), json!({"calendar": {"home": "x"}}), json!({"maxIterations": 5})] {
+        assert!(r.cal.check_default(&ok).await.is_ok(), "{ok}");
+    }
+    // By its name, as the owner's page and the agent say it.
+    assert!(r.cal.check_default(&json!({"calendar": {"defaultCalendar": "holidays in slovenia"}})).await.is_err());
+}

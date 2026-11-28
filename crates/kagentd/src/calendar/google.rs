@@ -93,6 +93,23 @@ impl Calendar {
         Ok(found)
     }
 
+    /// A settings patch that names `calendar.defaultCalendar` is refused while the account says that calendar is
+    /// read-only (calendar.md section 2), so the mistake shows when it is saved, not when an event is added. What
+    /// cannot be told (not connected, Google not answering, a calendar the account does not list) is left to the
+    /// check that `add` makes.
+    pub async fn check_default(&self, patch: &Value) -> Result<(), String> {
+        let Some(wanted) = patch.get("calendar").and_then(|c| c.get("defaultCalendar")).and_then(Value::as_str).map(str::trim).filter(|w| !w.is_empty()) else { return Ok(()) };
+        if self.state() != super::ConnState::Connected {
+            return Ok(());
+        }
+        let Ok(all) = self.account_calendars().await else { return Ok(()) };
+        let key = wanted.to_lowercase();
+        match all.iter().find(|c| c.id == wanted || (wanted == "primary" && c.primary) || c.name.to_lowercase() == key) {
+            Some(c) if !c.writable => Err(format!("calendar \"{}\" is read-only: choose a calendar you can write to as the default", c.name)),
+            _ => Ok(()),
+        }
+    }
+
     /// A calendar named by the model or the settings (an id, a name, or `primary`), if it is switched on.
     pub async fn on_calendar(&self, wanted: &str) -> Result<CalInfo, CalError> {
         let on = self.switched_on().await?;
