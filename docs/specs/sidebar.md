@@ -524,3 +524,12 @@ differ.
 - Headless check, added to the S42 scenarios: the header holds exactly those five
   things; the permission mode changes from the sidebar foot in the full and the
   collapsed state; the keyboard order is toggle, Stop all, voice chip, then the sidebar.
+
+### Amendment 2026-11-28 (v0.0.3): the window controls come last
+
+In the app window the window controls (Shrink to widget, Hide to tray, Maximize) come last in
+the keyboard tab order, after the sidebar and the view. They are no longer children of the
+header in the DOM: `.win-controls` is a later child of `.app`, drawn at the right end of the
+title bar (`position: absolute`, 36 px high; the header keeps room for it; the strip between
+the buttons still drags and a double click on it still maximizes). The header holds the
+toggle, KAgent, Stop all and the voice chip. Check: `scripts/test-sidebar-web.py`.

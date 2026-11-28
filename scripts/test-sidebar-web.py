@@ -320,9 +320,9 @@ async def main():
             await page.until("!!document.querySelector('.voice-chip')", "the voice chip")
             await page.shot(f"titlebar-{theme}")
             results[f"{t}: the title bar is 36 px high and drags the window"] = await page.js("Math.round(document.querySelector('header').getBoundingClientRect().height) === 36 && document.querySelector('header').classList.contains('app-titlebar')")
-            results[f"{t}: the header holds exactly the toggle, KAgent, Stop all, the voice chip and the window controls"] = await page.js(THINGS) == ["toggle", "logo:KAgent", "spacer", "Stop all", "voice", "window"]
+            results[f"{t}: the header holds exactly the toggle, KAgent, Stop all and the voice chip (the window controls follow the sidebar in the DOM)"] = await page.js(THINGS) == ["toggle", "logo:KAgent", "spacer", "Stop all", "voice"]
             results[f"{t}: the header has no select, no nav, no theme button and no permission picker"] = await page.js("(() => { const h = document.querySelector('header'); return !h.querySelector('select, nav, .perm, [aria-label*=theme i], [aria-label*=permission i]'); })()")
-            results[f"{t}: every control of the header has a name"] = await page.js("[...document.querySelectorAll('header button')].every(b => b.textContent.trim() || b.getAttribute('aria-label'))")
+            results[f"{t}: every control of the header has a name"] = await page.js("[...document.querySelectorAll('header button, .win-controls button')].every(b => b.textContent.trim() || b.getAttribute('aria-label'))")
             await page.js("document.querySelector('#sidebar-toggle').focus()")
             seen = [await page.js(DESCRIBE)]
             for _ in range(12):
@@ -330,7 +330,13 @@ async def main():
                 seen.append(await page.js(DESCRIBE))
                 if seen[-1] == "new":
                     break
-            results[f"{t}: the keyboard order is the toggle, Stop all, the voice chip, the window controls, then the sidebar"] = seen == ["toggle", "Stop all", "voice:connecting", "voice:mute", "voice:end", "window:Shrink to widget", "window:Hide to tray", "window:Maximize", "new"]
+            results[f"{t}: the keyboard order is the toggle, Stop all, the voice chip, then the sidebar"] = seen == ["toggle", "Stop all", "voice:connecting", "voice:mute", "voice:end", "new"]
+            # v0.0.3 A6: the window controls come last in the tab order, and are drawn at the right end of the title bar
+            results[f"{t}: the window controls follow the sidebar and the view in the DOM (last in the tab order)"] = await page.js("(() => { const w = document.querySelector('.win-controls'), f = document.querySelector('aside.sidebar'), m = document.querySelector('main'); return !document.querySelector('header .win-controls') && !!(f.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(m.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING); })()")
+            await page.js("document.querySelector('.win-btn').focus()")
+            await page.key("Tab", "Tab", 9, 8)
+            results[f"{t}: Shift+Tab from the first window control goes back into the page, not to the header"] = await page.js("!document.activeElement.closest('header') && !document.activeElement.closest('.win-controls')")
+            results[f"{t}: the controls are still at the right end of the title bar and the chips do not run under them"] = await page.js("(() => { const h = document.querySelector('header').getBoundingClientRect(), w = document.querySelector('.win-controls').getBoundingClientRect(), v = document.querySelector('.voice-chip').getBoundingClientRect(); return w.top >= h.top && w.bottom <= h.bottom && Math.round(h.right - w.right) <= 12 && v.right <= w.left; })()")
             # the foot
             results[f"{t}: the foot is above Settings, the last view, below System"] = await page.js("(() => { const kids = [...document.querySelector('.sb-nav').children]; const foot = kids.findIndex(k => k.classList.contains('sb-foot')); return foot === kids.length - 2 && kids[kids.length - 1].textContent.trim() === 'Settings' && kids[foot - 1].textContent.trim() === 'System'; })()")
             results[f"{t}: the permission row is full width with its dot and the name of the mode"] = await page.js("(() => { const b = document.querySelector('.sb-perm'), f = document.querySelector('.sb-foot'); return b.querySelector('.perm-dot') && b.textContent.trim() === 'Ask' && b.getAttribute('aria-label') === 'Permission level: Ask' && b.getBoundingClientRect().width > f.getBoundingClientRect().width - 60; })()")

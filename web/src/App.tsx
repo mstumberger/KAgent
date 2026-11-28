@@ -157,19 +157,6 @@ export default function App() {
         )}
         <WatchChip />
         <VoiceChip />
-        {isApp && (
-          <div className="win-controls" role="group" aria-label="Window">
-            <button className="win-btn" title="Shrink to the small always-on-top widget" aria-label="Shrink to widget" onClick={() => switchLayout("compact")}>
-              <Icon name="shrink" size={15} />
-            </button>
-            <button className="win-btn" title="Hide to the tray (keeps listening)" aria-label="Hide to tray" onClick={() => void api.post("/api/ui/window", { mode: "hidden" })}>
-              <Icon name="tray" size={15} />
-            </button>
-            <button className="win-btn" title="Maximize or restore (or double-click the title bar)" aria-label="Maximize" onClick={() => toggleMaximize()}>
-              <Icon name="max" size={13} />
-            </button>
-          </div>
-        )}
       </header>
       <div className="shell">
       <Sidebar />
@@ -191,6 +178,20 @@ export default function App() {
       </div>
       <ResizeEdges />
       <Toasts />
+      {/* Last in the tab order, after the sidebar and the view; drawn at the right end of the title bar (sidebar.md, amendment of v0.0.3). */}
+      {isApp && (
+        <div className="win-controls" role="group" aria-label="Window">
+          <button className="win-btn" title="Shrink to the small always-on-top widget" aria-label="Shrink to widget" onClick={() => switchLayout("compact")}>
+            <Icon name="shrink" size={15} />
+          </button>
+          <button className="win-btn" title="Hide to the tray (keeps listening)" aria-label="Hide to tray" onClick={() => void api.post("/api/ui/window", { mode: "hidden" })}>
+            <Icon name="tray" size={15} />
+          </button>
+          <button className="win-btn" title="Maximize or restore (or double-click the title bar)" aria-label="Maximize" onClick={() => toggleMaximize()}>
+            <Icon name="max" size={13} />
+          </button>
+        </div>
+      )}
       {isApp && (
         <div className="resize-grip" title="Drag to resize" onPointerDown={(e) => startResize(e, "se")}>
           <Icon name="grip" size={14} />
