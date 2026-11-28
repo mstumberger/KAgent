@@ -79,6 +79,20 @@ export interface Message {
   toolName?: string;
   isError?: boolean;
   via?: "text" | "voice";
+  /** The images of a user message (vision.md section 1). */
+  images?: ImageRef[];
+}
+
+/** An image stored beside the session: fetched with `GET /api/sessions/:id/images/:imageId`. */
+export interface ImageRef {
+  id: string;
+  mime: string;
+  width: number;
+  height: number;
+  bytes: number;
+  /** What the vision model said it shows, when the Brain cannot read images itself. */
+  description?: string;
+  readBy?: string;
 }
 
 /** What the built-in rules give a model, and what is sent with a request: the config of config.md section 3, resolved (models.md section 4). */

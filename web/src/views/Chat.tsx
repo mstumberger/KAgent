@@ -6,8 +6,12 @@ import { Bubble } from "../components/transcript";
 import WorkPanel from "../components/WorkPanel";
 import AgentsCard from "../components/AgentsCard";
 import { agentCards, placeAgents } from "../components/agents";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import type { Message } from "../api";
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ApiError, type Message } from "../api";
+import Attachments from "../components/Attachments";
+import { useComposerImages } from "../components/useComposerImages";
+import { tellProviderLine, imageFiles, ACCEPT } from "../images";
+import { notify } from "../components/toasts";
 import { cancelSession, getStore, openSession, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
 import Icon from "../components/Icon";
 import { useVoice } from "../voice/useVoice";
@@ -46,6 +50,12 @@ export default function Chat() {
   // Something can answer: the default model, or the conversation's own choice (picker.md section 5.1).
   const canAnswer = !choice.none;
   const endRef = useRef<HTMLDivElement>(null);
+  // Images of the message being written (vision.md section 1): pasted, dropped on the conversation, or attached.
+  const pics = useComposerImages(s.activeSession, choice.answering, s.models, (s.state?.settings.visionModel as string | undefined) ?? "");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dropping, setDropping] = useState(false);
+  const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  const canSend = !pics.uploading && (text.trim().length > 0 || pics.items.length > 0) && canAnswer;
   // One shared empty list: a fresh `[]` per render would defeat the memo of the cards.
   const messages = s.activeSession ? (s.messages[s.activeSession] ?? NO_MESSAGES) : NO_MESSAGES;
   const streaming = s.activeSession ? s.streaming[s.activeSession] : undefined;
@@ -93,14 +103,30 @@ export default function Chat() {
 
   return (
     <div className="chat-layout">
-      <section className="chat-main">
+      <section
+        className={`chat-main${dropping ? " dropping" : ""}`}
+        onDragOver={(e) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          setDropping(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget === e.target) setDropping(false);
+        }}
+        onDrop={(e) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          setDropping(false);
+          pics.add(imageFiles(e.dataTransfer.files));
+        }}
+      >
         <Approvals />
 
         <div className="messages">
           {!s.activeSession && <div className="empty">Create a session to start.</div>}
           {messages.map((m, i) => (
             <Fragment key={i}>
-              <Bubble m={m} streaming={i === messages.length - 1 && running ? streaming : undefined} />
+              <Bubble m={m} sessionId={s.activeSession} streaming={i === messages.length - 1 && running ? streaming : undefined} />
               {(placed.under.get(i) ?? []).map((card) => (
                 <AgentsCard key={card.id} child={card} parentId={parentId} />
               ))}
@@ -140,19 +166,32 @@ export default function Chat() {
           className="composer"
           onSubmit={(e) => {
             e.preventDefault();
-            if (text.trim() === "/plan") {
+            if (!canSend) return;
+            if (text.trim() === "/plan" && pics.items.length === 0) {
               // The command alone: the next message starts in plan mode.
               setPlanNext({ session: s.activeSession, on: true });
               setText("");
               return;
             }
-            void sendMessage(text, armed);
+            const sentText = text;
+            const sentImages = pics.items;
+            if (pics.providerLine && s.activeSession) tellProviderLine(s.activeSession);
+            // A message that was not accepted comes back to the composer with its images.
+            sendMessage(sentText, armed, sentImages.map((a) => a.ref?.id ?? "")).catch((err) => {
+              setText(sentText);
+              pics.restore(sentImages);
+              // A refused turn has its notice already (vision.md section 2).
+              if (!(err instanceof ApiError && err.code === "refused")) notify(err instanceof Error ? err.message : String(err));
+            });
             setText("");
+            pics.clear();
             setPlanNext({ session: null, on: false });
           }}
         >
+          <Attachments items={pics.items} onRemove={pics.remove} providerLine={pics.providerLine} />
           <CommandInput
             value={text}
+            onImages={pics.add}
             skills={s.skills}
             suspend={menuOpen}
             onChange={setText}
@@ -162,6 +201,10 @@ export default function Chat() {
           <div className="composer-bar">
             <ModelMenu sessionId={s.activeSession} onOpenChange={setMenuOpen} />
             <div className="composer-tools">
+              <input ref={fileInput} type="file" accept={ACCEPT} multiple hidden aria-label="Attach images" onChange={(e) => { pics.add(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+              <button type="button" className="pics-btn" title="Attach an image" aria-label="Attach an image" disabled={!s.activeSession} onClick={() => fileInput.current?.click()}>
+                <Icon name="paperclip" size={16} />
+              </button>
               <button
                 type="button"
                 className={`mic-btn${talking ? " on" : ""}${talking && v.muted ? " muted" : ""}`}
@@ -187,7 +230,7 @@ export default function Chat() {
                   Stop
                 </button>
               ) : (
-                <button className="primary" disabled={!text.trim() || !canAnswer}>
+                <button className="primary" disabled={!canSend}>
                   Send
                 </button>
               )}

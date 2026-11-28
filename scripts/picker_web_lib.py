@@ -1,10 +1,11 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42) and test-work-web.py (S43)."""
+"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43) and test-vision-web.py (S46)."""
 import asyncio, base64, json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
 
 ROOT = os.getcwd()
-DIST = f"{ROOT}/web/dist"
+# KAGENT_DIST: a build of the window somewhere else (the owner's daemon serves web/dist, which a test must not replace).
+DIST = os.environ.get("KAGENT_DIST") or f"{ROOT}/web/dist"
 SHOTS = "/tmp/kagent-s41-shots"
 PORT, CDP = 18802, 9334
 DAEMON = "http://127.0.0.1:7878"
@@ -33,6 +34,9 @@ OUTPUT = {}
 MESSAGES = {}
 APPROVALS = []
 READS = []
+# The images of the mock (S46): the bytes of each upload by session and id, and the uploads in order as (session, size).
+IMAGES = {}
+UPLOADS = []
 
 
 # The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
@@ -50,6 +54,13 @@ def reset(**kw):
     CALLS.clear()
     OPENED.clear()
     READS.clear()
+    IMAGES.clear()
+    UPLOADS.clear()
+    # Stored images the session already has: {session: {id: base64 of a PNG}}.
+    for sid, stored in (kw.get("images") or {}).items():
+        for iid, b64 in stored.items():
+            data = base64.b64decode(b64)
+            IMAGES.setdefault(sid, {})[iid] = (data, *png_size(data))
     TASKS.clear()
     TASKS.update({k: [dict(t) for t in v] for k, v in kw.get("tasks", {}).items()})
     OUTPUT.clear()
@@ -142,6 +153,31 @@ def daemon(method, path, body=None):
         return e.code, e.read(), e.headers.get("Content-Type", "application/json")
 
 
+def png_size(data):
+    """(width, height) of a PNG, from its IHDR."""
+    import struct
+    return struct.unpack(">II", data[16:24]) if data[:8] == b"\x89PNG\r\n\x1a\n" else (1, 1)
+
+
+def image_upload(sid, ctype, raw):
+    """The answer of `POST /api/sessions/:id/images` for a multipart body with the field `file`: the ImageRef, as the daemon makes it."""
+    boundary = re.search(r"boundary=(.+)", ctype).group(1).strip('"').encode()
+    for part in raw.split(b"--" + boundary):
+        head, _, data = part.partition(b"\r\n\r\n")
+        if b'name="file"' in head:
+            data = data.rsplit(b"\r\n", 1)[0]
+            w, h = png_size(data)
+            iid = f"im{len(UPLOADS)}"
+            UPLOADS.append([sid, len(data)])
+            IMAGES.setdefault(sid, {})[iid] = (data, w, h)
+            return 200, json.dumps({"id": iid, "mime": "image/png", "width": w, "height": h, "bytes": len(data)}).encode(), "application/json"
+    return 400, json.dumps({"error": {"code": "invalid_input", "message": "no file"}}).encode(), "application/json"
+
+
+def uploads():
+    return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__uploads").read())["uploads"]
+
+
 class Quiet(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
         pass  # a reset connection of a page that went away
@@ -168,7 +204,8 @@ class Mock(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         n = int(self.headers.get("Content-Length", 0) or 0)
         raw = self.rfile.read(n) if n else b""
-        body = json.loads(raw) if raw else None
+        ctype = self.headers.get("Content-Type", "")
+        body = json.loads(raw) if raw and not ctype.startswith("multipart/") else None
         if path == "/__cfg":
             reset(**(body or {}))
             return self.send(200, {"ok": True})
@@ -183,6 +220,8 @@ class Mock(BaseHTTPRequestHandler):
             if "text" in body:
                 OUTPUT[body["id"]] = body["text"]
             return self.send(200, {"ok": True})
+        if path == "/__uploads":
+            return self.send(200, {"uploads": UPLOADS})
         if path == "/__reads":
             return self.send(200, {"reads": READS})
         if path == "/__opened":
@@ -193,6 +232,7 @@ class Mock(BaseHTTPRequestHandler):
             state["chatModelValid"] = CFG["valid"]
             state["settings"]["chatModel"] = CFG["default"]
             state["settings"]["liveModel"] = "gemini::live"
+            state["settings"]["visionModel"] = CFG.get("vision", "")
             state["running"] = CFG.get("running", [])
             state["pendingApprovals"] = APPROVALS
             state["alertsOpen"] = CFG.get("alerts", 0)
@@ -225,6 +265,18 @@ class Mock(BaseHTTPRequestHandler):
                 tail = int(re.search(r"tail=(\d+)", self.path).group(1)) if "tail=" in self.path else 4000
                 READS.append([found["id"], tail])
                 return self.send(200, {"task": found, "output": OUTPUT.get(found["id"], "")[-tail:]})
+        mi = re.fullmatch(r"/api/sessions/([^/]+)/images(?:/([^/]+))?", path)
+        if mi and mi.group(1) in SESSIONS:
+            if method == "POST" and not mi.group(2):
+                return self.send(*image_upload(mi.group(1), ctype, raw))
+            if method == "GET" and mi.group(2) in IMAGES.get(mi.group(1), {}):
+                return self.send(200, IMAGES[mi.group(1)][mi.group(2)][0], "image/png")
+        mp = re.fullmatch(r"/api/sessions/([^/]+)/messages", path)
+        if mp and method == "POST" and mp.group(1) in SESSIONS:
+            CALLS.append(f"POST {path} {json.dumps(body)}")
+            if CFG.get("refuse"):
+                return self.send(409, {"error": {"code": "refused", "message": CFG["refuse"]}})
+            return self.send(200, {"status": "started", "turnId": "t1"})
         ms = re.fullmatch(r"/api/sessions/([^/]+)/subagents/([^/]+)/stop", path)
         if ms and method == "POST":
             CALLS.append(f"POST {path}")
@@ -237,8 +289,9 @@ class Mock(BaseHTTPRequestHandler):
             gone = dict(model("anthropic", "Anthropic", "gone-model"))
             providers = []
             for pid, pname in (("anthropic", "Anthropic"), ("gemini", "Google Gemini")):
+                base = "http://127.0.0.1:11434/v1" if pid in CFG.get("localProviders", ()) else "https://x.example/v1"
                 rows = [row(m) for m in MODELS if m["providerId"] == pid] + ([row(gone, False)] if pid == "anthropic" else [])
-                providers.append({"id": pid, "name": pname, "templateId": pid, "enabled": True, "api": {"type": "openai-chat-completions", "baseUrl": "https://x.example/v1", "headers": {}},
+                providers.append({"id": pid, "name": pname, "templateId": pid, "enabled": True, "api": {"type": "openai-chat-completions", "baseUrl": base, "headers": {}},
                                   "apiKeyMasked": "sk-...abcd", "hasKey": True, "models": rows, "modelsFetchedAt": None, "lastError": ""})
             return self.send(200, {"providers": providers})
         if path == "/api/projects" and method == "GET":
