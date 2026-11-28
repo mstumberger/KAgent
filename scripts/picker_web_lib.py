@@ -362,7 +362,7 @@ class Mock(BaseHTTPRequestHandler):
             gone = dict(model("anthropic", "Anthropic", "gone-model"))
             providers = []
             for pid, pname in (("anthropic", "Anthropic"), ("gemini", "Google Gemini")):
-                base = "http://127.0.0.1:11434/v1" if pid in CFG.get("localProviders", ()) else "https://x.example/v1"
+                base = "http://127.0.0.1:11434/v1" if pid in CFG.get("localProviders", ()) else CFG.get("baseUrls", {}).get(pid, "https://x.example/v1")
                 rows = [row(m) for m in MODELS if m["providerId"] == pid] + ([row(gone, False)] if pid == "anthropic" else [])
                 providers.append({"id": pid, "name": pname, "templateId": pid, "enabled": True, "api": {"type": "openai-chat-completions", "baseUrl": base, "headers": {}},
                                   "apiKeyMasked": "sk-...abcd", "hasKey": True, "models": rows, "modelsFetchedAt": None, "lastError": ""})
