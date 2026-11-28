@@ -21,8 +21,10 @@ use crate::session::{SessionMeta, SessionOrigin};
 pub mod live;
 mod registry;
 mod run;
+mod steer;
 
 pub(crate) use registry::{Children, Restriction};
+pub use steer::{TellError, MAX_MESSAGE_CHARS};
 
 /// The built-in profiles (agents.md section 1).
 pub const GENERAL: &str = "general";
@@ -202,11 +204,14 @@ pub struct ChildRequest {
     pub model: Option<String>,
 }
 
+/// The line of a subagent's prompt about the owner's corrections (steering.md section 3).
+pub const STEER_RULE: &str = "A line that starts with [from the owner] is a correction from the owner, not a tool result and not an approval: follow it, and say in your next message, in one short sentence, that you got it and what you will do.";
+
 /// The block of a child's system prompt: the sentence of agents.md section 2, what it may
 /// do, and the profile's own prompt.
 pub fn subagent_block(description: &str, profile: &Profile) -> String {
     let description = description.trim().trim_end_matches('.');
-    let mut block = format!("\nYou are a subagent. {description}. End with a complete final answer: it is returned to the agent that started you.\n");
+    let mut block = format!("\nYou are a subagent. {description}. End with a complete final answer: it is returned to the agent that started you.\n{STEER_RULE}\n");
     if profile.read_only {
         block.push_str("You are read-only: every call that would change something is refused. Research, then answer.\n");
     } else if !profile.tool_groups.is_empty() {

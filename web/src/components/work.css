@@ -171,3 +171,15 @@ main { position: relative; }
 .worker-tail li { list-style: none; margin-left: -16px; white-space: pre-wrap; word-break: break-word; }
 .worker-tail li[data-kind="steer"] { color: var(--ice); }
 .worker-tail li[data-kind="call"] { color: var(--dim); }
+.worker-tell-box { flex: 0 0 auto; border-top: 1px solid var(--rim); padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
+.worker-receipts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 96px; overflow: auto; font-size: 12px; }
+.worker-receipts li { display: flex; gap: 6px; align-items: baseline; }
+.worker-receipt-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.worker-receipt-tag { color: var(--signal); font-size: 11px; }
+.worker-receipt { font-size: 11px; color: var(--dim); flex: 0 0 auto; }
+.worker-receipt.state-delivered { color: var(--ok); }
+.worker-tell { display: flex; gap: 6px; align-items: stretch; }
+.worker-tell textarea { flex: 1; min-width: 0; resize: none; font-size: 12.5px; }
+.worker-tell-buttons { display: flex; flex-direction: column; gap: 4px; }
+.worker-tell-buttons button { padding: 3px 10px; font-size: 12px; }
+.worker-tell-error { margin: 0; }

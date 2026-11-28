@@ -1,5 +1,5 @@
 //! The tools of a main agent over its subagents (tools.md section 21): `agent_run`,
-//! `agent_wait`, `agent_stop`, `agent_list`. The orchestration is `agent::children`; the
+//! `agent_wait`, `agent_stop`, `agent_list` (and `agent_tell`, `agent_tell.rs`). The orchestration is `agent::children`; the
 //! tools reach it, and the profiles, through `AgentAccess`, as the todo tools reach the
 //! sessions through `TodoAccess`. `task_output` and `task_stop` are `tasktools`.
 
@@ -80,6 +80,7 @@ impl AgentAccess {
         registry.register(Arc::new(AgentWait::new(self.clone())));
         registry.register(Arc::new(AgentStop::new(self.clone())));
         registry.register(Arc::new(AgentList::new(self.clone())));
+        registry.register(Arc::new(super::agent_tell::AgentTell::new(self.clone())));
     }
 
     fn run_wait(&self) -> Duration {
@@ -87,7 +88,7 @@ impl AgentAccess {
         Duration::from_millis(if millis == 0 { children::RUN_WAIT.as_millis() as u64 } else { millis })
     }
 
-    fn agent(&self) -> anyhow::Result<Arc<Agent>> {
+    pub(super) fn agent(&self) -> anyhow::Result<Arc<Agent>> {
         self.agent.get().and_then(Weak::upgrade).ok_or_else(|| anyhow::anyhow!("subagents are not available: the agent is not attached"))
     }
 

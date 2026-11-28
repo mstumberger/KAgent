@@ -13,7 +13,7 @@ use super::*;
 use crate::tool::CallAssessment;
 
 /// Tools a subagent does not have: it cannot start or manage subagents (the depth limit).
-const ORCHESTRATION: [&str; 4] = ["agent_run", "agent_wait", "agent_stop", "agent_list"];
+const ORCHESTRATION: [&str; 5] = ["agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell"];
 
 /// What a session may do beyond the enabled groups: a subagent's profile.
 #[derive(Debug, Clone, Default)]
@@ -52,6 +52,8 @@ pub(super) struct Child {
     pub(super) end: watch::Sender<Option<End>>,
     /// When the progress of its tool calls was last announced (at most every `PROGRESS_EVERY`).
     pub(super) last_emit: Option<Instant>,
+    /// The owner interrupted it: its cancelled turn is followed by one that holds the owner's message (steering.md section 4).
+    pub(super) interrupted: bool,
 }
 
 /// The summary of a call without the name of the job `named` put in front of it.
@@ -270,6 +272,51 @@ impl Children {
         }
         child.last_emit = Some(Instant::now());
         Some((child.parent.clone(), child.view.clone()))
+    }
+
+    /// The owner's message to child `id`: a receipt `queued` on its view. Its id, the parent and the view to announce.
+    pub(crate) fn steer_add(&self, id: &str, text: &str, interrupt: bool) -> Option<(String, String, ChildView)> {
+        let mut inner = self.lock();
+        let child = inner.children.get_mut(id)?;
+        let steer_id = format!("st_{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
+        child.view.steering.push(live::Steering { id: steer_id.clone(), text: text.into(), interrupt, state: live::SteerState::Queued, at: Utc::now(), delivered_at: None });
+        if child.view.steering.len() > live::MAX_STEERING {
+            // The oldest that was read goes first.
+            let at = child.view.steering.iter().position(|s| s.state == live::SteerState::Delivered).unwrap_or(0);
+            child.view.steering.remove(at);
+        }
+        Some((steer_id, child.parent.clone(), child.view.clone()))
+    }
+
+    /// The worker read these messages: the receipts become `delivered`. The view to announce, when any changed.
+    pub(crate) fn steer_delivered(&self, id: &str, steer_ids: &[String]) -> Option<(String, ChildView)> {
+        let mut inner = self.lock();
+        let child = inner.children.get_mut(id)?;
+        let mut changed = false;
+        for s in child.view.steering.iter_mut().filter(|s| s.state == live::SteerState::Queued && steer_ids.contains(&s.id)) {
+            s.state = live::SteerState::Delivered;
+            s.delivered_at = Some(Utc::now());
+            changed = true;
+        }
+        changed.then(|| (child.parent.clone(), child.view.clone()))
+    }
+
+    /// The ids of the receipts of an interrupt that wait to be read.
+    pub(crate) fn queued_interrupts(&self, id: &str) -> Vec<String> {
+        let inner = self.lock();
+        inner.children.get(id).map(|c| c.view.steering.iter().filter(|s| s.interrupt && s.state == live::SteerState::Queued).map(|s| s.id.clone()).collect()).unwrap_or_default()
+    }
+
+    /// Mark (or unmark) child `id` as interrupted.
+    pub(crate) fn mark_interrupt(&self, id: &str, yes: bool) {
+        if let Some(child) = self.lock().children.get_mut(id) {
+            child.interrupted = yes;
+        }
+    }
+
+    /// Was `id` interrupted? Reading it clears it.
+    pub(crate) fn take_interrupt(&self, id: &str) -> bool {
+        self.lock().children.get_mut(id).is_some_and(|c| std::mem::take(&mut c.interrupted))
     }
 
     /// The call of `session` ended with `status` (also a call refused before it ran): always announced.

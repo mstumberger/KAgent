@@ -189,6 +189,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/calendar/report", post(crate::calendar::http::report))
         .route("/web/brave-key", get(crate::web::http::get_key).put(crate::web::http::put_key).delete(crate::web::http::delete_key))
         .route("/agents", get(crate::subagents::http::list))
+        .route("/agents/{id}/message", post(crate::subagents::tell_http::post))
         .route("/agents/{name}", put(crate::subagents::http::put_profile).delete(crate::subagents::http::delete))
         .route("/sessions/{id}/subagents/{child}/stop", post(crate::subagents::http::stop))
         .route("/sessions/{id}/subagents", get(crate::subagents::steer_http::list))

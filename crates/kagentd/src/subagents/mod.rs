@@ -6,6 +6,7 @@
 pub mod http;
 mod profiles;
 pub mod steer_http;
+pub mod tell_http;
 mod runner;
 pub mod settings;
 

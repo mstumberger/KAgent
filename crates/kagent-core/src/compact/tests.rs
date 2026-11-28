@@ -237,6 +237,9 @@ fn notes_are_not_a_turn_and_not_in_a_summary() {
     let kept = without_notes(&tail);
     assert_eq!(kept.len(), 5);
     assert!(kept.iter().all(|m| m.via != crate::protocol::Via::Note));
+    // The owner's message to a worker is an instruction: it stays (steering.md section 3).
+    let steer = Message::user("[from the owner] leave the tests alone").with_via(crate::protocol::Via::Note);
+    assert_eq!(crate::compact::without_notes(&[note.clone(), steer.clone()]), vec![steer]);
     // A note before the owner's second message: the cut before that message is still the index of it.
     let with_early_note = vec![Message::user("q0"), Message::assistant("a0", vec![]), note.clone(), Message::user("q1"), Message::assistant("a1", vec![])];
     assert_eq!(stored_index(&with_early_note, 0, &with_early_note, 3), 3, "the notes are not counted among the owner's messages");

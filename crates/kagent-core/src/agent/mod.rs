@@ -209,8 +209,15 @@ impl Agent {
         self.notes.brain_check(session_id, model_ref);
         let open: Vec<String> = state.meta.lock().await.todo.iter().filter(|t| t.status != crate::todo::TodoStatus::Completed).map(|t| t.content.clone()).collect();
         self.notes.todo_check(session_id, &open);
-        let note = self.notes.drain(session_id);
-        self.push_messages(session_id, state, note.into_iter().collect()).await
+        // The owner's messages to a worker come first, as their own message (steering.md section 3).
+        let steer = self.notes.drain_steer(session_id);
+        let mut out: Vec<Message> = Vec::new();
+        if !steer.is_empty() {
+            out.push(notes::steer_message(&steer.iter().map(|(_, text)| text.clone()).collect::<Vec<_>>()));
+            self.steer_delivered(session_id, &steer.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>());
+        }
+        out.extend(self.notes.drain(session_id));
+        self.push_messages(session_id, state, out).await
     }
 
     #[allow(clippy::too_many_arguments)]

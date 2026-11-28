@@ -467,6 +467,14 @@ class Mock(BaseHTTPRequestHandler):
             if CFG.get("refuse"):
                 return self.send(409, {"error": {"code": "refused", "message": CFG["refuse"]}})
             return self.send(200, {"status": "started", "turnId": "t1"})
+        mt = re.fullmatch(r"/api/agents/([^/]+)/message", path)
+        if mt and method == "POST":
+            # The owner's message to a worker (steering.md section 3); `reset(tell_error=(status, message))` makes it refuse.
+            CALLS.append(f"POST {path} {json.dumps(body)}")
+            if CFG.get("tell_error"):
+                status, message = CFG["tell_error"]
+                return self.send(status, {"error": {"code": "conflict", "message": message}})
+            return self.send(202, {"id": f"st_{len([c for c in CALLS if '/message' in c])}", "state": "queued"})
         md = re.fullmatch(r"/api/sessions/([^/]+)/subagents/([^/]+)", path)
         if md and method == "GET":
             # What the worker pane draws (steering.md section 2): `reset(details={child id: {...}})`; the calls are in CALLS.

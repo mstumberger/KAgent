@@ -93,6 +93,8 @@ export const agentsApi = {
   remove: (name: string) => api.del<void>(`/api/agents/${encodeURIComponent(name)}`),
   /** The Stop button of an Agents card: a running subagent is cancelled and a queued one never starts. */
   stop: (sessionId: string, childId: string) => api.post<{ status: ChildStatus }>(`/api/sessions/${sessionId}/subagents/${childId}/stop`, {}),
+  /** The owner's message to a running worker (steering.md sections 3 and 4): 202; 409 when it ended or has not started. */
+  tell: (childId: string, text: string, interrupt: boolean) => api.post<{ id: string; state: "queued" | "delivered" }>(`/api/agents/${childId}/message`, { text, interrupt }),
   /** What a worker is doing: its job, its todo list and the tail of its transcript. */
   detail: (sessionId: string, childId: string) => api.get<WorkerDetail>(`/api/sessions/${sessionId}/subagents/${childId}`),
 };

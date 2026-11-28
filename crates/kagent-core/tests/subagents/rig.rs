@@ -117,6 +117,11 @@ impl JobModel {
         self.seen.lock().unwrap().clone()
     }
 
+    /// The names of the tools the parent's first request offered.
+    pub fn parent_tools(&self) -> Vec<String> {
+        self.of("parent").first().map(|s| s.tools.clone()).unwrap_or_default()
+    }
+
     /// The requests of one script (`parent`, or a job's description), in order.
     pub fn of(&self, tag: &str) -> Vec<Seen> {
         self.seen().into_iter().filter(|s| s.tag == tag).collect()

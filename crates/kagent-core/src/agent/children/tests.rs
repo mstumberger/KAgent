@@ -28,7 +28,7 @@ fn the_block_names_the_job_the_limits_and_the_profile_prompt() {
     assert!(block.contains("Your tool groups are only: files, system. Tools outside them are refused.\n"), "{block}");
     let block = subagent_block("Look around", &Profile::explore());
     assert!(block.contains("You are read-only: every call that would change something is refused."), "{block}");
-    assert_eq!(subagent_block("one-line job", &Profile::general()), "\nYou are a subagent. one-line job. End with a complete final answer: it is returned to the agent that started you.\n");
+    assert_eq!(subagent_block("one-line job", &Profile::general()), format!("\nYou are a subagent. one-line job. End with a complete final answer: it is returned to the agent that started you.\n{STEER_RULE}\n"), "the line about the owner's corrections is in every block (steering.md section 3)");
 }
 
 #[test]
