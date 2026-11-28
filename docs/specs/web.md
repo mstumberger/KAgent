@@ -214,7 +214,9 @@ the owner's visible browser, for acting and testing) and not the `own` window of
   request in flight for 500 ms, at most 5 s more); the text is taken from the rendered
   `outerHTML` by the same HTML-to-text code (`html::to_text`), with the same size limits (a
   document over 2 MiB is `TooLarge`). A status of 400 or more of the main document is
-  the same failure as in plain HTTP. The whole read is limited to 40 s.
+  the same failure as in plain HTTP. The whole read is limited to 45 s. The browser keeps one
+  tab: a read uses it and leaves it on `about:blank`; any other tab the page opened is closed
+  at the end of the read.
 - **The egress guard inside the browser.** `Fetch.enable` with the pattern `*` pauses every
   request, the navigation, each redirect and each subresource: the URL goes through the
   same `Egress::admit` as every other web request; only http, https, `data:`, `blob:` and
@@ -227,9 +229,12 @@ the owner's visible browser, for acting and testing) and not the `own` window of
   pass through `Fetch`. Reading is still done from a profile with no login of the
   owner's, and nothing local can be changed by a GET.
 - **What it never does.** No click, no typing, no form, no `Input.*` calls. Downloads are
-  denied (`Browser.setDownloadBehavior` deny); a JavaScript dialog is dismissed
-  (`Page.handleJavaScriptDialog` accept false); a new window opened by the page is closed
-  (`Target.setDiscoverTargets`: a target that is not ours is closed).
+  denied (`Page.setDownloadBehavior` deny; an address that answers a download is the error
+  "the address is a download, which the reader never takes"); a JavaScript dialog is
+  dismissed (`Page.handleJavaScriptDialog` accept false); a window the page opened is
+  closed at the end of the read.
+- **Before the browser.** The first address also goes through the egress before the browser
+  is even started (`refused: ...`).
 
 ## 9. Challenges and warm-up (R3)
 
@@ -244,8 +249,8 @@ the owner's visible browser, for acting and testing) and not the `own` window of
   that must not match.
 - **Waiting.** The reader waits up to 20 s for a challenge to clear by itself (the page
   reloads when it does). If it does not: the result is `not done: this site asks for a
-  human check`, next: "tell the owner; a notice offers to open the page in a window where
-  he can pass the check once", and a notice goes out: `kind` error, key
+  human check`, next: "tell the owner: a notice offers to open the page in a window where he
+  can pass the check once; do not read this site again until he has", and a notice goes out: `kind` error, key
   `reader:check:<host>`, text "<host> asks for a human check", with an action
   `{label: "Open it", path: "/api/web/reader/open", body: {url}}` (notices.md).
 - **Open it.** `POST /api/web/reader/open {url}` closes the headless browser and starts
@@ -257,7 +262,7 @@ the owner's visible browser, for acting and testing) and not the `own` window of
   `not done: the reader window is open` (the profile is in use).
 - **Forget.** `DELETE /api/web/reader/sites/{host}` removes the host and clears its
   cookies from the profile through CDP (`Network.getAllCookies`, `Network.deleteCookies`
-  for the domains that are the host or its parents' subdomain match). `DELETE
+  for the cookies whose domain is the host, a parent of it or a subdomain of it). `DELETE
   /api/web/reader/profile` closes the browser (409 while a read runs or the window is
   open), deletes the profile folder and empties the list.
 - `GET /api/web/reader`: `{enabled, browser, running, windowOpen, profile, warmed[]}`.

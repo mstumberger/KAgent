@@ -489,8 +489,8 @@ Guards, extraction and engines: `web.md`. Both are read-only with side effect
 
 | Tool | Assess | Input | What |
 |---|---|---|---|
-| `web_fetch` | RO | `{url: http(s) URL, max_chars?: 1000..20000 (default 6000)}` | GET with the egress guard on every redirect (max 5), 15 s timeout, 2 MiB body cap, User-Agent `KAgent/<version>`. HTML -> title, main text, up to 30 links; `text/*`, JSON and XML -> raw text. Other types -> error naming the type and size. Cached 15 min (50 entries) |
-| `web_search` | RO | `{query: string (<= 400), limit?: 1..10 (default 5)}` | results of the engine in `settings.search.engine` as `[n] title - url` + snippet. Engine `none` -> error "web search is off (Settings -> Web)". Engine failure -> error with the cause (rate limit, bad key, unreachable) |
+| `web_fetch` | RO | `{url: http(s) URL, max_chars?: 1000..20000 (default 6000), render?: boolean}` | GET with the egress guard on every redirect (max 5), 15 s timeout (45 s with the reader), 2 MiB body cap, User-Agent `KAgent/<version>`. HTML -> title, main text, up to 30 links; `text/*`, JSON and XML -> raw text. Other types -> error naming the type and size. Cached 15 min (50 entries). `render: true`, a host of `web.readerSites`, a challenge page, an empty shell that needs JavaScript or a 403, 429 or 503 read the page with the reader (`web.md` section 8) instead; no browser: the plain answer and one line saying so; a human check that does not clear: `not_done` "this site asks for a human check" and a notice with "Open it" |
+| `web_search` | RO | `{query: string (<= 400), limit?: 1..10 (default 5)}` | results of the chain in `settings.search.engines` as `[n] title - url` + snippet, under a line naming the engine that answered (`(from the cache)` for a cached answer; 15 min). An empty chain -> error "web search is off (Settings -> Web)". Every engine failed -> `not_done` with what each said and what to do. A fourth search of a session within 10 s -> `not_done`, not run (`web.md` section 3.1) |
 
 Outside their range, `max_chars` and `limit` are read as the nearest end; a query over
 400 characters is an error. An answer is at most 23 500 bytes: the links go first, then

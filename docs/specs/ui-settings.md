@@ -52,7 +52,7 @@ From S42 (`sidebar.md`) the navigation is the left sidebar, not a row of tabs.
 | Basics | `browser` | Browser | Backend, port, binary; attach controls from S27 | S19 |
 | Basics | `desktop` | Desktop and apps | Editor, project folders | S19 |
 | Basics | `watchers` | Watchers | Quiet hours | S19 |
-| Basics | `web` | Web | Search engine, Brave key, SearXNG URL (`web.md`) | S30 |
+| Basics | `web` | Web | The chain of search engines (order, switches), Brave key, SearXNG URL; the reader: on or off, the browser it found, "always use the reader for" sites, warmed sites with Forget, Clear the reader's profile (`web.md` sections 3.1, 8, 9) | S30, R1-R3 |
 | Agent capabilities | `skills` | Skills | `skills.md` section 9 | S20 |
 | Agent capabilities | `memory` | Memory | `memory.md` section 7 | S25 |
 | Agent capabilities | `agents` | Subagents | Profiles and concurrency (`agents.md`) | S31 |
