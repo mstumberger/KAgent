@@ -130,6 +130,10 @@ first three are done first.
   upload pictures; screen watch checks text goals with OCR instead of the vision
   model; the click tool can find a label on the screen; scanned documents become text
   with their tables.
+- [ ] OpenCode as a coding agent, in the same pattern as Claude Code, Codex and
+  Antigravity: KAgent runs the owner's installed `opencode` command without a terminal,
+  reads its progress, and uses it as a worker of a workflow. Its free models are
+  usable this way, because the requests come from OpenCode's own client.
 - [ ] Every completions API, and OpenCode as one provider: a Gemini `generateContent`
   adapter next to chat completions, responses and messages; an embeddings client for
   any provider; one "OpenCode" provider with one key whose models are fetched and each
