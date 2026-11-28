@@ -67,6 +67,16 @@ pub struct Voice {
     pub file_size: Option<i64>,
 }
 
+/// One size of a photo: Telegram sends the same picture in several, smallest first.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "snake_case")]
+pub struct PhotoSize {
+    pub file_id: String,
+    pub width: i64,
+    pub height: i64,
+    pub file_size: Option<i64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "snake_case")]
 pub struct Message {
@@ -76,12 +86,20 @@ pub struct Message {
     pub date: i64,
     pub text: Option<String>,
     pub voice: Option<Voice>,
+    /// A photo (vision.md section 2): its sizes, and the words sent with it.
+    pub photo: Vec<PhotoSize>,
+    pub caption: Option<String>,
     /// Every other field of the message: a photo, a document, a sticker, ... is here.
     #[serde(flatten)]
     pub other: serde_json::Map<String, Value>,
 }
 
 impl Message {
+    /// The biggest size of the photo that Telegram lets a bot download.
+    pub fn best_photo(&self) -> Option<&PhotoSize> {
+        self.photo.iter().filter(|p| p.file_size.is_none_or(|n| n as usize <= MAX_FILE_BYTES)).max_by_key(|p| p.width * p.height)
+    }
+
     /// A photo, a document, ...: anything but text and a voice note.
     pub fn is_attachment(&self) -> bool {
         !self.other.is_empty()

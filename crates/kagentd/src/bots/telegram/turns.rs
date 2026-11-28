@@ -49,6 +49,11 @@ impl Bot {
 
     /// Free text: a turn in the chat's session. While one runs, the message queues as steering.
     pub(super) async fn turn(self: &Arc<Self>, chat: i64, text: &str) {
+        self.turn_with(chat, text, Vec::new()).await
+    }
+
+    /// `turn` with the pictures of the message (a Telegram photo): they are images of that message.
+    pub(super) async fn turn_with(self: &Arc<Self>, chat: i64, text: &str, photos: Vec<Vec<u8>>) {
         let wait = self.inner.lock().unwrap().turns.reserve(self.clock.now());
         if !wait.is_zero() {
             return self.say(chat, &format!("That is more than {TURNS_PER_MINUTE} messages in a minute. Wait {} s, please.", wait.as_secs().max(1))).await;
@@ -59,7 +64,7 @@ impl Bot {
             Err(e) => return self.say(chat, &format!("Could not start a session: {e:#}")).await,
         };
         if self.inner.lock().unwrap().working.contains_key(&session) {
-            return self.steer(chat, &session, text).await;
+            return self.steer(chat, &session, text, photos).await;
         }
         // The chat counts as busy from here, before anything is awaited: a message that
         // comes next queues as steering, and a turn that ends at once (no model is
@@ -75,7 +80,7 @@ impl Bot {
         if let Some(waiting) = self.inner.lock().unwrap().working.get_mut(&session) {
             waiting.message = placed;
         }
-        if let Err(e) = self.agent.send(&session, text).await {
+        if let Err(e) = self.hand_over(&session, text, photos).await {
             self.inner.lock().unwrap().working.remove(&session);
             return self.replace(chat, placed, &format!("Could not start: {e:#}")).await;
         }
@@ -89,14 +94,23 @@ impl Bot {
 
     /// A message of a session whose turn runs: the agent takes it as steering, and the
     /// placeholder says so.
-    async fn steer(&self, chat: i64, session: &str, text: &str) {
-        if let Err(e) = self.agent.send(session, text).await {
+    async fn steer(&self, chat: i64, session: &str, text: &str, photos: Vec<Vec<u8>>) {
+        if let Err(e) = self.hand_over(session, text, photos).await {
             return self.say(chat, &format!("Could not add the message: {e:#}")).await;
         }
         if let Some(waiting) = self.inner.lock().unwrap().working.get_mut(session) {
             waiting.queued += 1;
         }
         self.note(chat, session).await;
+    }
+
+    /// The message to the agent: text, and the pictures when there are some.
+    async fn hand_over(&self, session: &str, text: &str, photos: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        if photos.is_empty() {
+            self.agent.send(session, text).await
+        } else {
+            self.agent.send_images(session, text, photos).await
+        }
     }
 
     /// The placeholder of the session's turn says how many messages queued behind it.
@@ -156,6 +170,27 @@ impl Bot {
         };
         if let Err(e) = sent {
             tracing::warn!("telegram: not sent: {e}");
+        }
+    }
+
+    /// A photo (vision.md section 2): downloaded, then an image of the message that starts the turn; the
+    /// caption is its text. The window's limits apply (the store checks them), and so do its readers.
+    pub(super) async fn photo(self: &Arc<Self>, chat: i64, m: &crate::bots::telegram_api::Message) {
+        let Some(best) = m.best_photo() else {
+            return self.say(chat, "That photo is over 20 MB, which is more than Telegram lets a bot download. Send a smaller one.").await;
+        };
+        let bytes: Result<Vec<u8>, String> = async {
+            let file = self.api().get_file(&best.file_id).await.map_err(|e| e.to_string())?;
+            let path = file.file_path.as_deref().and_then(safe_file_path).ok_or("Telegram gave no plain file path")?;
+            self.api().download(path).await.map_err(|e| e.to_string())
+        }
+        .await;
+        match bytes {
+            Ok(bytes) => self.turn_with(chat, m.caption.as_deref().unwrap_or(""), vec![bytes]).await,
+            Err(why) => {
+                tracing::warn!("telegram: a photo was not downloaded: {why}");
+                self.say(chat, "The photo could not be downloaded. Try again.").await
+            }
         }
     }
 

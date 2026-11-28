@@ -42,6 +42,9 @@ pub trait BotAgent: Send + Sync {
     async fn session_exists(&self, session: &str) -> bool;
     /// Start a turn, or queue the text as steering while one runs.
     async fn send(&self, session: &str, text: &str) -> anyhow::Result<()>;
+    /// `send` with pictures (a Telegram photo): each is stored as an image of the message
+    /// (vision.md section 1: the same limits and the same readers as the window's).
+    async fn send_images(&self, session: &str, text: &str, photos: Vec<Vec<u8>>) -> anyhow::Result<()>;
     /// Resolve once the session is idle, with how its last turn ended.
     async fn wait_idle(&self, session: &str) -> TurnEnd;
     /// Cancel every running turn; how many.
@@ -76,6 +79,15 @@ impl BotAgent for DaemonAgent {
 
     async fn send(&self, session: &str, text: &str) -> anyhow::Result<()> {
         self.agent.send(session, text.to_string(), Via::Telegram).await.map(|_| ())
+    }
+
+    async fn send_images(&self, session: &str, text: &str, photos: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        let mut images = Vec::new();
+        for bytes in photos {
+            images.push(self.agent.store().put_image(session, bytes).await?);
+        }
+        let opts = kagent_core::agent::TurnOpts { images, ..Default::default() };
+        self.agent.send_with(session, text.to_string(), Via::Telegram, opts).await.map(|_| ())
     }
 
     async fn wait_idle(&self, session: &str) -> TurnEnd {
