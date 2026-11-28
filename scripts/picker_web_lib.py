@@ -778,10 +778,25 @@ class Page:
 
 async def dd_open(page, trigger_sel):
     """Open the list of a Dropdown (the themed select of the settings screen) with a real click on its trigger."""
-    await page.js(f"document.querySelector({json.dumps(trigger_sel)}).scrollIntoView({{block: 'center'}})")
-    x, y = await page.center(trigger_sel)
-    await page.send("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
-    await page.send("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", clickCount=1)
+    # The page may still be moving when this is called (a save just re-rendered the card, a toast came in): a click at
+    # coordinates read a moment ago then misses the trigger. So: wait until the trigger stands still, click, and when
+    # the list did not open, read the place again and click again (the screen-watch suite failed every other run).
+    where = f"(() => {{ const r = document.querySelector({json.dumps(trigger_sel)}).getBoundingClientRect(); return Math.round(r.x) + ',' + Math.round(r.y); }})()"
+    for attempt in range(4):
+        await page.js(f"document.querySelector({json.dumps(trigger_sel)}).scrollIntoView({{block: 'center'}})")
+        before = await page.js(where)
+        await asyncio.sleep(0.12)
+        if await page.js(where) != before:
+            continue
+        x, y = await page.center(trigger_sel)
+        await page.send("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
+        await page.send("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", clickCount=1)
+        try:
+            await page.until("!!document.querySelector('.dd-list')", f"the list of {trigger_sel}", seconds=2)
+            return
+        except RuntimeError:
+            if attempt == 3:
+                raise
     await page.until("!!document.querySelector('.dd-list')", f"the list of {trigger_sel}")
 
 
