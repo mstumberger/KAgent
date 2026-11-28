@@ -110,7 +110,8 @@ impl Tool for Windows {
                 return Ok(if wins.is_empty() {
                     ToolOutput::error("no windows listed")
                 } else {
-                    ToolOutput::ok(wins.iter().take(80).map(|w| format!("desktop {}  pid {}  [{}]  {}{}", w.desktop, w.pid, w.class, w.title, if w.focus { "  (focused)" } else { "" })).collect::<Vec<_>>().join("\n"))
+                    let rows = wins.iter().take(80).map(|w| format!("desktop {}  pid {}  [{}]  {}{}", w.desktop, w.pid, w.class, w.title, if w.focus { "  (focused)" } else { "" })).collect::<Vec<_>>().join("\n");
+                    ToolOutput::ok(format!("{rows}\n{}", crate::util::more_note(wins.len(), 80, "name a window with `window` to act on one")).trim_end().to_string())
                 });
             }
             let needle = s(&input, "window");

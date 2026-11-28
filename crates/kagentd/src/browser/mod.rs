@@ -160,7 +160,7 @@ impl Browser {
         let needle = s(input, "tab");
         match action {
             "status" => return Ok(session.status_output()),
-            "launch" => return Ok(ToolOutput::error("launch is not available: this is the owner's running browser")),
+            "launch" => return Ok(ToolOutput::error("launch is not available: this is the owner's running browser. Use open with a url to open a tab in it")),
             "tabs" => {
                 let pages = session.pages().await?;
                 let lines: Vec<String> = pages.iter().map(|p| format!("{}  {}  {}{}", p.target_id, p.title, p.url, if session.is_agent_tab(&p.target_id) { "  (opened by the agent)" } else { "" })).collect();

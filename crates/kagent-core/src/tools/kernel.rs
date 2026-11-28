@@ -153,6 +153,7 @@ impl KernelInfo {
             out.push_str(r);
             out.push('\n');
         }
+        out.push_str(&crate::util::more_note(rows.len(), 500, "pass `filter` with part of a module name"));
         out
     }
 }

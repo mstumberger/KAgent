@@ -103,7 +103,8 @@ impl Tool for Sessions {
         let action = input.get("action").and_then(Value::as_str).unwrap_or("");
         let metas = self.store.list().await?;
         if action == "list" {
-            return Ok(ToolOutput::ok(metas.iter().take(30).map(|m| format!("{}  {}  {} messages  \"{}\"", m.id, m.updated_at.format("%Y-%m-%d %H:%M"), m.message_count, m.title)).collect::<Vec<_>>().join("\n")));
+            let rows = metas.iter().take(30).map(|m| format!("{}  {}  {} messages  \"{}\"", m.id, m.updated_at.format("%Y-%m-%d %H:%M"), m.message_count, m.title)).collect::<Vec<_>>().join("\n");
+            return Ok(ToolOutput::ok(format!("{rows}\n{}", crate::util::more_note(metas.len(), 30, "session_search finds an older conversation by its words")).trim_end().to_string()));
         }
         let wanted = input.get("session").and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from).unwrap_or_else(|| ctx.session_id.clone());
         let Some(meta) = metas.iter().find(|m| m.id == wanted || m.id.starts_with(&wanted)) else {
@@ -111,7 +112,7 @@ impl Tool for Sessions {
         };
         let text = transcript(&meta.title, &self.store.load_messages(&meta.id).await?);
         match action {
-            "read" => Ok(ToolOutput::ok(crate::util::truncate_str(&text, 20_000).to_string())),
+            "read" => Ok(ToolOutput::ok(crate::util::cut_with_note(&text, 20_000, "export the session to read all of it"))),
             "export" => {
                 let home = super::xdg::home();
                 let path = match input.get("path").and_then(Value::as_str).filter(|p| !p.is_empty()) {
@@ -168,5 +169,23 @@ mod tests {
         assert!(t.contains("[widget 7]\n\n"), "{t}");
         assert_eq!(t.matches("[widget ").count(), 3, "the three lines that are the marker: {t}");
         assert!(t.contains(&format!("still text: {marker}")), "a marker inside a line of text is text: {t}");
+    }
+
+    /// agent-loop.md B.2 question 4: a cut list or transcript says so and how to get the rest.
+    #[tokio::test]
+    async fn a_long_list_and_a_long_transcript_say_what_was_cut() {
+        let dir = tempfile::tempdir().unwrap();
+        let tool = Sessions::new(dir.path().to_path_buf()).unwrap();
+        let store = crate::session::SessionStore::new(dir.path()).unwrap();
+        let mut last = String::new();
+        for i in 0..32 {
+            last = store.create(&format!("s{i}")).await.unwrap().id;
+        }
+        let ctx = ToolContext::standalone(std::time::Duration::from_secs(5), 100_000);
+        let list = tool.call(json!({"action": "list"}), ctx.clone()).await.unwrap();
+        assert!(list.content.ends_with("... 2 more not shown (session_search finds an older conversation by its words)"), "{}", list.content);
+        store.append(&last, &[Message::user("x".repeat(25_000))]).await.unwrap();
+        let read = tool.call(json!({"action": "read", "session": last}), ctx).await.unwrap();
+        assert!(read.content.contains("\n[cut: ") && read.content.ends_with("(export the session to read all of it)]"), "{}", &read.content[read.content.len() - 120..]);
     }
 }

@@ -193,7 +193,7 @@ impl Tool for Clipboard {
             });
         }
         Ok(match clipboard_text(&ctx).await {
-            Some(t) => ToolOutput::ok(crate::util::truncate_str(&t, 8_000)),
+            Some(t) => ToolOutput::ok(crate::util::cut_with_note(&t, 8_000, "the clipboard holds more; ask the owner for the part that matters")),
             None => ToolOutput::error("clipboard unavailable (no Klipper, wl-clipboard or xclip)"),
         })
     }

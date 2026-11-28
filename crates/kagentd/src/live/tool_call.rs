@@ -90,7 +90,7 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
             return;
         }
         // Keep the spoken context small: the model only needs the gist.
-        let result = json!({"status": state, "output": kagent_core::util::truncate_str(&msg.content, 6_000)});
+        let result = json!({"status": state, "output": kagent_core::util::cut_with_note(&msg.content, 6_000, "ask for less, or look at the chat")});
         let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, result)]));
     });
 }

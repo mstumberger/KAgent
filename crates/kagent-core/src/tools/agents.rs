@@ -304,6 +304,9 @@ impl Tool for AgentWait {
     }
 }
 
+/// What `agent_stop` answers: the cancel is a request, a running subagent ends at its next step (agent-loop.md B.2, question 2).
+pub const STOP_REQUESTED: &str = "stop requested: a waiting subagent never starts, a running one ends at its next step; agent_list shows its state";
+
 pub struct AgentStop {
     contract: ToolContract,
     access: AgentAccess,
@@ -348,7 +351,7 @@ impl Tool for AgentStop {
             Err(e) => return Ok(ToolOutput::error(e.to_string())),
         };
         Ok(match agent.cancel_child(&ctx.session_id, &args.id).await {
-            Ok(_) => ToolOutput::ok("stopped"),
+            Ok(_) => ToolOutput::ok(STOP_REQUESTED),
             Err(reason) => ToolOutput::error(reason),
         })
     }

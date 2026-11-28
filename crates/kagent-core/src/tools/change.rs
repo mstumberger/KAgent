@@ -162,8 +162,7 @@ impl Tool for Package {
                 let Some(name) = args.name.filter(|n| !n.trim().is_empty() && !n.trim().starts_with('-') && n.len() <= 100) else { return Ok(ToolOutput::error("search needs a name")) };
                 let argv = crate::platform::packages::search_argv(pm, name.trim()).unwrap_or_default();
                 let r = exec(&ctx, &argv).run().await?;
-                let lines: Vec<&str> = r.stdout.lines().take(40).collect();
-                Ok(ToolOutput::ok(if lines.is_empty() { "no packages found".into() } else { lines.join("\n") }))
+                Ok(search_reply(&r))
             }
             Some("info") => {
                 let Some(name) = args.name.filter(|n| valid_pkg(n)) else { return Ok(ToolOutput::error("info needs a valid package name")) };
@@ -173,7 +172,7 @@ impl Tool for Package {
                     if r.stdout.trim().is_empty() {
                         continue;
                     }
-                    out.push_str(&format!("## {}\n{}\n", argv.join(" "), r.stdout.lines().take(30).collect::<Vec<_>>().join("\n")));
+                    out.push_str(&format!("## {}\n{}\n{}", argv.join(" "), r.stdout.lines().take(30).collect::<Vec<_>>().join("\n"), crate::util::more_note(r.stdout.lines().count(), 30, "`shell` runs the same command for the rest")));
                 }
                 Ok(ToolOutput::ok(if out.is_empty() { format!("no package named {name}") } else { out }))
             }
@@ -404,9 +403,39 @@ impl Tool for EditFile {
     }
 }
 
+/// What `package search` answers: a failed search is not "no packages found" (agent-loop.md B.2, question 1)
+/// and a cut list says so (question 4).
+fn search_reply(r: &super::exec::ExecResult) -> ToolOutput {
+    let all = r.stdout.lines().count();
+    let lines: Vec<&str> = r.stdout.lines().take(40).collect();
+    if lines.is_empty() && !r.success() {
+        return ToolOutput::error(format!("the package search failed, so this is not \"no packages found\": {}", r.render()));
+    }
+    if lines.is_empty() {
+        return ToolOutput::ok("no packages found");
+    }
+    ToolOutput::ok(format!("{}\n{}", lines.join("\n"), crate::util::more_note(all, 40, "search for a longer name")).trim_end().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn result(code: i32, stdout: &str, stderr: &str) -> super::super::exec::ExecResult {
+        super::super::exec::ExecResult { code: Some(code), stdout: stdout.into(), stderr: stderr.into(), timed_out: false }
+    }
+
+    #[test]
+    fn package_search_says_failed_and_says_cut() {
+        let none = search_reply(&result(0, "", ""));
+        assert_eq!((none.is_error, none.content.as_str()), (false, "no packages found"));
+        let failed = search_reply(&result(100, "", "E: The repository is not signed"));
+        assert!(failed.is_error && failed.content.contains("the package search failed, so this is not \"no packages found\"") && failed.content.contains("not signed"), "{}", failed.content);
+        let many = (1..=45).map(|i| format!("pkg{i}")).collect::<Vec<_>>().join("\n");
+        let cut = search_reply(&result(0, &many, ""));
+        assert!(cut.content.ends_with("pkg40\n... 5 more not shown (search for a longer name)"), "{}", cut.content);
+        assert!(!search_reply(&result(0, "pkg1\n", "")).content.contains("more not shown"));
+    }
 
     #[test]
     fn root_allowlist_and_pkg_names() {

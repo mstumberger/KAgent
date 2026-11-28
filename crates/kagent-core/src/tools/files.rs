@@ -70,7 +70,7 @@ impl Tool for ReadFile {
         let path = expand(path);
         if (self.credential)(&path) {
             return Ok(ToolOutput::error(format!(
-                "{path}: refused, the file holds a KAgent credential (the API token or a secret). The agent never reads it."
+                "{path}: refused, the file holds a KAgent credential (the API token or a secret). The agent never reads it. If you need something from it, ask the owner."
             )));
         }
         let bytes = match tokio::fs::read(&path).await {
@@ -294,7 +294,8 @@ impl Tool for SearchFiles {
 /// as one, with the matches found before it.
 fn search_output(pattern: &str, path: &str, r: &super::exec::ExecResult, max: usize) -> ToolOutput {
     // Rows from one of KAgent's credential files are left out (token-guard.md).
-    let lines: Vec<&str> = r.stdout.lines().filter(|l| !l.trim().is_empty() && !credential_line(l)).take(max).collect();
+    let all: Vec<&str> = r.stdout.lines().filter(|l| !l.trim().is_empty() && !credential_line(l)).collect();
+    let lines: Vec<&str> = all.iter().copied().take(max).collect();
     let failed = r.timed_out || !matches!(r.code, Some(0) | Some(1));
     let problem = || {
         let errors: Vec<&str> = r.stderr.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
@@ -310,11 +311,12 @@ fn search_output(pattern: &str, path: &str, r: &super::exec::ExecResult, max: us
             ToolOutput::error(format!("no matches for /{pattern}/ in {path}"))
         };
     }
-    let mut out = format!("{} matches for /{pattern}/ in {path}\n", lines.len());
+    let mut out = if all.len() > max { format!("{} matches for /{pattern}/ in {path} (first {max} shown)\n", all.len()) } else { format!("{} matches for /{pattern}/ in {path}\n", lines.len()) };
     for l in lines {
         out.push_str(crate::util::truncate_str(l, 400));
         out.push('\n');
     }
+    out.push_str(&crate::util::more_note(all.len(), max, "narrow the pattern or the path, or raise max_results"));
     if failed {
         out.push_str(&format!("The search did not finish cleanly ({}): there may be more matches in what it could not read.\n", problem()));
     }
@@ -345,8 +347,15 @@ mod tests {
         let partial = search_output("x", "/h", &result(2, "/h/a:1:x\n", &format!("{denied}\n{denied}\n{denied}\n{denied}")), 100);
         assert!(!partial.is_error && partial.content.starts_with("1 matches for /x/ in /h\n/h/a:1:x\n"), "{}", partial.content);
         assert!(partial.content.contains("did not finish cleanly (exit 2: ") && partial.content.contains("(and 1 more)"), "{}", partial.content);
+        // agent-loop.md B.2 question 4: a result cut at max_results says how many there are and how to get the rest.
         let ok = search_output("x", "/h", &result(0, "/h/a:1:x\n/h/b:2:x\n", ""), 1);
-        assert_eq!((ok.is_error, ok.content.as_str()), (false, "1 matches for /x/ in /h\n/h/a:1:x\n"), "max_results");
+        assert_eq!(
+            (ok.is_error, ok.content.as_str()),
+            (false, "2 matches for /x/ in /h (first 1 shown)\n/h/a:1:x\n... 1 more not shown (narrow the pattern or the path, or raise max_results)\n"),
+            "max_results"
+        );
+        let all = search_output("x", "/h", &result(0, "/h/a:1:x\n/h/b:2:x\n", ""), 2);
+        assert_eq!(all.content, "2 matches for /x/ in /h\n/h/a:1:x\n/h/b:2:x\n", "nothing cut, no note");
     }
 
     #[tokio::test]
