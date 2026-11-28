@@ -16,6 +16,11 @@ Checks (voice.md section 10):
                call the server cancelled gets its reply as a [SAY] text turn.
   confirmation a live call that needs approval is asked out loud first (no card) and runs
                after a spoken yes, its card answered by voice.
+  look         (vision.md section 3) `screen` is declared to the live model whatever voice.toolGroups
+               holds; the first call of the session is asked out loud and sends no frame; after a
+               spoken yes the call sends one JPEG video frame and answers ok, a later call (another
+               target) is not asked; a locked screen is refused with no frame. The screenshot is a
+               generated picture (KAGENT_FAKE_SCREENSHOT), the lock state is faked (KAGENT_FAKE_LOCKED).
   auto mode    the tools declared to the live model.
 
 Usage: python3 scripts/test-live.py   (builds kagentd first)
@@ -42,6 +47,16 @@ state = {
     "script": "legacy", "chat_requests": [], "gate": threading.Event(), "tool_response": None, "response_ids": [],
     "base": "", "token": "", "fake_error": None, "script_done": False, "active": 0,
 }
+
+
+def make_png(path, w=1600, h=900):
+    """A picture the size of a monitor: the test never takes a screenshot of the owner's screen."""
+    import zlib
+    rows = b"".join(b"\x00" + bytes(v for x in range(w) for v in ((x * 7) % 256, (y * 5) % 256, (x + y) % 256)) for y in range(h))
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def pcm_b64(n=1600, amp=8000):
@@ -275,6 +290,27 @@ async def confirm_by_voice(ws, conn, got):
     await asyncio.sleep(0.3)
 
 
+async def look(ws, conn, got):
+    """live mode (vision.md section 3): the first look is asked out loud, the yes covers the later ones."""
+    # 1. The model calls `screen`: nothing is captured, the owner is asked.
+    await call(ws, "l1", "screen", {})
+    await until_message(ws, got, response("l1"), "the question of l1")
+    state["frames_after_l1"] = sum(1 for m in got if "video" in m.get("realtimeInput", {}))
+    # 2. The owner says yes; the model calls again with the same arguments: one frame, then the answer.
+    await hear(ws, "yes")
+    await asyncio.sleep(0.3)
+    await call(ws, "l2", "screen", {})
+    await until_message(ws, got, response("l2"), "the answer of l2")
+    # 3. Another look of the session (the monitor): no question.
+    await call(ws, "l3", "screen", {"target": "monitor"})
+    await until_message(ws, got, response("l3"), "the answer of l3")
+    # 4. A locked screen: refused, no frame.
+    state["lock"]()
+    await call(ws, "l4", "screen", {})
+    await until_message(ws, got, response("l4"), "the answer of l4")
+    state["frames_total"] = sum(1 for m in got if "video" in m.get("realtimeInput", {}))
+
+
 async def quiet(ws, conn, got):
     """Nothing is said: the test reads the setup and stops."""
 
@@ -292,7 +328,7 @@ async def voiceroll(ws, conn, got):
             got.append(received(json.loads(raw)))
 
 
-SCRIPTS = {"voiceroll": voiceroll, "legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
+SCRIPTS = {"look": look, "voiceroll": voiceroll, "legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
 
 
 async def fake_gemini(ws):
@@ -374,12 +410,16 @@ async def main():
         return 3
     home = tempfile.mkdtemp(prefix="kagent-live-")
     log = open(f"{home}/kagentd.log", "wb")
-    env = dict(os.environ, KAGENT_HOME=home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1", KAGENT_GEMINI_WS=f"ws://127.0.0.1:{FAKE_PORT}/ws")
+    fake_shot = f"{home}/fake-screen.png"
+    make_png(fake_shot)
+    lock_file = f"{home}/locked"
+    env = dict(os.environ, KAGENT_HOME=home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1", KAGENT_GEMINI_WS=f"ws://127.0.0.1:{FAKE_PORT}/ws", KAGENT_FAKE_SCREENSHOT=fake_shot, KAGENT_FAKE_LOCKED=lock_file)
     daemon = None
     # A morning report that waits for a voice session (calendar.md section 6), made "today" before the daemon starts.
     os.makedirs(f"{home}/data", exist_ok=True)
     with open(f"{home}/data/calendar-state.json", "w") as f:
         json.dump({"spoken": {"day": datetime.date.today().isoformat(), "text": REPORT}}, f)
+    state["lock"] = lambda: open(lock_file, "w").close()  # the screen is locked from here on
     server = await websockets.serve(fake_gemini, "127.0.0.1", FAKE_PORT)
     chat = ThreadingHTTPServer(("127.0.0.1", CHAT_PORT), Chat)
     threading.Thread(target=chat.serve_forever, daemon=True).start()
@@ -506,6 +546,31 @@ async def main():
         checks["live: after a spoken yes the same call runs, its card answered by voice"] = (
             state["tool_responses"].get("c5", {}).get("status") == "ok"
             and any(role == "tool" and "denied" not in c for role, c, _, _ in stored)
+            and not api("GET", "/api/state")["pendingApprovals"])
+
+        # ---------------------------------------------------------------- look at my screen (vision.md section 3)
+        api("PUT", "/api/settings", {"voice": {"brain": "live", "toolGroups": ["tasks"]}})  # no desktop group: screen is declared all the same
+        session = api("POST", "/api/sessions", {"title": "look test"})["id"]
+        state["setups"].clear(); state["recv"].clear(); state["tool_responses"].clear()
+        await live_session(session, "look", wait_script)
+        setup = state["setups"][0]["setup"]
+        screen_decl = next((f for f in setup["tools"][0]["functionDeclarations"] if f["name"] == "screen"), {})
+        video = [(i, m["realtimeInput"]["video"]) for i, m in enumerate(state["recv"]) if "video" in m.get("realtimeInput", {})]
+        reply_at = lambda call_id: next((i for i, m in enumerate(state["recv"]) if any(r["id"] == call_id for r in m.get("toolResponse", {}).get("functionResponses", []))), -1)
+        asked = state["tool_responses"].get("l1", {})
+        checks["look: screen is declared whatever voice.toolGroups holds, without a question parameter"] = (
+            bool(screen_decl) and "terminal" not in declared(setup) and "question" not in json.dumps(screen_decl))
+        checks["look: the first look is asked out loud and sends no frame"] = (
+            asked.get("status") == "needs_confirmation" and asked.get("say") == "I want to look at your active window. Say yes to go ahead, or no."
+            and state.get("frames_after_l1") == 0)
+        checks["look: after a spoken yes the call sends one JPEG video frame, then answers ok"] = (
+            state["tool_responses"].get("l2") == {"status": "ok", "output": "the screenshot is in your view now"}
+            and len(video) >= 1 and video[0][1]["mimeType"] == "image/jpeg" and base64.b64decode(video[0][1]["data"])[:2] == b"\xff\xd8"
+            and video[0][0] < reply_at("l2"))
+        checks["look: a later look of the same session is not asked, and sends its own frame"] = (
+            state["tool_responses"].get("l3", {}).get("status") == "ok" and len(video) == 2 and video[1][0] < reply_at("l3"))
+        checks["look: a locked screen is refused (the screen is locked) and sends no frame"] = (
+            state["tool_responses"].get("l4", {}).get("output") == "the screen is locked" and state.get("frames_total") == 2
             and not api("GET", "/api/state")["pendingApprovals"])
 
         # ---------------------------------------------------------------- the speaking voice changes mid session (voice-control.md section 2)

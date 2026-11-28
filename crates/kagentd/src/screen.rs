@@ -14,6 +14,8 @@ use kagent_core::tools::xdg::which;
 use kagent_providers::ApiType;
 use serde_json::{json, Value};
 
+pub mod live;
+
 pub struct Screen {
     contract: ToolContract,
     providers: Arc<kagent_providers::ProviderStore>,
@@ -63,6 +65,62 @@ impl Screen {
         }
     }
 
+    /// Take the screenshot of `target` into `<data>/screenshots`: its path, or the output that says why not.
+    /// A locked screen is never captured. `KAGENT_FAKE_SCREENSHOT` (a PNG path) stands in for the screenshot
+    /// program in the tests, which never take a picture of the owner's screen.
+    async fn capture(&self, target: &str, input: &Value, ctx: &ToolContext) -> anyhow::Result<Result<std::path::PathBuf, ToolOutput>> {
+        if let Some(why) = live::refusal(live::is_locked().await, 0) {
+            return Ok(Err(ToolOutput::error(why)));
+        }
+        std::fs::create_dir_all(&self.shots)?;
+        let path = self.shots.join(format!("screen-{}.png", chrono::Local::now().format("%Y%m%d-%H%M%S-%3f")));
+        if let Ok(fake) = std::env::var("KAGENT_FAKE_SCREENSHOT") {
+            std::fs::copy(fake, &path)?;
+            return Ok(Ok(path));
+        }
+        let p = path.display().to_string();
+        let Some(argv) = capture_argv(kagent_core::platform::desktop(), target, &p, |b| which(b).is_some()) else {
+            return Ok(Err(ToolOutput::error("no screenshot tool (spectacle or gnome-screenshot)")));
+        };
+        let window = input.get("window").and_then(Value::as_str).unwrap_or("").trim();
+        if !window.is_empty() && which("xdotool").is_some() {
+            let mut a = vec!["xdotool".to_string()];
+            a.extend(kagent_core::tools::focus::activate_chain(window));
+            let _ = exec(ctx, &a).run().await;
+            tokio::time::sleep(Duration::from_millis(400)).await;
+        }
+        let mut r = exec(ctx, &argv).run().await?;
+        if !path.is_file() {
+            // Spectacle occasionally exits before writing; one retry.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            r = exec(ctx, &argv).run().await?;
+        }
+        if !path.is_file() {
+            return Ok(Err(ToolOutput::error(format!("screenshot failed: {}", r.render()))));
+        }
+        Ok(Ok(path))
+    }
+
+    /// The live model's look: capture, one JPEG frame (longest side 1024) to the live session, and the answer
+    /// that says so. The screenshot file is deleted: the frame was its only use.
+    async fn look_live(&self, input: &Value, ctx: &ToolContext, sink: tokio::sync::mpsc::UnboundedSender<Value>) -> anyhow::Result<ToolOutput> {
+        let target = live::target_of(input);
+        let path = match self.capture(target, &Value::Null, ctx).await? {
+            Ok(path) => path,
+            Err(refused) => return Ok(refused),
+        };
+        let png = std::fs::read(&path);
+        let _ = std::fs::remove_file(&path);
+        let jpeg = match tokio::task::spawn_blocking(move || png.map_err(|e| e.to_string()).and_then(|png| live::frame_jpeg(&png))).await? {
+            Ok(jpeg) => jpeg,
+            Err(e) => return Ok(ToolOutput::error(format!("the screenshot could not be made into a frame ({e}): try again"))),
+        };
+        if sink.send(live::video_frame(&jpeg)).is_err() {
+            return Ok(ToolOutput::error("the voice session is gone: nothing was sent"));
+        }
+        Ok(ToolOutput::ok(live::SEEN))
+    }
+
     /// Vision model: settings.visionModel, else the chat model if it is an
     /// OpenAI-compatible cloud model, else the first enabled Gemini flash model.
     fn vision_model(&self) -> Option<kagent_providers::store::ResolvedModel> {
@@ -101,33 +159,20 @@ impl Tool for Screen {
         CallAssessment::from_contract(&self.contract, format!("screenshot of the {target} sent to {model}"), format!("screen {target}"))
     }
     async fn call(&self, input: Value, ctx: ToolContext) -> anyhow::Result<ToolOutput> {
+        // A call of the live model: its frame goes to the live session (vision.md section 3).
+        if let Some(sink) = live::sink_of(&ctx.call_id) {
+            return self.look_live(&input, &ctx, sink).await;
+        }
         let target = input.get("target").and_then(Value::as_str).unwrap_or("window");
         let question = input.get("question").and_then(Value::as_str).filter(|q| !q.trim().is_empty()).unwrap_or("Describe what is on this screen. Quote any visible text, error messages and terminal output exactly.");
         let Some(model) = self.vision_model() else {
             return Ok(ToolOutput::error("no vision model: add a Gemini (or OpenAI-compatible) provider with a key, or set settings.visionModel"));
         };
-        std::fs::create_dir_all(&self.shots)?;
-        let path = self.shots.join(format!("screen-{}.png", chrono::Local::now().format("%Y%m%d-%H%M%S")));
-        let p = path.display().to_string();
-        let Some(argv) = capture_argv(kagent_core::platform::desktop(), target, &p, |b| which(b).is_some()) else {
-            return Ok(ToolOutput::error("no screenshot tool (spectacle or gnome-screenshot)"));
+        let path = match self.capture(target, &input, &ctx).await? {
+            Ok(path) => path,
+            Err(refused) => return Ok(refused),
         };
-        let window = input.get("window").and_then(Value::as_str).unwrap_or("").trim();
-        if !window.is_empty() && which("xdotool").is_some() {
-            let mut a = vec!["xdotool".to_string()];
-            a.extend(kagent_core::tools::focus::activate_chain(window));
-            let _ = exec(&ctx, &a).run().await;
-            tokio::time::sleep(Duration::from_millis(400)).await;
-        }
-        let mut r = exec(&ctx, &argv).run().await?;
-        if !path.is_file() {
-            // Spectacle occasionally exits before writing; one retry.
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            r = exec(&ctx, &argv).run().await?;
-        }
-        if !path.is_file() {
-            return Ok(ToolOutput::error(format!("screenshot failed: {}", r.render())));
-        }
+        let p = path.display().to_string();
         let png = std::fs::read(&path)?;
         let b64 = base64::engine::general_purpose::STANDARD.encode(&png);
         let url = format!("{}/chat/completions", model.provider.api.base_url.trim_end_matches('/'));

@@ -179,6 +179,11 @@ pub fn audio_input(b64: &str) -> Value {
     json!({"realtimeInput": {"audio": {"mimeType": "audio/pcm;rate=16000", "data": b64}}})
 }
 
+/// One video frame (a screenshot, vision.md section 3): a JPEG, base64.
+pub fn video_input(b64: &str) -> Value {
+    json!({"realtimeInput": {"video": {"mimeType": "image/jpeg", "data": b64}}})
+}
+
 /// The results of the function calls of one `toolCall` message.
 pub fn tool_response(responses: &[(&str, &str, Value)]) -> Value {
     let r: Vec<Value> = responses.iter().map(|(id, name, result)| json!({"id": id, "name": name, "response": {"result": result}})).collect();
