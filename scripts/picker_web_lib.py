@@ -1,4 +1,4 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43), test-vision-web.py (S46) and test-local-models-web.py (S47)."""
+"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43), test-vision-web.py (S46), test-local-models-web.py (S47) and test-screen-watch-web.py (S48)."""
 import asyncio, base64, json, os, re, urllib.parse, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
@@ -40,6 +40,9 @@ UPLOADS = []
 # The local models page (S47; set with `reset(local=<the view of GET /api/local-models>)`): the view the mock answers and changes
 # as the page downloads, cancels, removes and sets a model. Empty: the routes fall through to the daemon.
 LOCAL = {}
+# The screen watch (S48; set with `reset(watch=<the watch of GET /api/screen-watch>, watch_model=<GET /api/screen-watch/model>)`):
+# the watch the daemon would report (None: none runs), and the model line of the settings card.
+WATCH = {}
 
 
 # The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
@@ -66,6 +69,9 @@ def reset(**kw):
             IMAGES.setdefault(sid, {})[iid] = (data, *png_size(data))
     LOCAL.clear()
     LOCAL.update(json.loads(json.dumps(kw["local"])) if kw.get("local") else {})
+    WATCH.clear()
+    WATCH.update(watch=json.loads(json.dumps(kw.get("watch"))), model=kw.get("watch_model") or {"model": "gemma3:4b", "server": "http://127.0.0.1:11434", "refusal": None})
+    STUB["settings"].pop("screenWatch", None)
     TASKS.clear()
     TASKS.update({k: [dict(t) for t in v] for k, v in kw.get("tasks", {}).items()})
     OUTPUT.clear()
@@ -269,6 +275,20 @@ class Mock(BaseHTTPRequestHandler):
             return self.send(200, {"reads": READS})
         if path == "/__opened":
             return self.send(200, {"opened": OPENED})
+        if path == "/__watch":
+            # The watch changes while the page runs (a look was made, the screen got locked): merged into the one the mock reports.
+            WATCH["watch"] = dict(WATCH["watch"] or {}, **body) if body else None
+            return self.send(200, {"ok": True})
+        if path == "/api/screen-watch" and method == "GET":
+            return self.send(200, WATCH.get("watch"))
+        if path == "/api/screen-watch" and method == "DELETE":
+            CALLS.append("DELETE /api/screen-watch")
+            ended, WATCH["watch"] = WATCH.get("watch"), None
+            return self.send(200, dict(ended, state="stopped")) if ended else self.send(404, {"error": {"code": "not_found", "message": "no screen watch is running"}})
+        if path == "/api/screen-watch/model" and method == "GET":
+            return self.send(200, WATCH["model"])
+        if path == "/api/settings" and method == "PUT" and "screenWatch" in (body or {}):
+            CALLS.append(f"PUT /api/settings {json.dumps(body)}")
         if path == "/__local":
             # The mock's view changes while the page runs (a download makes progress): merged into the view.
             LOCAL.update(body)
@@ -493,6 +513,11 @@ def reads():
 def local(**body):
     """Change the local models view of the mock while the page runs (S47)."""
     urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__local", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
+def watch(**body):
+    """Change the screen watch of the mock while the page runs (S48); no arguments: it ended."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__watch", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
 
 
 def calls():

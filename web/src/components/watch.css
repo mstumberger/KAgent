@@ -1,0 +1,99 @@
+/* The chip of a running screen watch, next to the voice chip (screen-watch.md section 4). */
+.watch-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--warn, #e0a030) 55%, transparent);
+  background: color-mix(in srgb, var(--warn, #e0a030) 12%, transparent);
+  border-radius: 999px;
+  margin: 0 6px 0 0;
+}
+.watch-chip.paused {
+  border-color: var(--rim-strong);
+  background: rgba(127, 127, 127, 0.08);
+}
+.watch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.watch-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.watch-chip svg {
+  color: var(--warn, #e0a030);
+}
+.watch-chip.paused svg {
+  color: var(--dim);
+}
+.watch-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(320px, calc(100vw - 16px));
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: default;
+}
+.watch-chip.compact .watch-pop {
+  position: fixed;
+  top: 44px;
+  left: 8px;
+  right: 8px;
+  width: auto;
+}
+.watch-goal {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.watch-pop dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+}
+.watch-pop dt {
+  color: var(--dim);
+}
+.watch-pop dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.watch-stop {
+  width: 100%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .watch-chip:not(.paused) svg {
+    animation: watch-blink 2.4s ease-in-out infinite;
+  }
+}
+@keyframes watch-blink {
+  50% {
+    opacity: 0.45;
+  }
+}
+/* The widget is dark in both themes: its chip reads on that, its popover is the house popup. */
+.watch-chip.compact .watch-btn {
+  color: #e6edf3;
+  height: 22px;
+  padding: 0 8px;
+}

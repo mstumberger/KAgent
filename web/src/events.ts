@@ -30,6 +30,8 @@ export type AgentEvent =
   | { type: "telegramStatus"; status: string; detail: string }
   /** The Google Calendar connection changed state (calendar.md section 7). */
   | { type: "calendarChanged"; state: string }
+  /** The screen watch changed state, or (at most every 5 s) its looks and last note (screen-watch.md section 4); `watch.state` is `watching` while it runs. */
+  | { type: "screenWatchChanged"; watch: import("./screenWatch").Watch }
   /** The downloads of local models changed (local-models.md section 3). */
   | { type: "localModelsChanged"; pulls: import("./settings/local-models/api").Pull[] }
   /** A background shell task of `sessionId` changed status (work-windows.md section 3). */

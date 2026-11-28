@@ -23,6 +23,9 @@ PlasmoidItem {
     property int failures: 0
     property var samples: []
     property int alertsOpen: 0
+    // The running screen watch (screen-watch.md): the minutes left (0: none runs) and its goal, from GET /api/screen-watch.
+    property int watchMinutes: 0
+    property string watchGoal: ""
     readonly property int maxSamples: 256
 
     readonly property var stateLabels: ({
@@ -40,7 +43,12 @@ PlasmoidItem {
     }
 
     toolTipMainText: i18n("KAgent")
-    toolTipSubText: alertsOpen > 0 ? statusText + "\n" + i18np("%1 open alert", "%1 open alerts", alertsOpen) : statusText
+    toolTipSubText: {
+        let text = alertsOpen > 0 ? statusText + "\n" + i18np("%1 open alert", "%1 open alerts", alertsOpen) : statusText
+        if (watchMinutes > 0)
+            text += "\n" + i18n("Watching the screen, %1 min left: %2", watchMinutes, watchGoal)
+        return text
+    }
     Plasmoid.icon: agentState === "approval" ? "dialog-warning"
         : agentState === "offline" ? "audio-input-microphone-muted" : "audio-input-microphone"
     Plasmoid.status: agentState === "approval" || alertsOpen > 0 ? PlasmaCore.Types.NeedsAttentionStatus
@@ -164,6 +172,18 @@ PlasmoidItem {
             if (xhr.status === 200)
                 root.alertsOpen = JSON.parse(xhr.responseText).alertsOpen || 0
         })
+        root.request("GET", "/api/screen-watch", function (xhr) {
+            if (xhr.status !== 200)
+                return
+            const w = JSON.parse(xhr.responseText)
+            if (w && w.state === "watching") {
+                root.watchMinutes = Math.max(1, Math.ceil((Date.parse(w.until) - Date.now()) / 60000))
+                root.watchGoal = w.goal || ""
+            } else {
+                root.watchMinutes = 0
+                root.watchGoal = ""
+            }
+        })
     }
 
     function stopAll() {
@@ -215,6 +235,23 @@ PlasmoidItem {
             agentState: root.agentState
             style: Plasmoid.configuration.style
         }
+        // The eye of a running screen watch: the owner is never watched without seeing it.
+        Row {
+            visible: root.watchMinutes > 0
+            anchors.top: parent.top
+            anchors.left: parent.left
+            spacing: 2
+            Kirigami.Icon {
+                source: "view-visible"
+                width: Math.round(parent.parent.height * 0.5)
+                height: width
+            }
+            PlasmaComponents.Label {
+                text: i18n("%1 min", root.watchMinutes)
+                font.pixelSize: parent.parent.height * 0.4
+                font.bold: true
+            }
+        }
         Rectangle {
             visible: root.alertsOpen > 0
             anchors.top: parent.top
@@ -263,6 +300,17 @@ PlasmoidItem {
                 text: root.statusText
                 elide: Text.ElideRight
                 color: root.agentState === "approval" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+            }
+            Kirigami.Icon {
+                visible: root.watchMinutes > 0
+                source: "view-visible"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            }
+            PlasmaComponents.Label {
+                visible: root.watchMinutes > 0
+                text: i18n("watching, %1 min", root.watchMinutes)
+                elide: Text.ElideRight
             }
             PlasmaComponents.Label {
                 visible: root.alertsOpen > 0

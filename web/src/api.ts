@@ -218,6 +218,8 @@ export interface Settings {
     report?: { enabled?: boolean; weekdays?: string; weekends?: string; spoken?: boolean; telegram?: boolean; tomorrow?: boolean; tasks?: boolean; leaveBy?: boolean };
   };
   desktop?: { editor?: string; projectRoots?: string[] };
+  /** settings.screenWatch (screen-watch.md): a missing field is the default. */
+  screenWatch?: { enabled?: boolean; cloudConfirm?: boolean; telegram?: boolean; defaultMinutes?: number; everySec?: number };
   watchers?: { quietHours?: string };
   /** Open the small widget when the daemon starts (default true). */
   startWidget?: boolean;
