@@ -211,3 +211,19 @@ fn deleting_a_provider_empties_every_setting_that_names_it() {
     s.fallback_model = "ollama2::c".into();
     assert!(!clear_provider_refs(&mut s, "ollama"));
 }
+
+#[test]
+fn the_lists_and_the_provider_view_say_what_is_local_and_free() {
+    let (_d, s) = store();
+    with_provider(&s, "nvidia");
+    let box_id = ok(add(&s, &json!({"templateId": "custom", "name": "Box", "baseUrl": "http://127.0.0.1:1234/v1", "apiType": "openai-chat-completions"})))["id"].as_str().unwrap().to_string();
+    s.update(&box_id, |p| p.models.push(kagent_providers::config::ModelEntry { id: "tiny-free".into(), name: String::new(), enabled: true, roles: vec!["chat".into()], smart: true, config: Default::default() })).unwrap();
+    let lists = model_lists(&s);
+    let rows = lists["chat"].as_array().unwrap();
+    let local: Vec<&str> = rows.iter().filter(|m| m["local"] == true).map(|m| m["providerId"].as_str().unwrap()).collect();
+    assert_eq!(local, [box_id.as_str()], "only the provider at a loopback address is local");
+    assert!(rows.iter().all(|m| m["free"] == (m["id"].as_str().unwrap().ends_with("-free"))));
+    assert!(rows.iter().any(|m| m["free"] == true), "tiny-free is free");
+    let views = s.masked();
+    assert_eq!(views.iter().map(|v| (v["id"].as_str().unwrap(), v["local"].as_bool().unwrap())).collect::<Vec<_>>(), [("nvidia", false), (box_id.as_str(), true)]);
+}

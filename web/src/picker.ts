@@ -3,7 +3,7 @@
 import { api, type ModelView, type SessionMeta } from "./api";
 
 /** A model of `GET /api/models` (`chat`): with the provider it belongs to. */
-export type PickerModel = ModelView & { providerId: string; providerName: string };
+export type PickerModel = ModelView & { providerId: string; providerName: string; /** The provider is on this machine or network (the daemon decides). */ local?: boolean; /** The id ends in `-free`. */ free?: boolean };
 
 /** What a conversation chose: a model ref and an effort, each `null` for the default. */
 export interface Choice {
