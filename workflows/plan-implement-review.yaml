@@ -1,0 +1,22 @@
+name: plan-implement-review
+description: A planner splits the job into tasks, the owner approves the plan, an implementer does each task and a reviewer checks it.
+steps:
+  - id: plan
+    role: planner
+    worker: {kind: subagent, profile: planner}
+    output: plan
+    gate: owner
+  - id: build
+    role: implementer
+    for_each: task
+    worker: {kind: subagent, profile: implementer}
+    parallel: 1
+    isolation: none
+  - id: review
+    role: reviewer
+    for_each: task
+    worker: {kind: subagent, profile: reviewer}
+    on_changes: {back_to: build, max_rounds: 3, then: owner}
+  - id: wrap
+    role: orchestrator
+    do: summary

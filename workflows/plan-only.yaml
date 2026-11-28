@@ -1,0 +1,11 @@
+name: plan-only
+description: A planner splits the job into tasks and the run ends at the plan the owner approves.
+steps:
+  - id: plan
+    role: planner
+    worker: {kind: subagent, profile: planner}
+    output: plan
+    gate: owner
+  - id: wrap
+    role: orchestrator
+    do: summary

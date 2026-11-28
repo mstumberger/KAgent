@@ -1,0 +1,15 @@
+name: implement-review
+description: No planner: the job is the one task. An implementer does it and a reviewer checks it, back and forth up to three rounds.
+steps:
+  - id: build
+    role: implementer
+    for_each: task
+    worker: {kind: subagent, profile: implementer}
+  - id: review
+    role: reviewer
+    for_each: task
+    worker: {kind: subagent, profile: reviewer}
+    on_changes: {back_to: build, max_rounds: 3, then: owner}
+  - id: wrap
+    role: orchestrator
+    do: summary
