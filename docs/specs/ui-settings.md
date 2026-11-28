@@ -48,7 +48,7 @@ From S42 (`sidebar.md`) the navigation is the left sidebar, not a row of tabs.
 | Basics | `appearance` | Appearance | Theme: auto (follows the system's light or dark setting; the default when the browser has no choice stored), dark or light. The switch at the foot of the sidebar goes through light, dark and auto. The page carries the theme in use as `data-theme` and the choice as `data-theme-pref` (`web/src/theme.ts`; v0.0.2) | S19 |
 | Basics | `models` | Models | The Providers page as it is (provider list, catalog, models, roles) plus "Roles" (fallback, vision, fast) and "Advanced" (reasoning level, max output tokens, temperature, max iterations, approval timeout) | S19 |
 | Basics | `local-models` | Local models | `local-models.md` section 4: the machine, the recommended models per job, downloads through Ollama (after Models) | S47 |
-| Basics | `voice` | Voice | Live model, voice, pause media; brain and context from S26 | S19 |
+| Basics | `voice` | Voice | Live model, voice, pause media; brain and context from S26; the card "At start" (v0.0.3): Listen on start, the idle time, Say the greeting out loud (`voice.md` section 14) | S19 |
 | Basics | `browser` | Browser | Backend, port, binary; attach controls from S27 | S19 |
 | Basics | `desktop` | Desktop and apps | Editor, project folders | S19 |
 | Basics | `watchers` | Watchers | Quiet hours | S19 |

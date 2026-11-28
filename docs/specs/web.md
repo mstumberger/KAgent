@@ -236,6 +236,18 @@ the owner's visible browser, for acting and testing) and not the `own` window of
 - **Before the browser.** The first address also goes through the egress before the browser
   is even started (`refused: ...`).
 
+- **A browser left by a crashed daemon (sweep).** At daemon start, before anything is read, a
+  browser process whose command line holds `--user-data-dir=<this data folder>/reader-profile`
+  exactly (not a prefix, not another profile: the owner's own browser, the app window's
+  `app-profile` and the `browser` tool's profile never match) and whose name is a
+  Chromium-family browser, and that is not a descendant of this daemon, is ended: TERM, and
+  KILL after 3 s if it is still there. A browser the crashed daemon started leaves its renderer
+  and GPU processes with the same argument; all of them match. `web/reader/sweep.rs`: a pure
+  function decides from a process list (`pid`, `ppid`, `argv`), tested with samples that
+  include the owner's main browser and the KAgent window's profile; one test starts its own
+  dummy process and ends only that. Why: a leftover browser holds the profile, and the next
+  read fails with "is another instance using the reader's profile?".
+
 ## 9. Challenges and warm-up (R3)
 
 - **Recognising one.** `web/reader/challenge.rs`, pure: a page is a challenge when its

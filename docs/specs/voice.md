@@ -304,3 +304,103 @@ says to ignore them.
   out loud first" instead of "never type, send or act on it".
 - Tests: `noise.rs` (the table, the held call, yes and no), `scripts/test-live.py` (a
   noise fragment, then a call: asked, no card).
+
+## 14. Listen on start (v0.0.3, 2026-11-28)
+
+Why: after login the owner wants KAgent to be there without a click: its window open and
+a live voice session running, and a greeting said out loud. Two switches, both off by
+default, both PROTECTED keys of the `settings` tool (a microphone that turns itself on is
+the owner's decision, made on the screen only).
+
+### 14.1 Settings
+
+| Key | Default | Meaning |
+|---|---|---|
+| `voice.listenOnStart` | `false` | after login the daemon opens its window and a live session starts by itself |
+| `voice.listenOnStartIdleMinutes` | `10` | 1..120 (else 400 and refused on load): a session started this way ends after this long without any speech of the owner |
+| `startup.greeting.spoken` | `false` | the greeting is also said, once, at the start of that session. Needs `voice.listenOnStart` (the card shows it disabled with "needs Listen on start") |
+
+The desktop-notification greeting (`startup.greeting.enabled`) is unchanged.
+
+### 14.2 When it starts (`kagentd/src/listen_start/`)
+
+At daemon start, with `voice.listenOnStart` on, all of these must hold, else nothing
+happens (one log line says which):
+
+1. **After login, not a restart.** The daemon started within 5 minutes of the start of
+   the owner's graphical session. The start is read from logind: the session in
+   `XDG_SESSION_ID`, else the user's `Display` session (`loginctl show-user <uid> -p
+   Display --value`), then `loginctl show-session <id> -p Timestamp --value`
+   (`Sat 2026-11-28 08:15:02 CET`, read as local time). A pure function
+   (`login::within_login_window`) decides from that text and the clock; when the text
+   cannot be read, or the session starts after the clock, it does not start. A manual
+   `systemctl --user restart kagentd` during the day never turns the microphone on.
+2. **Not locked.** The session is not locked (`screen::live::is_locked`, logind's
+   `LockedHint`). When it is, the daemon polls every 5 s and starts when the session is
+   unlocked, if that happens within 10 minutes of the daemon's start; else not at all.
+   The setting is read again at that moment.
+3. **No window yet.** A window already open (left by a previous daemon) is not touched
+   and nothing starts: KAgent does not take the microphone in a window it did not open.
+
+### 14.3 The start marker
+
+The daemon opens its window by the existing path (`appwin`, the widget or the full
+layout as `startWidget` says; `startWidget` off still opens it) with one more address
+parameter, `listen=<marker>`:
+
+- The marker is made by the daemon: 32 random bytes as hex, held in memory only, valid
+  for 2 minutes and for one use.
+- The page, when it has loaded and has the token, removes `listen` from the address at
+  once (a reload never presents it again) and posts it to `POST /api/voice/listen-start
+  {marker}`. The daemon compares in constant time, consumes it on a match, and answers
+  `{start: true}`; for a marker that is wrong, used or older than 2 minutes, `{start:
+  false}` (200: it is not an error, a stale link is just ignored). Only `{start: true}`
+  starts the session (`voice.start`, the same call as the click on Listen).
+- So an address that merely holds `listen=...` or any other flag cannot start the
+  microphone: a link, a bookmark, a reload or a pasted address does nothing without a
+  marker the daemon made a moment ago.
+- The older `?autostart` of the widget (tray "Listen") is a different path, started by the
+  owner's own click on the tray; it is not used here.
+
+### 14.4 The session, and what shows it
+
+- The first `/live` session that connects after the marker was consumed (within 60 s) is
+  the session started at login. The daemon marks it (`ListenStart::claim`) for as long as
+  it is open.
+- It ends by itself after `listenOnStartIdleMinutes` without speech of the owner: the time
+  counts from the start of the session and from each non-empty piece of what the owner says
+  or types. The check runs on the 10 s watchdog tick of `live/mod.rs`
+  (`listen_start::idle::expired`, pure). The status becomes `idle` with the detail "no speech
+  for N minutes". A session the owner started by a click has no such limit.
+- The stop phrases and the chip end it as usual. The voice chip of the title bar and the
+  tray icon already show any running session (the green pulsing icon); nothing new is
+  invented. The one addition: while the session was started at login the tray tooltip says
+  "KAgent: listening (started at login)".
+- No microphone, or the permission is refused: the page shows one notice ("Listen on start:
+  microphone unavailable (permission denied?)") and does not try again. The session is not
+  restarted by anything.
+
+### 14.5 The spoken greeting
+
+With `startup.greeting.spoken` on, the first thing said in the session started at login is
+the greeting: `startup::greeting_text` (the custom text, or the time of day and the owner's
+name, or with no name the question for it), sent as a `[SAY]` text turn after `setupComplete`
+(section 2: said word for word, starts no tool). When the morning report waits to be spoken
+(`calendar.md` section 6: on, `spoken`, connected, and its text built), its text follows the
+greeting in the same turn, separated by a blank line; with the report off, or failed, the
+greeting alone. It is said once per daemon start, only in the session started at login: a
+later session, a reconnect of the same one and a session started by a click never say it.
+
+### 14.6 Tests
+
+- `listen_start` (Rust): the marker (made by the daemon, one use, 2 minutes, a wrong one
+  does not burn the right one, an address-like string does nothing); `claim` only after a
+  consume and only for 60 s; the login window from samples of `loginctl` (a fresh login,
+  4 min 59 s, 5 min 1 s, midnight, `n/a`, empty, a session that starts after the clock);
+  the lock wait (starts when unlocked within 10 minutes, gives up after); the idle rule;
+  the settings (defaults, ranges, protected keys in the key walk of the `settings` tool).
+- Web (`scripts/test-listen-web.py`, headless Chrome with a fake microphone): a page opened
+  with a valid marker starts a session; one without, one with a used marker and one with an
+  invented marker do not; the card of Settings -> Voice saves its three keys and shows the
+  greeting switch disabled while Listen on start is off.
+- Not tested without an owner: a real login, a real microphone, the lock screen.

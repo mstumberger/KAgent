@@ -74,6 +74,7 @@ type AuditRecord = /* config.md section 6 */;
 | GET `/api/net/devices` / `/api/net/top?device=&minutes=` | | device rows / top flows |
 | POST `/api/net/unblock` | `{address}` | `{removed}` (undo path of router_block_ip) |
 | POST `/api/voice/demo` | | 202; plays ~6 s of synthetic speech levels (test visualizers without voice) |
+| POST `/api/voice/listen-start` | `{marker}` | `{start: bool}`: `true` once, for the marker the daemon made when it opened the window at login (valid 2 minutes); `false` for a wrong, used or old one (`voice.md` section 14.3) |
 | GET `/api/audit?limit=100&before=seq` | | `AuditRecord[]` |
 | GET `/api/audit/verify` | | `{ok: true, count}` or `{ok: false, brokenAt: seq, reason}` |
 | GET `/api/changes?limit=50` | | `Change[]` |

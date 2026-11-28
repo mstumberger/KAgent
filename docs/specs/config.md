@@ -44,7 +44,7 @@ All writes of JSON config are atomic (tmp + rename) and keep mode 0600.
   "approvalTimeoutSec": 600,
   "options": {"reasoningLevel": null, "maxOutputTokens": null, "temperature": null},
   "persona": {"name": "KAgent", "address": "", "language": "auto"},
-  "startup": {"autostart": true, "greeting": {"enabled": true, "text": ""}},
+  "startup": {"autostart": true, "greeting": {"enabled": true, "text": "", "spoken": false}},
   "voice": {"hotkey": "Meta+Space", "orbTheme": "orb", "pauseMedia": true},
   "desktop": {"editor": "", "projectRoots": []},
   "browser": {"port": 9333, "binary": ""},
@@ -75,7 +75,9 @@ All writes of JSON config are atomic (tmp + rename) and keep mode 0600.
   only, no sudo. Applied at daemon start and when the setting changes via the API.
 - `startup.greeting.enabled`: after the HTTP listener binds, a desktop notification
   greets the user. `text`: custom text; empty = auto ("Good morning/afternoon/
-  evening, <persona.address>. KAgent is up and watching.").
+  evening, <persona.address>. KAgent is up and watching."). `spoken` (default false): the
+  same text is also said at the start of the voice session that `voice.listenOnStart`
+  starts after login (`voice.md` section 14); a protected key of the `settings` tool.
 - `persona.language`: `auto` (answer in the user's language), `sl`, `en`.
 - Passwords/keys never live here (MikroTik password: Secret Service from S9; before S9
   `<config>/secrets.json` 0600).
@@ -280,7 +282,7 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
   "skills": {"disabled": [], "indexBudgetChars": 3000},
   "memory": {"enabled": true, "recallCount": 3, "recallChars": 1500},
   "compaction": {"enabled": true, "thresholdPct": 80},
-  "voice": {"brain": "live", "toolGroups": ["desktop", "tasks", "system"], "context": true, "vocabulary": true, "pauseMedia": true, "volume": 100},
+  "voice": {"brain": "live", "toolGroups": ["desktop", "tasks", "system"], "context": true, "vocabulary": true, "pauseMedia": true, "volume": 100, "listenOnStart": false, "listenOnStartIdleMinutes": 10},
   "browser": {"port": 9333, "binary": "", "backend": "own", "attachProfile": "", "attachTrust": "strict"},
   "tasks": {"onApproval": "deny", "deliver": ["desktop", "session"], "timeoutMin": 30, "maxConcurrent": 2},
   "telegram": {"enabled": false, "notifyAlerts": true, "forwardApprovals": false, "approvalForwardSec": 20, "allowPrivileged": false},
@@ -299,6 +301,7 @@ section 3): defaults for missing fields, unknown keys preserved, typos rejected.
 | `memory.recallCount` | 0..8; `memory.recallChars` 0..8000 |
 | `compaction.thresholdPct` | 50..95 |
 | `voice.brain` | `live` (the default) \| `auto` \| `routed` (`voice.md`); `voice.toolGroups` = groups declared to the live model in `live` and `auto` (unknown names are refused with 400 and on load; `[]` is no tools); existing keys `voice.hotkey`, `voice.orbTheme` stay untouched |
+| `voice.listenOnStart` | default false: after login the daemon opens its window and a live session starts by itself (`voice.md` section 14); `voice.listenOnStartIdleMinutes` 1..120, default 10: such a session ends after this long without speech (else 400, and refused on load). Both are protected keys of the `settings` tool |
 | `voice.volume` | 0..100, default 100: the loudness of KAgent's own speech, the playback gain of the page (`voice-control.md` section 2); not the system volume (that is the `audio` tool). Above 100 is refused with 400 |
 | `browser.backend` | `own` \| `attach`; `browser.attachProfile` = user data dir of the browser to attach to, empty = first found (`browser.md`); it must be an absolute path or start with `~/` (else 400, and refused on load); `browser.attachTrust` `strict` \| `normal` |
 | `tasks.onApproval` | `deny` \| `wait`: default policy for unattended runs (`automations.md`) |
