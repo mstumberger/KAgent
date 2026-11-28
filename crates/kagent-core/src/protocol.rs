@@ -25,6 +25,8 @@ pub enum Via {
     Telegram,
     /// To or from a subagent (S31).
     Agent,
+    /// A message of the screen watch: its hit, its end (screen-watch.md section 3).
+    Watch,
 }
 
 /// The pixels of an image while a request is built (`agent/vision.rs`): never stored in the
@@ -266,6 +268,9 @@ pub enum AgentEvent {
     /// The downloads of local models changed (local-models.md section 3): `pulls` is the
     /// list of `GET /api/local-models` (queued, pulling or failed rows), at most twice a second.
     LocalModelsChanged { pulls: serde_json::Value },
+    /// The screen watch changed state, or (at most every 5 s) its `looks` and `lastNote` (screen-watch.md
+    /// section 4): `watch` is the watch as `GET /api/screen-watch` shows it, with its final state when it ended.
+    ScreenWatchChanged { watch: serde_json::Value },
     /// A subagent of `session_id` changed state (agents.md section 3): `child` is a
     /// `ChildView` (id, title, profile, startedAt) and `status` one of `queued`, `running`,
     /// `done`, `failed`, `cancelled`.

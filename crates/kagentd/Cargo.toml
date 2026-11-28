@@ -35,5 +35,6 @@ ksni = "0.3.7"
 x11rb = { version = "0.14.0", features = ["shape"] }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true
 image.workspace = true

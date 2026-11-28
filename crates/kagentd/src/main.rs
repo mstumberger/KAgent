@@ -12,6 +12,8 @@ mod rounded;
 mod tasks;
 mod todo_api;
 mod screen;
+#[allow(dead_code)] // wired by the tool and the API (the next commit)
+mod screen_watch;
 mod appwin;
 mod tray;
 mod turn_config;
