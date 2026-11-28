@@ -149,7 +149,7 @@ a running subagent (`agent-pulse`) while something runs. The `title` says it in 
 
 **The panel**: under the capsule, the look of `.todo-panel` today (the rim, the medium
 radius, `rgba(18, 26, 46, 0.7)`, white in the light theme), at most `min(46vh, 420px)`
-high; it scrolls as a whole. Four sections (`components/work/WorkSection.tsx`), each a
+high; it scrolls as a whole. Four sections, and a fifth, Activity, once there is a notice (`components/work/WorkSection.tsx`), each a
 header of 28 px (a chevron, the title, a count in `--dim`, the actions at the right) and
 a body; a click on the header folds and unfolds it. A section the owner has not touched
 is open when it has something and closed when it has nothing; what the owner folded is
@@ -188,6 +188,16 @@ in the background".
 item, "3 of 7", Clear; `PUT /api/sessions/:id/todo` at each click. It loses its own box
 (`components/todo.css`: no margin, border or background) and sits in the section. With no
 list: "No todo list".
+
+**Activity** (`components/work/ActivitySection.tsx`). The last 20 notices of the open
+conversation (`notices.md`): one line each with the icon of its kind, the level, the text
+(one line, the whole text on hover), "x3" when the same `key` and kind came again in a row
+(one entry, the latest text and time) and the time. The page's own notices (no `sessionId`)
+are listed in every conversation. The log lives in the page's store (`components/toasts.ts`)
+for the life of the page and is not persisted; closing a toast does not remove its line.
+The section is drawn only when there is at least one entry; the capsule then shows a
+`bell` item with the count, and the panel opens even when nothing else is going on. At most
+20 are kept per conversation. Newest first.
 
 ### 5.3 When the lists are read
 

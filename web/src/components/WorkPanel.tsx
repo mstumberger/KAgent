@@ -1,8 +1,10 @@
 // The work panel (work-windows.md section 5.1): a capsule above the composer that counts what goes
-// on in the open session (agents, commands, the plan, the todo list) and expands into four sections.
+// on in the open session (agents, commands, the plan, the todo list) and expands into sections.
 // The widget draws the same capsule and, behind it, the sections in a sheet.
 import { useEffect, useId, useMemo, useState } from "react";
 import Icon from "./Icon";
+import ActivitySection from "./work/ActivitySection";
+import { useActivityCount } from "./toasts";
 import AgentsSection from "./work/AgentsSection";
 import BackgroundSection from "./work/BackgroundSection";
 import PlanSection from "./work/PlanSection";
@@ -13,6 +15,8 @@ import "./work.css";
 
 interface CapsuleProps {
   counts: Counts;
+  /** The notices of the conversation in the Activity section. */
+  notices?: number;
   open?: boolean;
   controls?: string;
   onClick: () => void;
@@ -20,7 +24,7 @@ interface CapsuleProps {
 }
 
 /** The button: one item per kind that has something. The first two carry the pulsing dot while something runs. */
-export function Capsule({ counts: c, open, controls, onClick, className = "" }: CapsuleProps) {
+export function Capsule({ counts: c, notices = 0, open, controls, onClick, className = "" }: CapsuleProps) {
   const running = c.agents > 0 || c.commands > 0;
   const text = describe(c);
   return (
@@ -37,6 +41,12 @@ export function Capsule({ counts: c, open, controls, onClick, className = "" }: 
           <Icon name="terminal" size={13} />
           <b>{c.commands}</b>
           {running && <span className="agent-dot pulse" aria-hidden="true" />}
+        </span>
+      )}
+      {notices > 0 && (
+        <span className="cap-item cap-activity">
+          <Icon name="bell" size={13} />
+          <b>{notices}</b>
         </span>
       )}
       {c.plan && <span className={`cap-item cap-plan ${c.plan}`}>{c.plan}</span>}
@@ -57,7 +67,7 @@ export function Capsule({ counts: c, open, controls, onClick, className = "" }: 
   );
 }
 
-/** The four sections, for the panel and for the widget's sheet. `pane`: a line may open a tab (the full window only). */
+/** The sections, for the panel and for the widget's sheet. `pane`: a line may open a tab (the full window only). */
 export function WorkSections({ sessionId, pane }: { sessionId: string; pane: boolean }) {
   return (
     <>
@@ -65,6 +75,7 @@ export function WorkSections({ sessionId, pane }: { sessionId: string; pane: boo
       <BackgroundSection sessionId={sessionId} pane={pane} />
       <PlanSection sessionId={sessionId} pane={pane} />
       <ProgressSection sessionId={sessionId} />
+      <ActivitySection sessionId={sessionId} />
     </>
   );
 }
@@ -81,11 +92,12 @@ export default function WorkPanel({ sessionId }: { sessionId: string | null }) {
   useEffect(() => {
     if (open && sessionId) void loadTasks(sessionId);
   }, [open, sessionId]);
-  const visible = useMemo(() => hasWork(counts), [counts]);
+  const notices = useActivityCount(sessionId);
+  const visible = useMemo(() => hasWork(counts) || notices > 0, [counts, notices]);
   if (!sessionId || !visible) return null;
   return (
     <div className="work-panel-wrap">
-      <Capsule counts={counts} open={open} controls={id} onClick={() => setOpen(!open)} />
+      <Capsule counts={counts} notices={notices} open={open} controls={id} onClick={() => setOpen(!open)} />
       {open && (
         <div className="work-panel" id={id} role="region" aria-label="Work">
           <WorkSections sessionId={sessionId} pane />

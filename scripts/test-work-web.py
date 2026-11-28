@@ -221,6 +221,38 @@ def section(name):
     return f"document.querySelector(\".work-section[data-section='{name}']\")"
 
 
+async def activity_checks(env, results, theme, label, compact):
+    page = env.page
+    t = f"{label} {theme}"
+    await env.open(theme, query="?overlay" if compact else "", init=FAKE_LIVE, **CFG)
+    results[f"{t}: Activity: no notice, no capsule and no Activity section"] = await page.js("!document.querySelector('.work-capsule')")
+    await emit(page, notice("gemini::a is out of quota", "provider:gemini:quota", level="error", kind="error", session="s1"))
+    await emit(page, notice("gemini::a is out of quota again", "provider:gemini:quota", level="error", kind="error", session="s1"))
+    await emit(page, notice("elsewhere", "k:x", session="s2"))
+    await emit(page, notice("Gemini answers again", "provider:gemini:quota", level="info", kind="recovery", session="s1"))
+    for i in range(22):
+        await emit(page, notice(f"note {i}", session="s1", level="info"))
+    await clear(page)
+    results[f"{t}: Activity: closed toasts leave no stack"] = await page.js("!document.querySelector('.toasts')")
+    results[f"{t}: Activity: the capsule shows a bell with the count of the notices of the open conversation (20)"] = await page.js("document.querySelector('.work-capsule .cap-activity').textContent.trim()") == "20"
+    await page.click(".work-capsule")
+    await page.until("!!document.querySelector('.work-section[data-section=activity]')", "the Activity section")
+    rows = await page.js("[...document.querySelectorAll('.activity-row')].map(r => r.querySelector('.activity-text').textContent)")
+    results[f"{t}: Activity lists the last 20 of the open conversation, newest first, and none of another one"] = len(rows) == 20 and rows[0] == "note 21" and rows[-1] == "note 2" and "elsewhere" not in rows
+    row = await page.js("(() => { const r = document.querySelector('.activity-row'); return {level: r.querySelector('.activity-level').textContent, time: /\\d/.test(r.querySelector('time').textContent), icon: !!r.querySelector('svg')}; })()")
+    results[f"{t}: an Activity line has the icon, the level and the time"] = row == {"level": "info", "time": True, "icon": True}
+    results[f"{t}: Activity counts its lines in the header"] = await page.js("document.querySelector('.work-section[data-section=activity] .work-section-count').textContent") == "20"
+    await page.shot(f"activity-{t.replace(' ', '-')}")
+    # a merged entry shows the count
+    await env.open(theme, query="?overlay" if compact else "", init=FAKE_LIVE, **CFG)
+    await emit(page, notice("gemini::a is out of quota", "provider:gemini:quota", level="error", kind="error", session="s1"))
+    await emit(page, notice("gemini::a is out of quota (2)", "provider:gemini:quota", level="error", kind="error", session="s1"))
+    await clear(page)
+    await page.click(".work-capsule")
+    await page.until("!!document.querySelector('.activity-row')", "the entry")
+    results[f"{t}: Activity: the same key twice is one line with x2 and the latest text, though the toast was closed"] = await page.js("[...document.querySelectorAll('.activity-row')].map(r => r.querySelector('.activity-text').textContent + '|' + r.querySelector('.activity-count').textContent)") == ["gemini::a is out of quota (2)|x2"]
+
+
 async def work_checks(env, results, theme):
     page = env.page
     t = f"1200x820 {theme}"
@@ -446,6 +478,10 @@ async def main():
             await env.size(w, h)
             for theme in ("dark", "light"):
                 await notice_checks(env, results, theme, label, compact, first=(label == "1200x820" and theme == "dark"))
+        for w, h, label, compact in ((1200, 820, "1200x820", False), (340, 460, "340x460", True)):
+            await env.size(w, h)
+            for theme in ("dark", "light"):
+                await activity_checks(env, results, theme, label, compact)
         for theme in ("dark", "light"):
             await work_checks(env, results, theme)
             await pane_checks(env, results, theme)
