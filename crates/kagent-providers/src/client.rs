@@ -16,6 +16,7 @@ use crate::adapters::{anthropic, ollama, openai_chat, openai_responses};
 use crate::config::ApiType;
 use crate::sse::SseParser;
 use crate::store::{ResolvedModel, ProviderStore};
+use crate::usage::UsageSink;
 
 enum Adapter {
     Chat(openai_chat::Reducer),
@@ -46,6 +47,8 @@ impl Adapter {
 pub struct ProvidersClient {
     store: Arc<ProviderStore>,
     http: reqwest::Client,
+    /// The daemon's usage module (usage.md): told about every answer. None in tests that do not count.
+    usage: Option<Arc<dyn UsageSink>>,
 }
 
 impl ProvidersClient {
@@ -57,7 +60,14 @@ impl ProvidersClient {
                 .connect_timeout(Duration::from_secs(15))
                 .build()
                 .expect("reqwest client"),
+            usage: None,
         }
+    }
+
+    /// The usage module counts every answer that ends well (usage.md section 2).
+    pub fn with_usage(mut self, sink: Arc<dyn UsageSink>) -> Self {
+        self.usage = Some(sink);
+        self
     }
 
     fn endpoint(resolved: &ResolvedModel) -> String {
@@ -203,7 +213,11 @@ impl ProvidersClient {
         for ev in rest {
             reducer.feed(&ev, &deltas);
         }
-        reducer.finish()
+        let response = reducer.finish()?;
+        if let Some(sink) = &self.usage {
+            sink.counted(&resolved.provider.id, &resolved.model.id, kagent_core::model::current_source(), &response.usage);
+        }
+        Ok(response)
     }
 }
 
@@ -307,5 +321,98 @@ mod tests {
         assert!(r.is_err());
         let err = r.unwrap_err();
         assert!(format!("{err:#}").contains("failed"));
+    }
+
+    /// A server on a free local port that answers every request with `response` (a whole HTTP response) and counts them.
+    pub(crate) async fn serve(response: String) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = hits.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = listener.accept().await else { return };
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let response = response.clone();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 65536];
+                    let mut got = 0;
+                    // Read until the whole request (headers and the body of its Content-Length) is in.
+                    loop {
+                        let n = sock.read(&mut buf[got..]).await.unwrap_or(0);
+                        if n == 0 {
+                            break;
+                        }
+                        got += n;
+                        let text = String::from_utf8_lossy(&buf[..got]).to_string();
+                        if let Some(end) = text.find("\r\n\r\n") {
+                            let len = text[..end].to_ascii_lowercase().split("content-length:").nth(1).and_then(|r| r.lines().next()).and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0);
+                            if got >= end + 4 + len {
+                                break;
+                            }
+                        }
+                    }
+                    let _ = sock.write_all(response.as_bytes()).await;
+                    let _ = sock.shutdown().await;
+                });
+            }
+        });
+        (base, hits)
+    }
+
+    pub(crate) fn request_for(model_ref: &str) -> ModelRequest {
+        ModelRequest { model_ref: model_ref.into(), system: String::new(), messages: vec![Message::user("hi")], tools: vec![], options: Default::default() }
+    }
+
+    /// An OpenAI-style streamed answer with a usage chunk.
+    pub(crate) fn sse_answer(extra_headers: &str) -> String {
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5}}\n\ndata: [DONE]\n\n";
+        format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n{extra_headers}content-length: {}\r\nconnection: close\r\n\r\n{body}", body.len())
+    }
+
+    pub(crate) fn store_at(dir: &std::path::Path, base: &str) -> Arc<ProviderStore> {
+        let s = store_with_ollama(dir);
+        s.update("ollama", |p| {
+            p.api.base_url = base.to_string();
+            p.api.api_type = ApiType::OpenaiChatCompletions;
+        })
+        .unwrap();
+        s
+    }
+
+    #[derive(Default)]
+    struct Counted(std::sync::Mutex<Vec<(String, String, kagent_core::model::CallSource, u64, u64)>>);
+    impl UsageSink for Counted {
+        fn counted(&self, provider: &str, model: &str, source: kagent_core::model::CallSource, usage: &kagent_core::protocol::Usage) {
+            self.0.lock().unwrap().push((provider.into(), model.into(), source, usage.input_tokens, usage.output_tokens));
+        }
+    }
+
+    #[tokio::test]
+    async fn an_answer_that_ends_well_is_counted_with_its_source() {
+        let (base, _) = serve(sse_answer("")).await;
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(Counted::default());
+        let client = ProvidersClient::new(store_at(dir.path(), &base)).with_usage(sink.clone());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let r = kagent_core::model::CALL_SOURCE.scope(kagent_core::model::CallSource::Task, client.complete(request_for("ollama::m"), tx, CancellationToken::new())).await.unwrap();
+        assert_eq!(r.text, "hello");
+        assert_eq!(*sink.0.lock().unwrap(), vec![("ollama".to_string(), "m".to_string(), kagent_core::model::CallSource::Task, 12, 5)]);
+        let (tx, _rx) = mpsc::unbounded_channel();
+        client.complete(request_for("ollama::m"), tx, CancellationToken::new()).await.unwrap();
+        assert_eq!(sink.0.lock().unwrap()[1].2, kagent_core::model::CallSource::Other, "outside a turn the source is other");
+    }
+
+    #[tokio::test]
+    async fn a_failed_request_is_not_counted() {
+        let body = "{\"error\":{\"message\":\"bad\"}}";
+        let (base, _) = serve(format!("HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len())).await;
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(Counted::default());
+        let client = ProvidersClient::new(store_at(dir.path(), &base)).with_usage(sink.clone());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        assert!(client.complete(request_for("ollama::m"), tx, CancellationToken::new()).await.is_err());
+        assert!(sink.0.lock().unwrap().is_empty());
     }
 }

@@ -32,6 +32,8 @@ pub struct ScriptedModel {
     pub model_refs: Arc<Mutex<Vec<(String, Option<u64>)>>>,
     /// The reasoning level of every request, in order.
     pub levels: Arc<Mutex<Vec<Option<String>>>>,
+    /// Who each request was made for (`CALL_SOURCE` of the turn).
+    pub sources: Arc<Mutex<Vec<kagent_core::model::CallSource>>>,
 }
 
 impl ScriptedModel {
@@ -47,6 +49,7 @@ impl ScriptedModel {
             systems: Arc::new(Mutex::new(Vec::new())),
             model_refs: Arc::new(Mutex::new(Vec::new())),
             levels: Arc::new(Mutex::new(Vec::new())),
+            sources: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -63,6 +66,7 @@ impl ModelClient for ScriptedModel {
         self.systems.lock().unwrap().push(request.system.clone());
         self.model_refs.lock().unwrap().push((request.model_ref.clone(), request.options.max_output_tokens));
         self.levels.lock().unwrap().push(request.options.reasoning_level.clone());
+        self.sources.lock().unwrap().push(kagent_core::model::current_source());
         let reply = self.queue.lock().unwrap().remove(0).map_err(anyhow::Error::msg)?;
         let _ = deltas.send(ModelDelta::Text(request.system.clone()));
         Ok(reply)

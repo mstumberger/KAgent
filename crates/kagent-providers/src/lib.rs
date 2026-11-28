@@ -8,6 +8,7 @@ pub mod local;
 pub mod rules;
 pub mod sse;
 pub mod store;
+pub mod usage;
 
 pub use client::ProvidersClient;
 pub use config::{ApiType, ProviderEntry, Template};

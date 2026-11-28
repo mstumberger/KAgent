@@ -289,6 +289,9 @@ pub enum AgentEvent {
     /// The downloads of local models changed (local-models.md section 3): `pulls` is the
     /// list of `GET /api/local-models` (queued, pulling or failed rows), at most twice a second.
     LocalModelsChanged { pulls: serde_json::Value },
+    /// The limits of a provider changed level, or (at most every 30 s while answers keep coming) its counters did (usage.md section 4).
+    #[serde(rename_all = "camelCase")]
+    UsageChanged { provider: String },
     /// The screen watch changed state, or (at most every 5 s) its `looks` and `lastNote` (screen-watch.md
     /// section 4): `watch` is the watch as `GET /api/screen-watch` shows it, with its final state when it ended.
     ScreenWatchChanged { watch: serde_json::Value },
