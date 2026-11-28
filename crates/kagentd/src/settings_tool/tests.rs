@@ -150,6 +150,7 @@ const FREE_KEYS: &[&str] = &[
     "chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel", "liveVoice", "maxIterations", "options", "persona", "startWidget", "startup.greeting", "voice",
     "desktop", "watchers.quietHours", "watchers.spoken", "tasks.deliver", "tasks.timeoutMin", "tasks.maxConcurrent", "skills", "compaction", "memory", "search.engine", "subagents",
     "calendar.calendars", "calendar.defaultCalendar", "calendar.defaultDurationMin", "calendar.home", "calendar.travelMarginMin", "calendar.report",
+    "screenWatch.enabled", "screenWatch.defaultMinutes", "screenWatch.everySec",
 ];
 
 #[test]
@@ -172,6 +173,20 @@ fn every_key_is_protected_or_free() {
     for p in FREE_KEYS {
         assert!(keys::leaves(&view).iter().any(|k| under(k, p)), "{p} names no setting");
     }
+}
+
+#[tokio::test]
+async fn what_lets_a_frame_leave_the_machine_is_changed_on_the_screen_only() {
+    let h = host();
+    let t = tool(&h);
+    for key in ["screenWatch.cloudConfirm", "screenWatch.telegram"] {
+        let out = run(&t, json!({"action": "set", "changes": {key: true}})).await;
+        assert!(out.is_error && out.content.contains("changed on the screen only"), "{key}: {}", out.content);
+    }
+    assert!(!h.settings().screen_watch_config().cloud_confirm);
+    let free = run(&t, json!({"action": "set", "changes": {"screenWatch.everySec": 20}})).await;
+    assert!(!free.is_error, "{}", free.content);
+    assert_eq!(h.settings().screen_watch_config().every_sec, 20);
 }
 
 #[tokio::test]

@@ -12,7 +12,6 @@ mod rounded;
 mod tasks;
 mod todo_api;
 mod screen;
-#[allow(dead_code)] // wired by the tool and the API (the next commit)
 mod screen_watch;
 mod appwin;
 mod tray;
@@ -91,6 +90,8 @@ pub struct AppState {
     pub calendar: Arc<calendar::Calendar>,
     /// Recommended local models and their downloads (local-models.md).
     pub local_models: Arc<local_models::LocalModels>,
+    /// The screen watch (screen-watch.md): the one watch, its tool and its routes.
+    pub screen_watch: Arc<screen_watch::ScreenWatch>,
     pub skills: Arc<skills::SkillHub>,
     /// The memory store, behind the routes and the memory tools (memory.md).
     pub memory: Arc<memory::MemoryHub>,
@@ -247,6 +248,9 @@ async fn run() -> anyhow::Result<()> {
     // Recommended local models (local-models.md): the tool finds the module once it exists.
     let local_models_cell: local_models::tool::LocalModelsCell = Default::default();
     registry.register(Arc::new(local_models::tool::LocalModelsTool::new(local_models_cell.clone())));
+    // The screen watch (screen-watch.md): the tool finds the watch once it exists.
+    let screen_watch_cell: screen_watch::tool::WatchCell = Default::default();
+    registry.register(Arc::new(screen_watch::tool::ScreenWatchTool::new(screen_watch_cell.clone())));
     // Inline widgets (widgets.md): the fragments live under <data>/widgets.
     let widgets = Arc::new(widgets::Widgets::new(paths.data.clone()));
     registry.register(Arc::new(widgets::WidgetShow::new(widgets.clone())));
@@ -399,6 +403,11 @@ async fn run() -> anyhow::Result<()> {
     calendar::change::register_undo(&calendar, &services);
     let local_models = local_models::LocalModels::new(providers.clone(), settings_arc.clone(), events.clone());
     let _ = local_models_cell.set(local_models.clone());
+    let screen_watch = screen_watch::ScreenWatch::new(
+        Arc::new(screen_watch::env::RealEnv { providers: providers.clone(), settings: settings_arc.clone(), local_models: local_models.clone(), agent: agent.clone() }),
+        events.clone(),
+    );
+    let _ = screen_watch_cell.set(screen_watch.clone());
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,
@@ -410,6 +419,7 @@ async fn run() -> anyhow::Result<()> {
         bots,
         calendar,
         local_models,
+        screen_watch,
         skills: skills.clone(),
         memory,
         skill_sources,

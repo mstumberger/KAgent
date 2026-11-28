@@ -74,7 +74,7 @@ pub fn group_of(name: &str) -> &'static str {
         "package" | "measure" | "undo_change" | "list_changes" => "change",
         "audio_control" | "bluetooth_control" | "wifi" | "display" | "windows" | "notify" | "open" => "desktop",
         // `widget_show` (tools.md section 22) is registered by the daemon like `ui` and `sessions`.
-        "media" | "open_in_editor" | "projects" | "focus_context" | "clipboard" | "input" | "browser" | "ui" | "terminal" | "system_power" | "sessions" | "screen" | "message" | "widget_show" => "desktop",
+        "media" | "open_in_editor" | "projects" | "focus_context" | "clipboard" | "input" | "browser" | "ui" | "terminal" | "system_power" | "sessions" | "screen" | "screen_watch" | "message" | "widget_show" => "desktop",
         "security_report" | "list_alerts" => "security",
         "router_status" | "lan_devices" | "router_log" | "router_lists" | "traffic_top"
         | "router_block_ip" | "router_unblock_ip" => "router",

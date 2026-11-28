@@ -215,6 +215,8 @@ pub async fn stop_all(State(st): State<Arc<AppState>>) -> ApiResult<Response> {
     // Count tool process groups alive now; cancellation kills each group.
     let processes = kagent_core::tools::exec::running_process_groups();
     let cancelled = st.agent.stop_all().await;
+    // The screen watch is a running activity too (screen-watch.md section 4).
+    st.screen_watch.stop();
     Ok(ok_json(json!({"cancelledTurns": cancelled, "killedProcesses": processes})))
 }
 

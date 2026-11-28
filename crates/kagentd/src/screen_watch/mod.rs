@@ -6,9 +6,12 @@
 //! behind `Env`, so the tests run with a fake capture and a scripted model.
 
 pub mod capture;
+pub mod env;
+pub mod http;
 pub mod look;
 pub mod run;
 pub mod settings;
+pub mod tool;
 pub mod vision;
 
 #[cfg(test)]
@@ -51,6 +54,27 @@ pub enum State {
     Expired,
     Stopped,
     Failed,
+}
+
+impl Mode {
+    pub fn name(self) -> &'static str {
+        match self {
+            Mode::Once => "once",
+            Mode::Repeat => "repeat",
+        }
+    }
+}
+
+impl State {
+    pub fn name(self) -> &'static str {
+        match self {
+            State::Watching => "watching",
+            State::Met => "met",
+            State::Expired => "expired",
+            State::Stopped => "stopped",
+            State::Failed => "failed",
+        }
+    }
 }
 
 /// The one watch (screen-watch.md section 1).

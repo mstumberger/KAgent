@@ -125,27 +125,32 @@ impl Screen {
     /// OpenAI-compatible cloud model, else the first enabled Gemini flash model.
     fn vision_model(&self) -> Option<kagent_providers::store::ResolvedModel> {
         let s = self.settings.get()?.read().unwrap();
-        let explicit = s.extra.get("visionModel").and_then(Value::as_str).unwrap_or("").to_string();
-        let ok = |r: &kagent_providers::store::ResolvedModel| {
-            let good = r.provider.api.api_type == ApiType::OpenaiChatCompletions && !r.provider.api_key.is_empty() && !r.config.supports_live;
-            tracing::debug!("vision candidate {}::{}: api {:?}, key {}, live {} -> {}", r.provider.id, r.model.id, r.provider.api.api_type, !r.provider.api_key.is_empty(), r.config.supports_live, good);
-            good
-        };
-        for cand in [explicit, s.chat_model.clone(), s.fallback_model.clone()] {
-            if let Ok(r) = self.providers.resolve(&cand) {
-                if ok(&r) {
-                    return Some(r);
-                }
+        cloud_vision_model(&self.providers, &s)
+    }
+}
+
+/// The vision model that needs a key (an OpenAI-compatible cloud model): the same choice for the `screen`
+/// tool and for the cloud check of the screen watch.
+pub fn cloud_vision_model(providers: &kagent_providers::ProviderStore, s: &crate::settings::Settings) -> Option<kagent_providers::store::ResolvedModel> {
+    let explicit = s.extra.get("visionModel").and_then(Value::as_str).unwrap_or("").to_string();
+    let ok = |r: &kagent_providers::store::ResolvedModel| {
+        let good = r.provider.api.api_type == ApiType::OpenaiChatCompletions && !r.provider.api_key.is_empty() && !r.config.supports_live;
+        tracing::debug!("vision candidate {}::{}: api {:?}, key {}, live {} -> {}", r.provider.id, r.model.id, r.provider.api.api_type, !r.provider.api_key.is_empty(), r.config.supports_live, good);
+        good
+    };
+    for cand in [explicit, s.chat_model.clone(), s.fallback_model.clone()] {
+        if let Ok(r) = providers.resolve(&cand) {
+            if ok(&r) {
+                return Some(r);
             }
         }
-        drop(s);
-        self.providers
-            .enabled_models()
-            .into_iter()
-            // enabled_models() yields (provider id, model, config): build the model ref.
-            .filter(|(_, m, _)| m.id.contains("flash") && !m.id.contains("live") && !m.id.contains("tts") && !m.id.contains("image"))
-            .find_map(|(pid, m, _)| self.providers.resolve(&format!("{pid}::{}", m.id)).ok().filter(ok))
     }
+    providers
+        .enabled_models()
+        .into_iter()
+        // enabled_models() yields (provider id, model, config): build the model ref.
+        .filter(|(_, m, _)| m.id.contains("flash") && !m.id.contains("live") && !m.id.contains("tts") && !m.id.contains("image"))
+        .find_map(|(pid, m, _)| providers.resolve(&format!("{pid}::{}", m.id)).ok().filter(ok))
 }
 
 #[async_trait]
