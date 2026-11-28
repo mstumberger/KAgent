@@ -372,7 +372,10 @@ parameter, `listen=<marker>`:
   or types. The check runs on the 10 s watchdog tick of `live/mod.rs`
   (`listen_start::idle::expired`, pure). The status becomes `idle` with the detail "no speech
   for N minutes". A session the owner started by a click has no such limit.
-- The stop phrases and the chip end it as usual. The voice chip of the title bar and the
+- "Stop listening" (and "nehaj poslusati", "prenehaj poslusati") ends it without a model call: `live/mod.rs` hands the owner's
+  words to `listen_start::stop::hear`, only in the session started at login, keeping the last 48 characters so the phrase may
+  arrive in two pieces, and ignoring a negation ("don't stop listening"). The status is `idle` with the detail "stopped by
+  voice". The chip ("end") ends it too, as in any session. The voice chip of the title bar and the
   tray icon already show any running session (the green pulsing icon); nothing new is
   invented. The one addition: while the session was started at login the tray tooltip says
   "KAgent: listening (started at login)".
@@ -397,7 +400,8 @@ later session, a reconnect of the same one and a session started by a click neve
   does not burn the right one, an address-like string does nothing); `claim` only after a
   consume and only for 60 s; the login window from samples of `loginctl` (a fresh login,
   4 min 59 s, 5 min 1 s, midnight, `n/a`, empty, a session that starts after the clock);
-  the lock wait (starts when unlocked within 10 minutes, gives up after); the idle rule;
+  the lock wait (starts when unlocked within 10 minutes, gives up after); the idle rule; the stop phrase (table, negations, a
+  phrase in two pieces);
   the settings (defaults, ranges, protected keys in the key walk of the `settings` tool).
 - Web (`scripts/test-listen-web.py`, headless Chrome with a fake microphone): a page opened
   with a valid marker starts a session; one without, one with a used marker and one with an

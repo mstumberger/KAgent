@@ -108,6 +108,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     let mut greeting = login.as_ref().filter(|l| l.plan.greeting).map(|_| crate::listen_start::greeting_now(&st));
     let mut last_speech = std::time::Instant::now();
     let mut end_detail = String::new();
+    // What the owner said last, kept only to hear "stop listening" in the session started at login.
+    let mut said_tail = String::new();
     let _ = out.send(json!({"type": "session", "sessionId": session}));
 
     let (tool_tx, mut tool_rx) = mpsc::unbounded_channel::<Value>();
@@ -332,6 +334,12 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                     kagent_core::tools::message::owner_turn(&session);
                                 }
                                 st.calendar.hear(&t);
+                                if login.is_some() && crate::listen_start::stop::hear(&mut said_tail, &t) {
+                                    tracing::info!(session, "listen on start: 'stop listening' heard, the session ends");
+                                    end_detail = "stopped by voice".into();
+                                    let _ = up_tx.send(UpMsg::Close(None)).await;
+                                    break 'conn;
+                                }
                                 // "Stop watching" ends the screen watch without a model call (voice-control.md section 4).
                                 if st.screen_watch.hear(&t) {
                                     let _ = out.send(json!({"type": "status", "state": "live", "detail": "screen watch stopped"}));
