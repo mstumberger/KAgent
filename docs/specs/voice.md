@@ -270,3 +270,15 @@ seconds into the owner's only terminal (a running Claude Code session). `full` l
 - Tests: `confirm.rs` (asked once per session), `screen/live/tests.rs` (declared whatever the
   groups hold; one JPEG frame of 1024 and the answer; locked sends nothing; a call nobody
   registered keeps the vision path), `instruction.rs`; `scripts/test-live.py` scenario `look`.
+
+### Amendment 2026-11-28: screen watch (S48, `screen-watch.md` section 3)
+
+- A hit (and the end of a watch) reaches an open live session as a `[SAY]` text turn, the same frame as the morning report:
+  `live/mod.rs` registers the session's channel to Gemini for as long as it is open (`screen_watch::say`), and the message is spoken
+  without its `(goal: ...)` tail. The session still gets the full message (role assistant, `via: "watch"`). With no live session open the
+  notice is a desktop notification instead; `screenWatch.telegram` adds Telegram in both cases.
+- "Stop watching" said in a live session ends the watch without a model call: `live/mod.rs` hands each piece of the owner's words to
+  `ScreenWatch::hear`, which keeps the last 48 characters, so the phrase may arrive in two pieces ("stop", "watching"), and ignores a
+  negation ("don't stop watching"). The phrases: "stop watching", "stop the (screen) watch", "cancel the watch", "nehaj gledati",
+  "nehaj opazovati", "ustavi opazovanje", "prenehaj opazovati". It does nothing while no watch runs.
+- `screen_watch start` is an `always_ask` call, so from voice it is asked out loud in every mode (section 12).

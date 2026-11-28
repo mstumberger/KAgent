@@ -715,6 +715,43 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
 9. The owner: paste a screenshot of an error into a chat and ask what it says; by voice, "look at my
    screen, what is this dialog?"; say yes once and look again without being asked.
 
+## S48 Screen watch
+1. **[auto]** The loop (`screen_watch/tests/hits.rs`, a fake capture and a scripted vision model, paused time): a hit on the third look
+   ends a `once` watch with one message; `repeat` reports and not more often than every 30 s and ends with the time; the end says the
+   last note and the minutes; stop says nothing; low confidence needs a second look 2 s later, never skipped, and the second look's
+   note is the report; `cloudConfirm` sends exactly one frame per hit (none for a look that missed, none when off), a "no" from the
+   cloud model is not a hit, a failed cloud answer is not asked again.
+2. **[auto]** The guards (`tests/guards.rs`): a second start is refused with the running goal (also two at once); a closed window fails
+   the watch ("the window was closed"); five unreadable answers in a row fail it and a good answer resets the count; a model that does
+   not answer counts the same; an idle screen costs a model look in seven; a locked screen pauses it, counts no looks and the clock
+   runs on; a card on the screen stops a monitor watch from looking; slow looks double the interval and say so; a turn thinking on the
+   model makes it wait; limits of minutes, interval and goal; the 2 hour cap (120 looks at 60 s, then expiry); the defaults come from
+   the settings; refused switched off, without a local model, or on KAgent itself.
+3. **[auto]** `look` (`look/tests.rs`): the 1.5 % edge, the limit of 6, a forced look, the JPEG of at most 1024; the prompt; the JSON
+   reply with a fence, words around it, strings and percents; every malformed reply is unreadable; a missing confidence needs the
+   second look; a note is 12 words.
+4. **[auto]** The model and "local" (`tests/models.rs`, `vision/tests.rs`, `local_models/vision.rs`): the refusal names Settings -> Local
+   models and the recommendation; an installed vision model of the list is used; the `visionModel` setting wins when its provider is
+   local and is never used when it is a cloud one; Ollama at a public address is not local; the address table of `is_local_url`.
+5. **[auto]** Telling (`tell/tests.rs`, `tests/telling.rs`, `say.rs`): a hit is a session message `via: "watch"` and a desktop notification;
+   spoken as `[SAY]` (without the goal) when a live session is open and then no notification; Telegram with or without the voice; the
+   restart note is a session message only, told once; the stop phrases in English and Slovenian with their negations, in pieces; the kill
+   switch (and the tray and KRunner) ends the watch; frames never reach disk: the home is listed before and after a run with the real
+   capture function, only the marker exists meanwhile and it holds the goal.
+6. **[auto]** Tool and settings (`tests/tool.rs`, `screen_watch/settings.rs`, `settings_tool/tests.rs`): the summary, `always_ask` and what
+   from voice asks in every mode, status and stop ask nothing, the calls through the tool, refusal and bad input; the defaults, the
+   ranges, a typo; `screenWatch.cloudConfirm` and `.telegram` are refused to the `settings` tool.
+7. **[auto, gated]** `KAGENT_IT=1 cargo test the_prompt_against_the_real_local_model`: the look's prompt against the real `gemma3:4b` in
+   the local Ollama on two generated pictures (a green circle that meets the goal, a blue square that does not): the reply parses as the
+   JSON shape; the raw replies and the time of a look are printed.
+8. **[auto]** `scripts/test-screen-watch-web.py` (62 checks): the chip from the daemon and from the event, its minutes, title and
+   popover, the countdown, paused, every end state, Stop, every view, the widget, the card and each save, the refusal and its link; dark
+   and light at 1200x820 and 340x460; screenshots in `/tmp/kagent-s48-shots/`.
+9. The owner: with `gemma3:4b` set for vision, say "tell me when this build finishes" and run `cargo build`; the chip shows, the minutes
+   count down, and when the build ends the widget says so; "stop watching" ends one. Not run by the agent: the real capture of a window
+   (`xwd`) and of a monitor (`spectacle`), the real notification, the Telegram message, the plasmoid's eye, and `scripts/test-live.py`
+   (it needs port 7878): a live check that a hit is spoken as `[SAY]` and that `screen_watch start` is asked out loud belongs there.
+
 ## S47 Recommended local models
 1. **[auto]** The probe (`kagent-core platform::gpu`): `nvidia-smi` output of one card (recorded on the owner's RTX 3060), two
    cards (the larger wins), a card that says `N/A`, a name with a comma, garbage; the amdgpu sysfs files (bytes, the largest AMD

@@ -120,3 +120,19 @@ web/src/settings/sections/Desktop.tsx     the card
 - Tool: the summary; refused without a local vision model; asked from voice in `full`.
 - Web, headless: the chip appears, counts down, its popover stops the watch.
 - With the owner: "tell me when this build finishes" on a real `cargo build`, by voice.
+
+## 8. As built (2026-11-28)
+
+The decisions are in `IMPLEMENTATION.md` section E, session 2026-11-28 (S48). What differs from, or is added to, the text above:
+
+- `Watch` also has `minutes` (what was asked for, for the end line), `paused` (the screen is locked) and `reason` (why it failed).
+  `GET /api/screen-watch/model` is new: the card names the model there.
+- The files are as listed plus `env.rs` (the daemon's side), `run.rs` (the loop), `tell.rs` and `say.rs` (the session, the voice, the
+  notice, the stop phrases), `capture.rs` and `vision.rs`; `local_models/vision.rs` picks the installed vision model.
+- A look takes the frame as a PNG (`xwd -id` through a pipe for a window, `spectacle` into the runtime folder for a monitor, deleted
+  at once) and makes the 64x36 grey thumbnail and the JPEG of 1024 in memory. Nothing else is written.
+- The vision call is Ollama's `/api/chat` with `format: "json"` (an OpenAI-compatible local server gets `/chat/completions`).
+- A watch that a restart ended is told to its own session at the daemon's next start (a message `via: "watch"`), not to the next
+  session that opens.
+- `screen_watch start` is `always_ask` as the tool table says; a stored "always allow" rule never covers it, so "rememberable for
+  the session" of the table is not built (open question in the log).
