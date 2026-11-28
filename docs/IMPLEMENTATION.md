@@ -3240,6 +3240,55 @@ One commit per item on branch `v0.0.3`. Decisions:
 - Counts: `cargo test --workspace` 962 -> 974 (3 ignored, as before); with `KAGENT_IT=1` the same.
   Web: screen-watch 62, local-models 58, vision 117, work 233, sidebar 168, picker 107, calendar 60.
 
+### Session 2026-11-28 (v0.0.3: the agent loop, `docs/specs/agent-loop.md`)
+
+- **A** The table is `crates/kagentd/src/prompt/rules.rs` (21 rows: 5 enforced, 2 new checks, 14
+  guidance); `every_rule_sentence_has_a_row` builds the chat prompt and the three voice instructions
+  and splits them into sentences (quote-aware), so a new "never", "always", "must not" or "do not ...
+  without" fails the build until it has a row. Enforced sentences were shortened (destructive: "are
+  always asked on a card first"; memory secrets; messages to people; retries; listening). The two
+  word-for-word voice sentences are unchanged and pinned by a test. "Always name the target `window`"
+  is guidance on purpose: Wayland has no window activation and `key` and `mouse` use the focus.
+- **A noise check** (`live/noise.rs`): a changing call after only a transcript that is surely not
+  Slovenian or English is asked out loud (`needs_confirmation`, in every mode). `not_sl_en` is
+  conservative: more than half the letters outside Latin, or foreign words that are at least half of
+  the words and more than the common Slovenian and English ones; one word never counts. The turn's
+  words are `Heard` (what `user_buf` holds, cleared at `turnComplete`). A read-only call, the `screen`
+  look and a turn with no transcript are never held. The yes may be in the same buffer as the
+  fragment: an answered call runs (`step_saying` checks the answer first).
+- **The `message` tool** did not enforce "send only after a yes": it now does. The state is per
+  session in the tool (`owner_turn`, typed text and the count of owner turns). `Agent::start` counts a
+  turn for Text, Voice and Telegram input (also a queued one); the live session counts every piece of
+  the owner's transcript or typed text. `send` with text is refused unless that exact text was typed
+  first. An outside agent (MCP) has no owner turn, so it cannot send a typed message.
+- **B** `ToolOutput` has `kind` (`ResultKind`) next to `is_error`; `ToolCallStatus` gained `NotDone`,
+  `Shown`, `Partial` (additions only). `NotDone` reads as a failure for the model (`is_error`), `Shown`
+  and `Partial` do not (`ToolCallStatus::is_failure`). A stored message has no status, so the web card
+  tells the kinds by their fixed beginnings (`web/src/components/toolResult.ts`). The review (90
+  tools) found 13 to fix, all small: `ui show` (now `shown`), `agent_stop` ("stopped" was a request),
+  a failed `package search` read as "no packages found", seven lists or texts cut without a note, two
+  refusals without a next step, `message send`. `util::more_note` and `util::cut_with_note` give every
+  cut the same words. The voice copy of a result (6000 characters) says what it cut.
+  The search_files test pinned "1 matches" for a list cut at 1 of 2: that was the defect, the test
+  now asserts the count and the note.
+- **C** `agent/notes.rs`: the loop calls `push_notes` before every model request (file changes from
+  `tools/seen.rs`, the Brain from `config.model_ref`, the todo list from the session meta, then the
+  drain). A note is one stored user message with `via: note`; `Message::is_user_turn` is false for it
+  so no cut of a compaction or the tool budget starts at a note, and `without_notes` keeps it out of
+  a summary. Settings: `apply` (the screen) notes, `apply_quiet` (the `settings` tool) does not.
+  Only sessions whose turn runs are noted (`Agent::note_running`): a setting changed while nothing
+  runs is not told to a later turn. The edit tools refuse a file whose mtime changed since the session
+  read or wrote it (`not_done`).
+- **Alert session** (`watch/investigate.rs`): the starting-task sentence and the chat prompt rule
+  are consistent with the `owner` note and all three stay: the prompt rule and the sentence cover a
+  message that arrives between turns (no turn runs, so no note), the note covers a message that
+  arrives inside the turn. The sentence in the investigation message is the most redundant of the
+  three (the prompt rule says the same) and could go; it is cheap and was left.
+- Counts: `cargo test --workspace` 974 -> 1008 (3 ignored, as before); `KAGENT_IT=1` the same, the
+  real Ollama (gemma3:4b) answers the tool round trip and the screen-watch prompt. `scripts/test-live.py`
+  42 -> 44 (two checks for the noise rule). `scripts/test-loop-web.py` is new (21). Web: screen-watch 62,
+  local-models 58, vision 117, work 233, sidebar 168, picker 107, calendar 60.
+
 ## F. Progress
 
 - [x] S0 compile drafts
