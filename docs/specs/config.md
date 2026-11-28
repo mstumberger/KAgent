@@ -18,6 +18,7 @@
 | heartbeat | `<data>/heartbeat` (written every 60 s) | |
 | sentinel | `<data>/sentinel/{honeytokens.json, baseline.json}` | |
 | net | `<data>/net.sqlite` | |
+| usage | `<data>/usage.sqlite` | the counters of the providers (section 15) |
 | agent browser profile | `<data>/browser-profile/` | |
 | screenshots | `<data>/screenshots/` | |
 | logs | `<data>/logs/kagentd.log` (daily rotation, 7 files) | `RUST_LOG` |
@@ -436,3 +437,24 @@ link-local address, or `localhost`; a host name that needs a lookup counts as no
 
 `<data>/screen-watch.json` exists only while a watch runs: the watch as JSON (id, session, goal, target, window title, times, last
 note). It holds no image and is deleted when the watch ends.
+
+## 15. usage.sqlite and settings.usage (v0.0.3)
+
+Spec: `usage.md`.
+
+`<data>/usage.sqlite` (WAL), one table, created at the first start:
+
+```sql
+usage(win TEXT, start TEXT, provider TEXT, model TEXT, source TEXT, requests INTEGER, input_tokens INTEGER, output_tokens INTEGER,
+      PRIMARY KEY(win, start, provider, model, source)) WITHOUT ROWID
+```
+
+`win` is `minute`, `day` or `month`; `start` is the window in the machine's local time (`YYYY-MM-DDTHH:MM`, `YYYY-MM-DD`,
+`YYYY-MM`); `source` is `chat`, `voice`, `subagent`, `task` or `other`. Each answer that ended well adds one request and its
+tokens to the three windows it falls in. Rows older than 13 months are deleted at start. When the file cannot be opened the
+counters are kept in memory and a warning is logged.
+
+`settings.usage` (a typed section, free for the `settings` tool): `knownLimits`, a map from a provider id to a list of
+`{window, unit, total}` (`window`: `minute`, `day`, `month`; `unit`: `requests`, `tokens`; `total`: 1 to 1000000000000; one
+limit for each window and unit of a provider). Unknown keys and values are refused (`deny_unknown_fields`). KAgent counts its own
+requests and tokens of the current window against each and shows them with `source: "kagent"`. Never prefilled.

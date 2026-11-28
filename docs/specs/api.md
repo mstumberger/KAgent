@@ -444,3 +444,32 @@ end with its final `state`) and, while it watches, at most every 5 s with `looks
 neither hides a watch nor leaves a chip behind. `POST /api/stop-all` (the kill switch), the tray's Stop and KRunner's `stop` end the
 watch too; the tool and these routes are the only ways to start or end one. The watch is in memory only; the daemon keeps a file
 `<data>/screen-watch.json` (the watch as JSON: goal and session, never a frame) while one runs, so that a restart can tell its session.
+
+## 11. Usage and limits (v0.0.3)
+
+Spec: `usage.md`. Same transport, auth and error shape as section 3.
+
+| Method path | Request | Response |
+|---|---|---|
+| GET `/api/usage` | | `{providers: [{id, name, local, limits: [Limit], tightest: Limit \| null, today: Totals, month: Totals, models: [{model, today: Totals, month: Totals}], knownLimits: [{window, unit, total}], checkedAt: string \| null}]}` for every provider, in their order |
+
+`Limit` is `{id, name, used: number \| null, total: number \| null, unit: "requests"\|"tokens", resetsAt: string \| null, source:
+"provider"\|"kagent", level: "fine"\|"close"\|"nearlyOut"\|"out"}`; `Totals` is `{requests, inputTokens, outputTokens}`.
+`checkedAt` is when the last answer that carried a limit was seen. A local provider has `limits: []`. No key, token or header value
+is in any answer.
+
+Changes to earlier answers (additions only):
+
+- `GET /api/providers` rows gain `local` (the daemon's one rule for a local provider, `kagent_providers::is_local_url`) and
+  `tightestLimit` (the tightest `Limit` or `null`).
+- `GET /api/models` rows (`chat`, `fast`, `vision`, `live`) gain `local` and `free` (the model id ends in `-free`), which the
+  model chooser (`chooser.md`) reads.
+- The known limits are saved with `PUT /api/settings {"usage": {"knownLimits": {"<provider>": [{"window": "minute"|"day"|"month",
+  "unit": "requests"|"tokens", "total": 1500}]}}}` (`config.md` section 15).
+
+```json
+{"type":"usageChanged","provider":"gemini"}
+```
+
+`usageChanged` is sent at once when a limit of the provider appeared, went away or changed level, and otherwise at most every 30
+seconds per provider while answers keep coming (the counters moved). A window reads `GET /api/usage` again.

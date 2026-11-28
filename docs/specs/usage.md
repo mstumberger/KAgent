@@ -40,7 +40,8 @@ inclusive), `nearlyOut` (over 90 %) or `out` (100 %, or a 429 that names a limit
 **A missing or malformed header yields no limit, never a wrong one**: a limit needs a limit and a remaining value that are
 whole numbers with `0 < limit` and `remaining <= limit`; a reset that is present and cannot be read drops that family.
 A limit carries when it was seen; it is dropped when its reset has passed, or, with no reset, 10 minutes after it was seen
-without a newer answer replacing it. A newer answer replaces the limit with the same `id`.
+without a newer answer replacing it. A newer answer replaces the limit with the same `id`; an answer that says no limit leaves the others alone, and a successful
+answer does not clear a limit that came from an error (it ends at its reset, or after ten minutes).
 
 ### 3.1 Headers (`kagent-providers/src/usage/headers.rs`)
 
@@ -88,7 +89,7 @@ away, and otherwise at most every 30 seconds per provider while responses keep a
 - `GET /api/usage` -> `{providers: [{id, name, local, limits: [Limit], tightest: Limit | null, today: Totals, month: Totals,
   models: [{model, today: Totals, month: Totals}], knownLimits: [...], checkedAt: string | null}]}`, with `Totals =
   {requests, inputTokens, outputTokens}`. Every provider, also those without a limit. `checkedAt` is when the last answer
-  was seen. No key, no token, no header value other than the numbers above is in any answer (tested with a key in the store).
+  that carried a limit was seen. No key, no token, no header value other than the numbers above is in any answer (tested with a key in the store).
 - `GET /api/providers` rows gain `local` and `tightestLimit` (the tightest limit or null).
 - The known limits are saved with `PUT /api/settings {usage: {knownLimits: {<provider>: [...]}}}`.
 

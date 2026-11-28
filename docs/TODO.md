@@ -80,6 +80,7 @@ first three are done first.
   provider, a Usage block on its card). From what each provider reports on its
   answers and its quota endpoint where it has one, plus KAgent's own count; a limit
   that is out skips to the fallback, and unattended work respects it.
+  Built: counters per provider and model (`usage.sqlite`); limits from rate-limit headers (Anthropic, OpenAI style) and 429 bodies (Gemini, OpenAI, Anthropic) and the owner's known limits; the ring on the picker and per provider in the chooser, the card, a bar per provider row, the Usage block, the 90 % line, the tool `usage`. Not built: quota endpoints, skipping to the fallback, the reserve for unattended work.
 - [ ] Import from other agents: a guide that scans Claude Code, ZCode and Copilot for
   conversations (grouped by folder, which become projects), skills, commands,
   instruction files and MCP servers; imported conversations can be continued; a
@@ -91,6 +92,7 @@ first three are done first.
   provider; a Usage page with reports; OpenCode Zen with fetched models and private
   data held back from free models; Antigravity as a third coding agent through its
   official CLI.
+  Built: the model chooser (providers first, search, chips, Recent, keyboard) in the composer's menu, the widget sheet, the Defaults card and the subagent profile form (the task form has no model field). Not built: routes and rotation, named credentials, the Usage page, OpenCode Zen, Antigravity.
 - [ ] The shell: a router with back and forward (buttons, Alt+arrows, the mouse's side
   buttons); every page checked and fixed at five sizes up to 2560 px, with one set of
   layout rules and parts; conversations can be renamed, moved to a project, archived
