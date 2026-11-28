@@ -410,3 +410,24 @@ already existed is only switched on. Nothing is made the Brain or anything else.
 
 `localModelsChanged` carries the whole `pulls` list: at every change of state, and while a download runs at most twice a second.
 A window reads `GET /api/local-models` again when a pull leaves the list (the installed models changed).
+
+## 10. Screen watch (S48)
+
+Spec: `screen-watch.md`. Same transport, auth and error shape as section 3.
+
+| Method path | Request | Response |
+|---|---|---|
+| GET `/api/screen-watch` | | The running watch (`screen-watch.md` section 1, plus `minutes`, `paused`, and `reason` once it failed), or `null` |
+| DELETE `/api/screen-watch` | | 200 the watch as it ended (`state: "stopped"`); 404 "no screen watch is running" |
+| GET `/api/screen-watch/model` | | `{model, server, refusal}`: the local vision model a watch would use and where it runs, or `model: null` and the refusal that names Settings -> Local models (the card of the settings page reads it) |
+
+```json
+{"type":"screenWatchChanged","watch":{"id":"w_1a2b","state":"watching","looks":42,"lastNote":"still compiling (312/480)"}}
+```
+
+`screenWatchChanged` carries the whole watch: at every change of state (the start, paused or resumed, the interval doubled, the
+end with its final `state`) and, while it watches, at most every 5 s with `looks` and `lastNote`. A watch is over for a window when
+`state` is not `watching`; a window reads `GET /api/screen-watch` at its start and every 30 s while a chip shows, so a missed event
+neither hides a watch nor leaves a chip behind. `POST /api/stop-all` (the kill switch), the tray's Stop and KRunner's `stop` end the
+watch too; the tool and these routes are the only ways to start or end one. The watch is in memory only; the daemon keeps a file
+`<data>/screen-watch.json` (the watch as JSON: goal and session, never a frame) while one runs, so that a restart can tell its session.

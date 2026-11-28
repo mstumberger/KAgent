@@ -949,6 +949,58 @@ Decisions the spec did not settle:
   Chrome of a web suite is running at the same time (port 9333): run the web suites and `cargo test`
   one after the other.
 
+### Session 2026-11-28 (S48: screen watch, v0.0.2 item 9)
+
+Built: `specs/screen-watch.md` sections 1 to 7, in five commits on `v0.0.2` (the watch and its looks, the tool with the settings and
+the routes, telling the owner, the chip and the card, the docs). 962 workspace tests with `KAGENT_IT=1` (886 before, 76 new, the gated model test among them). `tsc` clean, `npm run lint` with only its four old
+warnings, `scripts/test-screen-watch-web.py` 62/62 (dark and light, 1200x820 and 340x460); local models 58, vision 109, work 201,
+sidebar 162, picker 103 and calendar 60 unchanged, all run on a build of the current tree (`KAGENT_DIST`). No automatic test takes a
+real screenshot or calls a real model; the one gated test (`KAGENT_IT=1`) calls the local `gemma3:4b` (section below).
+Decisions the spec did not settle:
+- **"Local"** is one function, `screen_watch::vision::is_local_url(base_url)`: the provider's base URL host is a loopback, private
+  (10/8, 172.16/12, 192.168/16, fc00::/7) or link-local IP literal, or `localhost`. A host name that needs a lookup (`box.lan`,
+  `ollama.com`) is NOT local (nothing resolves names here, and a frame is never sent to a name nobody checked); the API type does not
+  decide. The model of the `visionModel` setting is used only when its provider passes; else the recommended installed vision model of
+  the shipped list (then the largest installed one) on the Ollama provider's address, which must pass too. Cloud confirm uses the
+  `screen` tool's cloud choice (`screen::cloud_vision_model`) and gives up when that provider is local.
+- **Time** is `tokio::time::Instant` inside the loop (tests pause the clock: a 2 hour watch runs in milliseconds); `until` is the wall
+  clock at the start plus the minutes, for display.
+- **A look counts** every frame taken, skipped or not; a skip keeps the last note; a locked screen or a waiting card counts none.
+  Changed pixel: a grey step of 16 of 255 on the 64x36 thumbnail (encoder jitter is not a change). The second look of a low confidence
+  hit is never skipped. A reply without `confidence` is 0.5 (the second look decides); a percent (85 or "85%") is read as 0.85; a note is cut
+  to 12 words. Failed captures and model errors count with the unreadable answers towards the five in a row.
+- **Cloud confirm** sends the frame of the hit once; a "no" is not a hit (the note says so); a failed or unreadable cloud answer is not
+  asked again and the local verdict stands (so at most one frame per hit leaves the machine, even offline).
+- **Frames and disk.** A window is read with `xwd -id ... -silent` through a pipe and turned into a PNG in memory (`capture.rs`
+  parses 24 and 32 bit TrueColor dumps); a monitor needs `spectacle -o`, which can only write a file: it is made in `$XDG_RUNTIME_DIR`
+  (memory, 0700) and deleted before the call returns. `KAGENT_FAKE_SCREENSHOT` stands in for both, read from its path without a copy;
+  `KAGENT_FAKE_WINDOW="<id> <title>"` is a new test seam for the active window. The only file a watch writes is `<data>/screen-watch.json`
+  (goal, session, times; no image), deleted when it ends, so that a restart can say it ended the watch.
+- **The restart note** goes to the session that asked for the watch, as a message `via: "watch"`, when the daemon starts (not "at the
+  next session start": there is no such event for a text session). `Via::Watch` is new in `kagent-core`.
+- **Where a hit is spoken.** The live session of the watch's session, else any open live session (one owner, one machine); the text is
+  spoken without its "(goal: ...)" tail. Registration is `screen_watch::say` (a map like `screen::live`'s), the one line in `live/mod.rs`.
+  A spoken hit still leaves the full message in the session (the transcript of the voice adds its own line).
+- **Telegram** is sent in addition to the voice or the desktop notice when `screenWatch.telegram` is on. `screenWatch.telegram` is a
+  protected key too (the spec names only `cloudConfirm`): it sends words about the screen off the machine.
+- **Tool.** `start` is `always_ask` (as the table says), so a stored rule never covers it; "rememberable for the session" of the
+  same row contradicts that and is not built. The summary names the active window by a blocking `xdotool` call at assessment.
+  Starting while the active window is KAgent itself is refused (its class contains `kagent`): say "the monitor", or click the other
+  window first. `stop` and `status` use `as_read_only`.
+- **API.** `GET /api/screen-watch/model` is new (the card names the model). `DELETE` answers 200 with the watch as it ended, 404 when
+  none runs. Routes are thin; the logic is tested through `ScreenWatch` (no test builds an `AppState`, none ever did).
+- **A turn on the same model.** The watch waits (polling each second, the clock running) while any turn runs and the chat or fast model is
+  the watch's model (same server and id). Another model's turn does not stop it.
+- **Web.** `picker_web_lib.py` gained the watch routes (`reset(watch=, watch_model=)`, `/__watch`, `watch()`); the chip reads only the
+  store that the daemon fills (the event, `GET` at the start and every 30 s while it shows), has no close button, and shows in every view
+  and in the widget. The Plasma widget (`main.qml`) polls `/api/screen-watch` with the alerts and shows an eye with the minutes and in its
+  tooltip; QML has no linter here and was not run.
+- Not verified: a real `xwd` or `spectacle` capture (never the owner's screen), a real notification and Telegram message, the plasmoid, the
+  voice path (`[SAY]` into a real Gemini session, the spoken question for `start`: `scripts/test-live.py` needs port 7878 and was not run),
+  a hit on a real `cargo build` (the owner's check, section G).
+- Seen, not changed: `scripts/test-live.py` still has no check for screen watch; `Screen::capture` keeps its screenshots under `<data>/screenshots`
+  (S46: the `screen` tool's own files, outside this stage).
+
 ### Session 2026-11-28 (S46: images in chat and "look at my screen", v0.0.2 item 7)
 
 Built: `specs/vision.md` sections 1 to 4, in six commits on `v0.0.2` (the store and routes, the
@@ -3182,6 +3234,7 @@ v0.0.2
 - [x] S45 Google Calendar and the morning report (`specs/calendar.md`; items 1 to 8 automatic against a fake Google, item 9 is the owner's with a real account; section E, 2026-11-27 night)
 - [x] S46 images in chat and "look at my screen" (`specs/vision.md`; the automatic items pass, `test-live.py` has the checks and was not run, the owner's checks are left; section E, 2026-11-28)
 - [x] S47 recommended local models (`specs/local-models.md`; items 1 to 5 automatic, item 6 is the owner's, with a real Ollama; section E, 2026-11-28)
+- [x] S48 screen watch (`specs/screen-watch.md`; items 1 to 8 automatic with the gated real-model test, item 9 is the owner's, by voice on a real build; section E, 2026-11-28)
 
 Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
@@ -3213,6 +3266,7 @@ Phase 6 (planned 2026-11-27; S40 and S41 done)
 | S35 | Claude Code installed and logged in as in a terminal (`claude --version` answers). Once: Settings -> Coding agents -> Test (it starts one short job and uses a little of the subscription). tmux is not needed |
 | S36 | install Codex (`codex` on PATH; KAgent never installs it) and log in; Settings -> Coding agents -> Test |
 | S37 | Konsole, for "Open in a terminal" |
+| S48 | after the release rebuild and restart, and `npm run build` in `web/`: Settings -> Desktop and apps -> Screen watch names `gemma3:4b` (S47 first); say "tell me when this build finishes" and run `cargo build` in a terminal: the chip shows, then the notice; "stop watching" ends one. Needs `xdotool` and `xwd` (x11-apps) for a window, `spectacle` for the monitor; the Plasma widget needs a reload (`plasmashell --replace`) for its eye. Also `python3 scripts/test-live.py` once with the daemon stopped |
 | S47 | after the release rebuild and restart, and `npm run build` in `web/`: Settings -> Local models; press Download on Gemma 3 4B (the model of screen watch; about 3 GB, Ollama must run), then "Use for vision". KAgent never installs Ollama. The sizes and memory numbers of `config/local-models.json` are estimates: compare them with `ollama show <id>` once |
 | S46 | after the release rebuild and restart, and `npm run build` in `web/`: paste a screenshot of an error into a chat and ask what it says (with a Brain that has "Reads images", or a vision model set in Settings -> Models); by voice in `live` or `auto`: "look at my screen, what is this dialog?" and say yes to the question; then `python3 scripts/test-live.py` once with the daemon stopped (it needs port 7878) |
 | S45 | console.cloud.google.com: a project; enable "Google Calendar API"; OAuth consent screen (External, your address as a test user, then "Publish app", else Google expires the token after 7 days); Credentials, OAuth client ID, Desktop app; paste the client id and secret into Settings -> Calendar, Save client, Connect |

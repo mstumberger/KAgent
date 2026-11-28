@@ -410,3 +410,21 @@ calls tools reliably. `engine` is `ollama` (downloadable) or `whisper` (listed o
 and memory numbers are hand-kept estimates, checked against Ollama's library when the list is updated with a
 release. No new key in `settings.json`: the page saves `chatModel`, `fallbackModel` and `visionModel`, which
 exist.
+
+## 14. settings.screenWatch (S48)
+
+```json
+"screenWatch": {"enabled": true, "cloudConfirm": false, "telegram": false, "defaultMinutes": 20, "everySec": 10}
+```
+
+Typed section (`screen_watch/settings.rs`, `deny_unknown_fields`, a typo is refused with the suggestion like the other sections).
+`enabled`: off refuses `screen_watch start` (a running watch goes on). `cloudConfirm`: a hit is confirmed by the cloud vision
+model of the `screen` tool with the one frame of the hit before it is reported; never a model on this machine or network.
+`telegram`: a hit and the end of a watch also go to the paired chat. `defaultMinutes` 1..=120 and `everySec` 5..=60 are what a `start`
+without them gets; out of range makes the file invalid. Protected keys of the `settings` tool: `screenWatch.cloudConfirm` and
+`screenWatch.telegram` (they let a frame, or words about it, leave the machine); the other three are free. "Local" is decided by
+`screen_watch::vision::is_local_url`: the provider's base URL is a loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7) or
+link-local address, or `localhost`; a host name that needs a lookup counts as not local.
+
+`<data>/screen-watch.json` exists only while a watch runs: the watch as JSON (id, session, goal, target, window title, times, last
+note). It holds no image and is deleted when the watch ends.

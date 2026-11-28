@@ -265,3 +265,16 @@ replaces the pulls, so the bars move without a request.
   the current tree): each chip, the badge and its order, the 4 GB and no-card and no-Ollama states, a download with progress,
   Cancel, a queued and a failed row with Retry, "Use for vision" and "Use as fallback", Remove with its confirmation, dark and
   light at 1200x820 and 700x500, no console error; screenshots in `/tmp/kagent-s47-shots/`.
+
+## 14. The Screen watch card (S48)
+
+A card on Desktop and apps, after "Project folders" (`settings/screen-watch/Card.tsx`, imported by `sections/Desktop.tsx`). Rows: "Allow
+screen watch" (`screenWatch.enabled`), "Model" (from `GET /api/screen-watch/model`: the model id in mono and where it runs, or the
+refusal in red with a button "Open Local models"), "Default length" (a select, 5 minutes to 2 hours), "Look every" (a select, 5 to
+60 seconds), "Confirm a hit with the cloud model" (`cloudConfirm`, with the words "one frame goes to your cloud vision model") and
+"Also tell me on Telegram". Each control saves on change with `PUT /api/settings {"screenWatch": {...}}`; a missing field reads as its
+default. The chip is `components/WatchChip.tsx` (`watch.css`): see `screen-watch.md` section 4. Verified by
+`scripts/test-screen-watch-web.py` (62 checks, a mocked API on `picker_web_lib.py`, `KAGENT_DIST` for a build of the current tree):
+the chip from the daemon at load and from the event, the countdown, the popover and its updates, paused, each end state, Stop, every
+view, the widget, the card in both themes at 1200x820 and 340x460, each save, the refusal and its link; screenshots in
+`/tmp/kagent-s48-shots/`.

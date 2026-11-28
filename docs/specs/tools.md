@@ -571,3 +571,16 @@ The permission rules are those of `voice-control.md` section 4: `add` and `updat
 
 Registered by the daemon like `calendar_events` (it finds the module once it exists) and listed in
 `group_of` with `settings`.
+
+## 28. Screen watch (group `desktop`; S48)
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `screen_watch` `start` | MUT, `always_ask`, side effect none, risk medium | `{action: "start", goal: string (<= 200), minutes?: 1..120 (default `screenWatch.defaultMinutes`), everySec?: 5..60 (default `screenWatch.everySec`), mode?: "once"\|"repeat", target?: "window"\|"monitor"}` | Starts the one watch (`screen-watch.md` sections 1 and 2). Summary: `watch "<title of the active window>" for <n> minutes: <goal>`, or `watch the monitor for ...`. It asks every time, in every permission mode, and from voice it is asked out loud like any `always_ask` call (`voice-control.md` section 4); no stored rule satisfies it |
+| `screen_watch` `status` | RO | `{action: "status"}` | The running watch in words (what it looks at, until when, the interval, looks so far, the last note, paused), else how the last one ended, else "no screen watch" |
+| `screen_watch` `stop` | RO-equivalent (`as_read_only`) | `{action: "stop"}` | Ends it as `stopped`; "no screen watch is running" when none runs. The daemon also catches "stop watching" said in a live session |
+
+Refusals are errors that say what to do: a second `start` names the running goal; no local vision model names Settings ->
+Local models and the model it recommends; `screenWatch.enabled` off names the card; a goal over 200 characters, minutes outside
+1..120 or `everySec` outside 5..60; an active window that is KAgent itself ("click the window to watch first, or use target
+monitor"). Registered by the daemon like `local_models` (a cell the watch fills); `group_of` maps it to `desktop`.
