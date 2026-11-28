@@ -5,12 +5,15 @@ pub mod http;
 pub mod limits;
 pub mod settings;
 pub mod store;
+pub mod tool;
 mod view;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_limits;
+#[cfg(test)]
+mod tests_tool;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
