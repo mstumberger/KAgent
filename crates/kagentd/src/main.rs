@@ -256,6 +256,8 @@ async fn run() -> anyhow::Result<()> {
     registry.register(Arc::new(screen::Screen::new(providers.clone(), settings_cell.clone(), &paths.data)));
     // The web tools (web.md): they read settings.search from the same cell.
     let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config, &paths.data, events.clone()));
+    // A reader browser left by a daemon that crashed holds the profile: end it before anything is read (web.md section 8).
+    web::reader::sweep::at_start(&paths.data).await;
     registry.register(web.fetch_tool());
     registry.register(web.search_tool());
     // Google Calendar (calendar.md): the tools are registered now and find the module once it exists.
