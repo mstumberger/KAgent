@@ -112,6 +112,23 @@ pub fn to_frame(input: &[u8], max_side: u32) -> Result<Encoded, ImageError> {
     reencode(input, max_side, true)
 }
 
+/// A grey thumbnail of `w` x `h` pixels (one byte each) of a PNG, JPEG or WebP: what screen watch compares
+/// between two looks (screen-watch.md section 2). Nothing is kept.
+pub fn thumb_gray(input: &[u8], w: u32, h: u32) -> Result<Vec<u8>, ImageError> {
+    let unreadable = |e: image::ImageError| ImageError::Unreadable(e.to_string());
+    let reader = ImageReader::new(Cursor::new(input)).with_guessed_format().map_err(|e| ImageError::Unreadable(e.to_string()))?;
+    let img = reader.decode().map_err(unreadable)?;
+    Ok(img.resize_exact(w, h, image::imageops::FilterType::Triangle).to_luma8().into_raw())
+}
+
+/// A PNG of `rgb` (three bytes a pixel, `w` x `h`): a window the X server handed over as raw pixels.
+pub fn png_of_rgb(w: u32, h: u32, rgb: Vec<u8>) -> Result<Vec<u8>, ImageError> {
+    let img = image::RgbImage::from_raw(w, h, rgb).ok_or_else(|| ImageError::Unreadable("the pixels do not fit the size".into()))?;
+    let mut out = Vec::new();
+    img.write_to(&mut Cursor::new(&mut out), ImageFormat::Png).map_err(|e| ImageError::Unreadable(e.to_string()))?;
+    Ok(out)
+}
+
 fn ext_of(mime: &str) -> &'static str {
     if mime == "image/png" { "png" } else { "jpg" }
 }

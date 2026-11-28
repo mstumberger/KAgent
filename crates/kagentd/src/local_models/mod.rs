@@ -9,6 +9,7 @@ pub mod manage;
 pub mod ollama;
 pub mod pull;
 pub mod tool;
+pub mod vision;
 
 #[cfg(test)]
 mod fake;

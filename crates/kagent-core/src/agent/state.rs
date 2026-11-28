@@ -129,6 +129,11 @@ impl Agent {
         }
     }
 
+    /// Any session has a turn running (screen watch waits for it: screen-watch.md section 5).
+    pub fn any_running(&self) -> bool {
+        self.sessions.lock().unwrap().values().any(|s| s.running.lock().unwrap().is_some())
+    }
+
     pub fn forget(&self, session_id: &str) {
         if let Some(s) = self.sessions.lock().unwrap().remove(session_id) {
             if let Some(c) = s.running.lock().unwrap().take() {
