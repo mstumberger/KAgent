@@ -151,6 +151,8 @@ const FREE_KEYS: &[&str] = &[
     "desktop", "watchers.quietHours", "watchers.spoken", "tasks.deliver", "tasks.timeoutMin", "tasks.maxConcurrent", "skills", "compaction", "memory", "search.engine", "subagents",
     "calendar.calendars", "calendar.defaultCalendar", "calendar.defaultDurationMin", "calendar.home", "calendar.travelMarginMin", "calendar.report",
     "screenWatch.enabled", "screenWatch.defaultMinutes", "screenWatch.everySec",
+    // The limits the owner types per provider (usage.md section 3.3): a number KAgent counts against, nothing more.
+    "usage.knownLimits",
 ];
 
 #[test]

@@ -150,6 +150,14 @@ impl ProvidersClient {
         r.json(body)
     }
 
+    /// Tell the usage module what a response said: its limits, from the headers and (a 429) the body.
+    fn observe(&self, resolved: &ResolvedModel, status: u16, headers: &crate::usage::Headers, body: &str) {
+        let Some(sink) = &self.usage else { return };
+        let seen = chrono::Utc::now();
+        let limits = crate::usage::limits_of_response(status, headers, body, seen);
+        sink.observed(&resolved.provider.id, crate::usage::Observation { status, limits, seen });
+    }
+
     async fn complete_inner(
         &self,
         request: ModelRequest,
@@ -169,20 +177,23 @@ impl ProvidersClient {
                 anyhow::bail!("cancelled");
             }
             match self.request(&resolved, &body).send().await {
-                Ok(r) if r.status().is_success() => {
-                    response = Some(r);
-                    break;
-                }
-                Ok(r) if (r.status().as_u16() == 429 || r.status().is_server_error()) && attempt < 2 => {
-                    let status = r.status();
-                    let detail = r.text().await.unwrap_or_default();
-                    tracing::warn!(attempt, %status, "model request failed, retrying: {}", util::short(&detail));
-                    tokio::time::sleep(Duration::from_millis(500 * (attempt as u64 + 1))).await;
-                }
                 Ok(r) => {
                     let status = r.status();
+                    let headers = crate::usage::pick_headers(r.headers());
+                    if status.is_success() {
+                        self.observe(&resolved, status.as_u16(), &headers, "");
+                        response = Some(r);
+                        break;
+                    }
                     let detail = r.text().await.unwrap_or_default();
-                    anyhow::bail!("provider error {status}: {}", util::short(&detail));
+                    // The limits an answer says are read for failures too (usage.md section 3).
+                    self.observe(&resolved, status.as_u16(), &headers, &detail);
+                    if (status.as_u16() == 429 || status.is_server_error()) && attempt < 2 {
+                        tracing::warn!(attempt, %status, "model request failed, retrying: {}", util::short(&detail));
+                        tokio::time::sleep(Duration::from_millis(500 * (attempt as u64 + 1))).await;
+                    } else {
+                        anyhow::bail!("provider error {status}: {}", util::short(&detail));
+                    }
                 }
                 Err(e) => anyhow::bail!("request failed: {e:#}"),
             }
@@ -387,6 +398,7 @@ mod tests {
         fn counted(&self, provider: &str, model: &str, source: kagent_core::model::CallSource, usage: &kagent_core::protocol::Usage) {
             self.0.lock().unwrap().push((provider.into(), model.into(), source, usage.input_tokens, usage.output_tokens));
         }
+        fn observed(&self, _provider: &str, _observation: crate::usage::Observation) {}
     }
 
     #[tokio::test]
@@ -414,5 +426,48 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         assert!(client.complete(request_for("ollama::m"), tx, CancellationToken::new()).await.is_err());
         assert!(sink.0.lock().unwrap().is_empty());
+    }
+
+    #[derive(Default)]
+    struct Seen(std::sync::Mutex<Vec<(String, crate::usage::Observation)>>);
+    impl UsageSink for Seen {
+        fn counted(&self, _p: &str, _m: &str, _s: kagent_core::model::CallSource, _u: &kagent_core::protocol::Usage) {}
+        fn observed(&self, provider: &str, observation: crate::usage::Observation) {
+            self.0.lock().unwrap().push((provider.into(), observation));
+        }
+    }
+
+    #[tokio::test]
+    async fn the_limits_of_a_good_answer_are_read_from_its_headers() {
+        // FIXTURE: from documentation, not recorded (OpenAI-style rate-limit headers).
+        let (base, _) = serve(sse_answer("x-ratelimit-limit-requests: 60\r\nx-ratelimit-remaining-requests: 59\r\nx-ratelimit-reset-requests: 1s\r\nset-cookie: session=SECRET\r\n")).await;
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(Seen::default());
+        let client = ProvidersClient::new(store_at(dir.path(), &base)).with_usage(sink.clone());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        client.complete(request_for("ollama::m"), tx, CancellationToken::new()).await.unwrap();
+        let seen = sink.0.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!((seen[0].0.as_str(), seen[0].1.status), ("ollama", 200));
+        assert_eq!(seen[0].1.limits.len(), 1);
+        assert_eq!((seen[0].1.limits[0].used, seen[0].1.limits[0].total), (Some(1), Some(60)));
+        assert!(!format!("{:?}", seen[0].1).contains("SECRET"), "only the rate-limit headers are kept");
+    }
+
+    #[tokio::test]
+    async fn the_limits_of_a_429_are_read_from_its_headers_and_body_on_every_try() {
+        // FIXTURE: from documentation, not recorded (OpenAI's rate_limit_exceeded message, retry-after).
+        let body = r#"{"error":{"message":"Rate limit reached for gpt-4 on requests per min (RPM): Limit 3, Used 3, Requested 1. Please try again in 20s.","type":"requests","code":"rate_limit_exceeded"}}"#;
+        let (base, hits) = serve(format!("HTTP/1.1 429 Too Many Requests\r\ncontent-type: application/json\r\nretry-after: 20\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len())).await;
+        let dir = tempfile::tempdir().unwrap();
+        let sink = Arc::new(Seen::default());
+        let client = ProvidersClient::new(store_at(dir.path(), &base)).with_usage(sink.clone());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let err = client.complete(request_for("ollama::m"), tx, CancellationToken::new()).await.unwrap_err();
+        assert!(format!("{err:#}").contains("429"));
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 3, "the retries are unchanged");
+        let seen = sink.0.lock().unwrap();
+        assert_eq!(seen.len(), 3, "every response is seen, failures too");
+        assert!(seen.iter().all(|(_, o)| o.status == 429 && o.limits.len() == 1 && o.limits[0].id == "rpm" && o.limits[0].level == crate::usage::Level::Out));
     }
 }

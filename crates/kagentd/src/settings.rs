@@ -325,7 +325,8 @@ impl Settings {
         self.section::<crate::calendar::settings::CalendarSection>("calendar")?.validate()?;
         self.section::<crate::screen_watch::ScreenWatchSection>("screenWatch")?.validate()?;
         self.section::<crate::subagents::SubagentsSection>("subagents")?.validate()?;
-        self.section::<crate::hooks::config::HooksSection>("hooks")?.validate()
+        self.section::<crate::hooks::config::HooksSection>("hooks")?.validate()?;
+        self.section::<crate::usage::settings::UsageSection>("usage")?.validate()
     }
 
     /// settings.startWidget (default true): open the small widget when the daemon starts.

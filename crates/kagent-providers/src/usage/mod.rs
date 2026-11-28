@@ -1,4 +1,10 @@
 //! What a provider says about usage (usage.md section 3): the limit type, its levels, and the seam the daemon plugs into.
+//! `headers.rs` reads the rate-limit headers, `errors.rs` the body of a 429.
+
+pub mod errors;
+pub mod headers;
+
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use kagent_core::model::CallSource;
@@ -91,9 +97,39 @@ impl Limit {
     }
 }
 
-/// The seam of the daemon's usage module: the client calls it, it stores. `counted` after a response that ended well.
+/// The headers of a response that matter here, lower-case names (nothing else is kept: a key never rides along).
+pub type Headers = BTreeMap<String, String>;
+
+/// What one response said: its limits (from the headers and, for a 429, the body).
+#[derive(Debug, Clone)]
+pub struct Observation {
+    pub status: u16,
+    pub limits: Vec<Limit>,
+    pub seen: DateTime<Utc>,
+}
+
+/// The seam of the daemon's usage module: the client calls it, it stores. `counted` after a response that ended well,
+/// `observed` for every response, success or failure.
 pub trait UsageSink: Send + Sync {
     fn counted(&self, provider: &str, model: &str, source: CallSource, usage: &Usage);
+    fn observed(&self, provider: &str, observation: Observation);
+}
+
+/// The limits one response says: the headers, and for a 429 the body too. Pure, so it is tested on samples.
+pub fn limits_of_response(status: u16, headers: &Headers, body: &str, now: DateTime<Utc>) -> Vec<Limit> {
+    let mut out = headers::limits_from_headers(headers, now);
+    if status == 429 {
+        out.extend(errors::limits_from_error(body, headers, now));
+    }
+    out
+}
+
+/// The headers worth keeping from a response: the rate-limit families and `retry-after`, lower-case. Nothing else.
+pub fn pick_headers(all: &reqwest::header::HeaderMap) -> Headers {
+    all.iter()
+        .filter(|(k, _)| k.as_str().starts_with("anthropic-ratelimit-") || k.as_str().starts_with("x-ratelimit-") || k.as_str() == "retry-after")
+        .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_ascii_lowercase(), v.trim().to_string())))
+        .collect()
 }
 
 #[cfg(test)]

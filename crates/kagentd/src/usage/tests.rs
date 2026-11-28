@@ -10,11 +10,11 @@ use tokio::sync::broadcast;
 use super::store::{Counters, Window};
 use super::UsageHub;
 
-fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<Local> {
+pub(super) fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<Local> {
     Local.with_ymd_and_hms(y, mo, d, h, mi, 0).single().expect("a local time that exists")
 }
 
-fn usage(i: u64, o: u64) -> Usage {
+pub(super) fn usage(i: u64, o: u64) -> Usage {
     Usage { input_tokens: i, output_tokens: o }
 }
 
@@ -81,13 +81,13 @@ fn rows_older_than_13_months_are_pruned() {
     assert_eq!(c.rows(Window::Minute), 1);
 }
 
-fn hub() -> (tempfile::TempDir, Arc<UsageHub>, broadcast::Receiver<AgentEvent>) {
+pub(super) fn hub() -> (tempfile::TempDir, Arc<UsageHub>, broadcast::Receiver<AgentEvent>) {
     let dir = tempfile::tempdir().unwrap();
     let providers = Arc::new(ProviderStore::load(dir.path().join("providers.json"), ProviderStore::builtin_catalog().unwrap(), &[]).unwrap());
     providers.add_from_template("gemini", None, None, Some("sk-SECRET-KEY-1234".into()), Default::default(), None).unwrap();
     providers.add_from_template("ollama", None, Some("http://127.0.0.1:11434/v1".into()), None, Default::default(), None).unwrap();
     let (tx, rx) = broadcast::channel(16);
-    (dir, UsageHub::new(Counters::memory().unwrap(), providers, tx), rx)
+    (dir, UsageHub::new(Counters::memory().unwrap(), providers, Arc::new(std::sync::RwLock::new(crate::settings::Settings::defaults())), tx), rx)
 }
 
 #[test]
