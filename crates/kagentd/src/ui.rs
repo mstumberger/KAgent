@@ -18,7 +18,7 @@ use tokio::sync::{broadcast, oneshot};
 
 const MAX_LOGS: usize = 300;
 /// Tabs `show` may open (ui-settings.md section 1): the same ids as `web/src/nav.ts`.
-const VIEWS: [&str; 9] = ["chat", "voice", "tasks", "tickets", "alerts", "changes", "security", "system", "settings"];
+const VIEWS: [&str; 10] = ["chat", "voice", "tasks", "tickets", "runs", "alerts", "changes", "security", "system", "settings"];
 /// Settings sections `show` may open (ui-settings.md section 3). The former tabs
 /// `providers` and `tools` are two of them. A stage that adds a section adds its id here
 /// and in `web/src/settings/registry.ts`.

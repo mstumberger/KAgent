@@ -16,6 +16,7 @@ use kagent_core::protocol::{AgentEvent, Role, ToolCall};
 use kagent_core::session::SessionStore;
 use kagent_core::tool::ToolRegistry;
 use kagent_core::tools::agents::AgentAccess;
+use kagent_core::tools::workflow::WorkflowAccess;
 use kagent_core::workflow::{roles, shipped, Definition, Engine, Run, RunState, StartRequest, Task, TaskState};
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, mpsc, Notify};
@@ -152,6 +153,7 @@ pub struct Wf {
     pub defs: Arc<Mutex<HashMap<String, String>>>,
     pub events: Arc<Mutex<Vec<AgentEvent>>>,
     pub spans: Arc<Mutex<Spans>>,
+    pub waccess: WorkflowAccess,
 }
 
 pub fn lookup_profile(name: &str) -> Option<Profile> {
@@ -177,6 +179,8 @@ pub async fn wf() -> Wf {
     tools.register(Arc::new(ProbeTool::ro("probe_a", &spans)));
     tools.register(Arc::new(ProbeTool::mut_("probe_c", &spans)));
     access.register(&mut tools);
+    let waccess = WorkflowAccess::default();
+    waccess.register(&mut tools);
     let model = RoleModel::default();
     let mut cfg = common::config();
     cfg.system_prompt = "BASE PROMPT.".into();
@@ -196,6 +200,7 @@ pub async fn wf() -> Wf {
     access.attach(&agent);
     let defs = Arc::new(Mutex::new(HashMap::new()));
     let engine = Engine::new(agent.clone(), dir.path().join("runs"), Arc::new(lookup_profile), definitions(defs.clone()));
+    waccess.attach(&engine);
     // The reviewer's diff is not under test here: git is not needed.
     engine.set_differ(Arc::new(|_, files| format!("diff of {}", files.join(","))));
     let events = Arc::new(Mutex::new(Vec::new()));
@@ -213,7 +218,7 @@ pub async fn wf() -> Wf {
     }
     let project = dir.path().join("project");
     std::fs::create_dir_all(&project).unwrap();
-    Wf { engine, agent, model, store, dir, project, defs, events, spans }
+    Wf { engine, agent, model, store, dir, project, defs, events, spans, waccess }
 }
 
 impl Wf {

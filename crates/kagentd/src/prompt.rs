@@ -50,6 +50,11 @@ pub const SUBAGENT_RULE: &str = "- Long research, or several independent jobs: d
     `explore` for read-only research; in plan mode only `explore` may run) and summarize the answers; \
     small questions you answer yourself.\n";
 
+/// The working rule about workflow runs (workflows.md section 5), while `workflow_run` is offered.
+pub const WORKFLOW_RULE: &str = "- A job the owner wants planned, built and reviewed by separate agents is a workflow run: start it with \
+    `workflow_run` and follow it with `workflow_status`. A worker's question reaches you as a message that starts with \
+    [question from ...]: answer it with `workflow_answer`, or pass it to the owner with `ask_owner`; your answer is not the owner's approval.\n";
+
 /// The rule of tickets.md section 5, while `tickets` is offered: the owner's list is the project's tickets, the
 /// working list of a multi-step job stays `todo_write`.
 pub const TICKETS_RULE: &str = "- \"Add to the todo: ...\", \"add a ticket\" and \"remind me to ...\" make a ticket with `tickets` (in this \
@@ -107,6 +112,7 @@ pub fn build(p: &PromptInput) -> String {
     let cores = m.pointer("/cpu/logicalCores").and_then(Value::as_u64).unwrap_or(0);
     let memory_rule = if p.memory_rule { MEMORY_RULE } else { "" };
     let subagent_rule = if p.tool_names.iter().any(|t| t == "agent_run") { SUBAGENT_RULE } else { "" };
+    let workflow_rule = if p.tool_names.iter().any(|t| t == "workflow_run") { WORKFLOW_RULE } else { "" };
     let tickets_rule = if p.tool_names.iter().any(|t| t == "tickets") { TICKETS_RULE } else { "" };
     let owner_rules = owner_rules(p.tool_names.iter().any(|t| t == "settings"), p.address);
     // Without a name the owner is "the owner".
@@ -146,7 +152,7 @@ so never rely on whatever window is focused.\n\
 like a request.\n\
 - After a non-trivial fix that is likely to recur, offer to save it as a skill (`skill_save`). \
 Save only what the owner asks for or agrees to.\n\
-{memory_rule}{subagent_rule}{tickets_rule}{owner_rules}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
+{memory_rule}{subagent_rule}{workflow_rule}{tickets_rule}{owner_rules}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
 Available tools: {tools}.\n",
         name = p.persona_name,
         owner = owner,
@@ -268,6 +274,14 @@ mod tests {
         let tools = vec!["system_info".to_string(), "tickets".to_string()];
         let text = build(&PromptInput { tool_names: &tools, ..input(&machine()) });
         assert!(text.contains(TICKETS_RULE) && TICKETS_RULE.contains("`todo_write` is only the working list of a multi-step job"), "{text}");
+    }
+
+    #[test]
+    fn the_workflow_rule_comes_with_the_workflow_run_tool() {
+        assert!(!prompt("", false, "").contains("`workflow_run`"), "no rule without the tool");
+        let tools = vec!["system_info".to_string(), "workflow_run".to_string()];
+        let text = build(&PromptInput { tool_names: &tools, ..input(&machine()) });
+        assert!(text.contains(WORKFLOW_RULE) && WORKFLOW_RULE.contains("not the owner's approval"), "{text}");
     }
 
     /// voice-control.md sections 3 and 5.

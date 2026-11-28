@@ -158,7 +158,7 @@ impl Children {
                 return Some(format!("tool '{tool}' is not in this subagent's tool groups ({}): call only tools of those groups", groups.join(", ")));
             }
         }
-        if r.read_only && !call.read_only {
+        if r.read_only && !call.read_only && !WORKER_ONLY.contains(&tool) {
             return Some("explore is read-only: this call would change something. Research with read-only tools, then answer".into());
         }
         None

@@ -76,6 +76,9 @@ pub async fn apply_quiet(st: &Arc<AppState>, patch: Value) -> Result<Value, Http
     // At most `subagents.maxConcurrent` subagents run at once (agents.md section 2).
     let max_children = st.settings.read().unwrap().subagents_config().max_concurrent;
     st.agent.set_max_concurrent_children(max_children as usize).await;
+    // At most `workflows.maxRuns` runs are active at once (workflows.md section 3.4).
+    let max_runs = st.settings.read().unwrap().workflows_config().max_runs;
+    st.runs.set_max_runs(max_runs);
     // Apply the systemd user unit change outside the settings lock (spawns
     // systemctl; slow paths must never hold the lock).
     if let Some(want) = wants_autostart {

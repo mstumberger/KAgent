@@ -39,3 +39,30 @@ pub fn summary(run: &Run) -> String {
     }
     out
 }
+
+/// What `workflow_status` says about one run, for the Brain.
+pub fn status(run: &Run) -> String {
+    let (done, total) = run.counts();
+    let mut out = format!("Run {} \"{}\" ({}): {}", run.id, run.title, run.workflow, run.state.word());
+    if !run.reason.is_empty() {
+        out.push_str(&format!(" ({})", run.reason));
+    }
+    out.push_str(&format!(", {done} of {total} tasks done.\n"));
+    for t in &run.tasks {
+        let round = if t.round > 0 && matches!(t.state, TaskState::Implementing | TaskState::InReview | TaskState::Changes) { format!(", round {}", t.round) } else { String::new() };
+        out.push_str(&format!("- {} {}: {}{round}\n", t.id, t.title, t.state.word()));
+    }
+    for q in run.questions.iter().filter(|q| q.answer.is_none()) {
+        out.push_str(&format!("Open question {} from task {}: {}\n", q.id, q.task, cut(&q.text, 300)));
+    }
+    if run.state == super::RunState::AwaitingApproval {
+        out.push_str("The plan waits for the owner's approval.\n");
+    }
+    out
+}
+
+/// What `workflow_run` asks the owner: the workflow, the project and the workers.
+pub fn card(def: &super::Definition, project: &str, goal: &str) -> String {
+    let workers: Vec<String> = def.steps.iter().filter_map(|s| s.worker.as_ref().map(|w| format!("{} ({}{})", s.role.word(), w.profile, s.model.as_deref().map(|m| format!(", {m}")).unwrap_or_default()))).collect();
+    format!("run the workflow {} in {} with {}: {}", def.name, project.rsplit('/').next().unwrap_or(project), workers.join(", "), cut(goal.trim(), 100))
+}
