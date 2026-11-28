@@ -131,6 +131,8 @@ input[type="range"] { accent-color: var(--ice); padding: 0; border: none; backgr
   border-radius: 0;
   padding: 2px 0 2px 16px;
 }
+.bubble.note { opacity: 0.6; font-size: 12.5px; line-height: 1.45; padding: 2px 0 2px 16px; border-left: 1px dashed var(--rim-strong); color: var(--dim); }
+.bubble.note .via { margin-right: 6px; }
 .via { font-size: 10.5px; color: var(--dim); border: 1px solid var(--rim); border-radius: 999px; padding: 0 7px; letter-spacing: 0.02em; }
 .calls { font-size: 12px; color: var(--dim); }
 .tool-card { align-self: flex-start; max-width: 760px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--rim); border-radius: var(--radius-m); }

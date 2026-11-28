@@ -116,7 +116,7 @@ pub fn should_compact(h: &History<'_>, t: &Trigger) -> Plan {
         let after = |c: usize| overhead + reserve + suffix[c].div_ceil(CHARS_PER_TOKEN);
         // Not the first message: something real must be summarized. Nothing reaches the
         // target: the last user message, when that still makes the request smaller.
-        let users: Vec<usize> = (1..h.tail.len()).filter(|&i| h.tail[i].role == Role::User).collect();
+        let users: Vec<usize> = (1..h.tail.len()).filter(|&i| h.tail[i].is_user_turn()).collect();
         if let Some(&last) = users.last() {
             cut = users.into_iter().find(|&c| after(c) <= target).unwrap_or(last);
             if after(cut) >= used {
@@ -134,18 +134,24 @@ pub fn should_compact(h: &History<'_>, t: &Trigger) -> Plan {
     Plan::Summarize { tail_cut: cut }
 }
 
+/// The messages a summary is made of: the notes of the daemon are left out (agent-loop.md C.1), they
+/// were about the moment they were written.
+pub fn without_notes(messages: &[Message]) -> Vec<Message> {
+    messages.iter().filter(|m| m.via != crate::protocol::Via::Note).cloned().collect()
+}
+
 /// The cut of a compaction by hand or on a capacity error (compaction.md sections 1
 /// and 4): everything before the last user message. `None` when that is nothing.
 pub fn before_last_user(tail: &[Message]) -> Option<usize> {
-    let last = tail.iter().rposition(|m| m.role == Role::User)?;
+    let last = tail.iter().rposition(|m| m.is_user_turn())?;
     (last > 0).then_some(last)
 }
 
 /// The index in `stored` of the user message a cut of the tail ends before. `tail` is
 /// `sanitize_history(&stored[from..])`, which keeps every user message.
 pub fn stored_index(stored: &[Message], from: usize, tail: &[Message], tail_cut: usize) -> usize {
-    let rank = tail[..tail_cut].iter().filter(|m| m.role == Role::User).count();
-    stored.iter().enumerate().skip(from).filter(|(_, m)| m.role == Role::User).map(|(i, _)| i).nth(rank).unwrap_or(stored.len())
+    let rank = tail[..tail_cut].iter().filter(|m| m.is_user_turn()).count();
+    stored.iter().enumerate().skip(from).filter(|(_, m)| m.is_user_turn()).map(|(i, _)| i).nth(rank).unwrap_or(stored.len())
 }
 
 /// The system text of the summary request (compaction.md section 3).

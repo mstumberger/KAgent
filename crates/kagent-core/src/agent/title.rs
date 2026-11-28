@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::model::{ModelClient, ModelOptions, ModelRequest};
-use crate::protocol::{AgentEvent, Message, Role};
+use crate::protocol::{AgentEvent, Message};
 use crate::util::truncate_str;
 
 pub fn is_placeholder(title: &str) -> bool {
@@ -130,7 +130,7 @@ impl super::Agent {
         let Ok(list) = self.store.list().await else { return };
         for meta in list.into_iter().filter(|m| is_placeholder(&m.title) && m.message_count > 0) {
             let Ok(msgs) = self.store.load_messages(&meta.id).await else { continue };
-            let Some(first) = msgs.iter().find(|m| m.role == Role::User && meaningful(&m.content)) else { continue };
+            let Some(first) = msgs.iter().find(|m| m.is_user_turn() && meaningful(&m.content)) else { continue };
             let Some(q) = quick_title(&first.content) else { continue };
             // Never the copy of the list: it is older than what was saved since.
             apply_title(&self.sessions, &self.store, &self.refined, &meta.id, &q).await;

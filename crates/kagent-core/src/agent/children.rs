@@ -15,7 +15,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::{Message, Role, Via};
+use crate::protocol::{Message, Via};
 use crate::session::{SessionMeta, SessionOrigin};
 
 mod registry;
@@ -255,7 +255,7 @@ pub fn render(child: &ChildView, end: Option<&End>, limit: usize) -> String {
 
 /// Notifications at the end of `messages`, in a row: turns a parent ran on its own.
 fn auto_turns(messages: &[Message]) -> usize {
-    messages.iter().rev().filter(|m| m.role == Role::User).take_while(|m| m.via == Via::Agent).count()
+    messages.iter().rev().filter(|m| m.is_user_turn()).take_while(|m| m.via == Via::Agent).count()
 }
 
 /// Only a session the owner is at is woken by a notification: a task, an alert

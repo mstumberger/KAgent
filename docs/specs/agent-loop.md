@@ -305,9 +305,11 @@ request the loop drains it and stores what it drained as ONE message: role `user
 
 - The UI renders a message with `via: "note"` dimmed (the session reload shows it dimmed
   too: it is stored in the session file with its `via`).
-- Compaction drops notes: `compact` and `sanitize_history` leave messages with
-  `via: "note"` out of what is summarised and of what is kept (a note is about the moment
-  it was written).
+- Compaction drops notes: `compact::without_notes` leaves messages with `via: "note"` out of
+  what a summary is made of (a note is about the moment it was written), and a note is not
+  a turn: `Message::is_user_turn` is false for it, so the cuts of a compaction, the budget
+  trim and the hint of the tool budget never start at a note. A note in the part that is
+  kept stays, as one of the last messages the model should see.
 - A note is text and starts no action. It never reaches `live/approve.rs`, the card
   broker or `confirm.rs`: only the owner's own words answer a card or a spoken question.
   A note that says "yes" or "confirm" answers nothing (tested with a card waiting).
@@ -320,7 +322,7 @@ request the loop drains it and stores what it drained as ONE message: role `user
 
 | Kind | Source | Text | Cooldown |
 |---|---|---|---|
-| `setting` | `settings_apply::apply` from `PUT /api/settings` (the owner on the screen; the `settings` tool's own changes are not noted, the model made them), a session with a running turn | `The owner changed <path> from <old> to <new>.` Values over 80 characters are cut with "..."; a secret (`settings_tool::keys::is_secret`) says `(value not shown)`; at most 3 paths per change, then "and N more" | 0 |
+| `setting` | `settings_apply::apply` from `PUT /api/settings` (the owner on the screen; the `settings` tool's own changes are not noted, the model made them), every session with a running turn (`Agent::note_running`); one note per change, naming at most 3 settings | `The owner changed <path> from <old> to <new>.` Values over 80 characters are cut with "..."; a secret (`settings_tool::keys::is_secret`) says `(value not shown)`; at most 3 paths per change, then "and N more" | 0 |
 | `owner` | a message sent while a turn runs (`Agent::start`, outcome `Queued`) | `The owner sent a new message while you were working: "<first 200 characters>". It replaces your current task unless it says otherwise.` | 0 (every message is told) |
 | `file` | the file tools remember the mtime of what a session read (`tools/seen.rs`); checked at every model request | `<path> changed on disk since you read it. Read it again before you edit it.` | per path, 3 requests |
 | `todo` | the loop counts tool calls since the last `todo_write` of the session | `Your todo list has <n> open items: <first 5>. Update it with todo_write.` after 8 calls with items open | 10 calls |

@@ -27,6 +27,8 @@ pub enum Via {
     Agent,
     /// A message of the screen watch: its hit, its end (screen-watch.md section 3).
     Watch,
+    /// A note of the daemon into a running turn (agent-loop.md C): stored as a message of role user, never the owner's words.
+    Note,
 }
 
 /// The pixels of an image while a request is built (`agent/vision.rs`): never stored in the
@@ -102,6 +104,12 @@ fn is_text(v: &Via) -> bool {
 }
 
 impl Message {
+    /// A message of the owner or of a caller that stands in for them: it starts a turn. A note of the daemon does not
+    /// (compaction cuts and the hint of the tool budget look for these).
+    pub fn is_user_turn(&self) -> bool {
+        self.role == Role::User && self.via != Via::Note
+    }
+
     pub fn user(content: impl Into<String>) -> Self {
         Self::base(Role::User, content.into())
     }

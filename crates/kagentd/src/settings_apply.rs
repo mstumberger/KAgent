@@ -14,6 +14,8 @@ use crate::server::{bad_request, HttpError};
 use crate::settings::Settings;
 use crate::AppState;
 
+mod notes;
+
 /// The part of a change that needs no daemon: the role check of the models, the patch (all
 /// or nothing) and the save. `locked` runs under the settings lock, after the patch and
 /// before the save (the side effects that must see the new values). A patch that cannot be
@@ -44,8 +46,19 @@ pub fn patch_and_save(
     Ok(s.clone())
 }
 
-/// Apply a settings patch all or nothing; returns the stored settings.
+/// Apply a settings patch all or nothing; returns the stored settings. The owner's change on the screen
+/// (`PUT /api/settings`): the turns that run are told (agent-loop.md C.2).
 pub async fn apply(st: &Arc<AppState>, patch: Value) -> Result<Value, HttpError> {
+    let before = serde_json::to_value(&*st.settings.read().unwrap()).unwrap_or(Value::Null);
+    let after = apply_quiet(st, patch).await?;
+    if let Some(text) = notes::note_text(&before, &after) {
+        st.agent.note_running(kagent_core::agent::notes::NoteKind::Setting, "settings", &text);
+    }
+    Ok(after)
+}
+
+/// The same change without a note: the `settings` tool's own (the model made it and has the result).
+pub async fn apply_quiet(st: &Arc<AppState>, patch: Value) -> Result<Value, HttpError> {
     let wants_autostart = patch.get("startup").and_then(|v| v.get("autostart")).and_then(Value::as_bool);
     // A read-only calendar cannot be the default (calendar.md section 2): refused here, where the account can be asked.
     st.calendar.check_default(&patch).await.map_err(bad_request)?;
@@ -87,6 +100,6 @@ impl crate::settings_tool::SettingsHost for Host {
         &self.0.providers
     }
     async fn apply(&self, patch: Value) -> Result<(), String> {
-        apply(&self.0, patch).await.map(|_| ()).map_err(|e| e.2)
+        apply_quiet(&self.0, patch).await.map(|_| ()).map_err(|e| e.2)
     }
 }

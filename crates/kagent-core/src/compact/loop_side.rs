@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use crate::agent::notice::{provider_key, provider_of, ErrorClass};
 use crate::agent::state::SessionState;
 use crate::agent::{Agent, AgentConfig};
-use crate::compact::{before_last_user, is_capacity_error, is_unreachable_error, should_compact, stored_index, summarize, summary_message, CompactError, CompactView, CompactionConfig, History, Plan, Step, Trigger, MIN_MANUAL_MESSAGES};
+use crate::compact::{before_last_user, without_notes, is_capacity_error, is_unreachable_error, should_compact, stored_index, summarize, summary_message, CompactError, CompactView, CompactionConfig, History, Plan, Step, Trigger, MIN_MANUAL_MESSAGES};
 use crate::context::{self, sanitize_history, HistorySummary};
 use crate::protocol::{AgentEvent, Message};
 
@@ -42,7 +42,7 @@ impl Agent {
         let mut summary = old.as_ref().map(|(text, upto)| (text.clone(), *upto));
         if let Plan::Summarize { tail_cut } = plan {
             let upto = stored_index(&stored, from, &tail, tail_cut);
-            match self.summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &compaction), old.as_ref().map(|(text, _)| text.as_str()), &tail[..tail_cut], upto, cancel).await {
+            match self.summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &compaction), old.as_ref().map(|(text, _)| text.as_str()), &without_notes(&tail[..tail_cut]), upto, cancel).await {
                 Ok(text) => summary = Some((text, upto)),
                 Err(e) => tracing::warn!(session_id, "history not summarized, trimming instead: {e:#}"),
             }
@@ -65,7 +65,7 @@ impl Agent {
         let Some(cut) = before_last_user(&tail) else { return Ok(None) };
         let upto = stored_index(&stored, from, &tail, cut);
         let text = self
-            .summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &self.compaction_config()), old.as_ref().map(|(text, _)| text.as_str()), &tail[..cut], upto, cancel)
+            .summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &self.compaction_config()), old.as_ref().map(|(text, _)| text.as_str()), &without_notes(&tail[..cut]), upto, cancel)
             .await
             .map_err(|e| format!("{e:#}"))?;
         Ok(Some(CompactView { summary: text, kept_messages: stored.len() - upto }))

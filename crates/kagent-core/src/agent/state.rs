@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::title;
 use crate::permission::{ApprovalDecision, ApprovalKind};
-use crate::protocol::{AgentEvent, Message, Role, Via};
+use crate::protocol::{AgentEvent, Message, Via};
 use crate::session::SessionMeta;
 use crate::todo::{TodoItem, TodoItemInput};
 
@@ -142,6 +142,8 @@ impl Agent {
         }
         self.permissions.set_planning(session_id, false);
         self.children.forget(session_id);
+        self.notes.forget(session_id);
+        crate::tools::seen::forget(session_id);
     }
 
     pub async fn cancel(&self, session_id: &str) -> bool {
@@ -304,7 +306,7 @@ impl Agent {
             meta.title = t;
         }
         if title::is_placeholder(&meta.title) {
-            if let Some(first) = messages.iter().find(|m| m.role == Role::User && title::meaningful(&m.content)) {
+            if let Some(first) = messages.iter().find(|m| m.is_user_turn() && title::meaningful(&m.content)) {
                 if let Some(q) = title::quick_title(&first.content) {
                     meta.title = q;
                     let _ = self.events.send(AgentEvent::SessionUpdated { session_id: session_id.into(), title: meta.title.clone() });

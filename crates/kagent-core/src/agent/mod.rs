@@ -24,6 +24,7 @@ mod config;
 pub mod hooks;
 pub mod title;
 pub(crate) mod state;
+pub mod notes;
 pub mod notice;
 mod picker;
 pub mod project;
@@ -71,6 +72,8 @@ pub struct Agent {
     pub(crate) hooks: hooks::HookState,
     /// Providers that failed and have not answered since (`notice.rs`).
     pub(crate) failing: notice::Failing,
+    /// Notes of the daemon into running turns (`notes.rs`).
+    pub(crate) notes: notes::Notes,
     /// Who reads images for a Brain (`vision.rs`).
     vision: Mutex<Option<vision::VisionSource>>,
     /// Descriptions made for an image that was not stored with one, by `<session>:<image>`.
@@ -97,6 +100,7 @@ impl Agent {
             children: Default::default(),
             hooks: hooks::HookState::new(deps.hooks),
             failing: Default::default(),
+            notes: Default::default(),
             vision: Mutex::new(None),
             described: Mutex::new(std::collections::HashMap::new()),
         })
@@ -179,8 +183,34 @@ impl Agent {
                 let handle = self.spawn_turn(session_id, turn_id.clone(), input, state, cancel);
                 Ok(SendOutcome::Started { turn_id, handle })
             }
-            Taken::Queued => Ok(SendOutcome::Queued),
+            Taken::Queued => {
+                // The running turn is told what the new message means (agent-loop.md C.2): it replaces the task.
+                if matches!(input.via, Via::Text | Via::Voice | Via::Telegram) {
+                    self.notes.push(session_id, notes::NoteKind::Owner, "", notes::owner_message(&input.text));
+                }
+                Ok(SendOutcome::Queued)
+            }
         }
+    }
+
+    /// A note for every session whose turn is running: the owner changed a setting (agent-loop.md C.2).
+    pub fn note_running(&self, kind: notes::NoteKind, key: &str, text: &str) {
+        let running: Vec<String> = self.sessions.lock().unwrap().iter().filter(|(_, s)| s.running.lock().unwrap().is_some()).map(|(id, _)| id.clone()).collect();
+        for id in running {
+            self.notes.push(&id, kind, key, text.to_string());
+        }
+    }
+
+    /// Before a model request: what changed on disk, the model, the todo list; then the notes as one stored message.
+    async fn push_notes(&self, session_id: &str, state: &SessionState, model_ref: &str) -> anyhow::Result<()> {
+        for path in crate::tools::seen::changed(session_id) {
+            self.notes.push(session_id, notes::NoteKind::File, &path, notes::file_changed(&path));
+        }
+        self.notes.brain_check(session_id, model_ref);
+        let open: Vec<String> = state.meta.lock().await.todo.iter().filter(|t| t.status != crate::todo::TodoStatus::Completed).map(|t| t.content.clone()).collect();
+        self.notes.todo_check(session_id, &open);
+        let note = self.notes.drain(session_id);
+        self.push_messages(session_id, state, note.into_iter().collect()).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -235,6 +265,7 @@ impl Agent {
             self.push_messages(session_id, state, steering).await?;
             config.system_prompt.push_str(&late);
             self.push_messages(session_id, state, self.hook_messages(session_id, &mut hook_budget)).await?;
+            self.push_notes(session_id, state, &config.model_ref).await?;
 
             iteration += 1;
             if iteration > config.max_iterations.max(1) {
@@ -245,7 +276,7 @@ impl Agent {
             let all_tools = self.tools_for(session_id);
             let n_all = all_tools.len();
             // The latest user message decides which groups win when not all fit.
-            let hint = state.messages.lock().await.iter().rev().find(|m| m.role == crate::protocol::Role::User).map(|m| m.content.clone()).unwrap_or_default();
+            let hint = state.messages.lock().await.iter().rev().find(|m| m.is_user_turn()).map(|m| m.content.clone()).unwrap_or_default();
             let tools = crate::context::budget_tools(all_tools, config.context_tokens, 0.35, &hint);
             if tools.len() < n_all && iteration == 1 {
                 tracing::info!(session_id, kept = tools.len(), of = n_all, "small context window: advertising a reduced tool set");
@@ -357,6 +388,7 @@ impl Agent {
             }
             let results = self.execute_calls_from(session_id, turn_id, &calls, cancel, config.privilege, crate::permission::Origin::of_via(input.via)).await;
             self.push_messages(session_id, state, results).await?;
+            self.notes.count_calls(session_id, &calls.iter().map(|c| c.name.as_str()).collect::<Vec<_>>());
         }
     }
 }

@@ -78,7 +78,7 @@ export interface Message {
   toolCallId?: string;
   toolName?: string;
   isError?: boolean;
-  via?: "text" | "voice";
+  via?: "text" | "voice" | "telegram" | "task" | "agent" | "watch" | "note";
   /** The images of a user message (vision.md section 1). */
   images?: ImageRef[];
 }

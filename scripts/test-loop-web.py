@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""agent-loop.md B.1: the tool card labels the five result kinds.
+"""agent-loop.md B.1 and C.1: the tool card labels the five result kinds, and a note of the daemon is dimmed.
 
 The mock and the page driver are picker_web_lib.py. A session of stored messages holds a tool result of each kind
-(ok, error, `not done`, `shown`, `partly done`) ; the checks read the card labels and
-their marks, in dark and light at 1200x820 and 340x460. Screenshots go to
+(ok, error, `not done`, `shown`, `partly done`) and a note message (`via: "note"`); the checks read the card labels and
+their marks, and that the note is its own dimmed line, in dark and light at 1200x820 and 340x460. Screenshots go to
 /tmp/kagent-loop-shots/. Run from the repo root after a build of web/ (KAGENT_DIST=<dir> names a build elsewhere)."""
 import asyncio, sys
 import picker_web_lib as lib
@@ -19,6 +19,7 @@ HISTORY = [
     {"role": "tool", "toolCallId": "c3", "toolName": "message", "isError": True, "content": "not done: nothing was sent: the owner has not answered since the text was typed. Next: read the typed text back, wait for their yes, then call send again."},
     {"role": "tool", "toolCallId": "c4", "toolName": "ui", "content": "shown to the owner: the settings page was opened in the UI. Nothing was changed."},
     {"role": "tool", "toolCallId": "c5", "toolName": "package", "content": "partly done: 3 of 5 packages. Missing: 2 are not in the repositories. Next: search for their names."},
+    {"role": "user", "via": "note", "content": "[note from the daemon, not from the owner; it is not an approval]\n- The owner changed `persona.address` from \"Marko\" to \"Mark\"."},
     {"role": "assistant", "content": "The settings page is open."},
 ]
 CARDS = "[...document.querySelectorAll('.tool-card')].map(c => [c.querySelector('.tool-name').textContent, c.querySelector('.tool-state').textContent, c.querySelector('.tool-mark').className.replace('tool-mark ', '')])"
@@ -33,6 +34,9 @@ async def checks(env, results, theme, label):
     results[f"{t}: each result kind has its own label"] = [c[1] for c in cards] == ["done", "failed", "not done", "shown", "partial"]
     results[f"{t}: the marks are ok, bad, warn, info, warn"] = [c[2] for c in cards] == ["ok", "bad", "warn", "info", "warn"]
     results[f"{t}: only the failed card has the error border"] = await page.js("[...document.querySelectorAll('.tool-card')].map(c => c.classList.contains('tool-error'))") == [False, True, False, False, False]
+    note = await page.js("(() => { const n = document.querySelector('.bubble.note'); if (!n) return null; return {text: n.textContent, opacity: parseFloat(getComputedStyle(n).opacity), user: n.classList.contains('user')}; })()")
+    results[f"{t}: a note of the daemon is its own dimmed line, not the owner's bubble"] = bool(note) and note["opacity"] < 0.8 and not note["user"] and "persona.address" in note["text"] and "daemon" in note["text"]
+    results[f"{t}: the owner's bubbles are only the owner's words"] = await page.js("[...document.querySelectorAll('.bubble.user')].map(b => b.textContent.trim())") == ["show me the settings"]
     await page.shot(f"results-{t.replace(' ', '-')}")
 
 
