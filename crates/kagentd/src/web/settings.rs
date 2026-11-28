@@ -21,22 +21,27 @@ pub struct SearchSection {
     /// Base URL of a SearXNG instance, such as `https://searx.example.org`; empty = none.
     /// It may be on this machine or the local network: the owner sets it, never the model.
     pub searx_url: String,
+    /// The ordered chain of engines (web.md section 3.1). Absent: derived from `engine`
+    /// (`chain`). An empty list is "search off".
+    pub engines: Option<Vec<Engine>>,
 }
 
 impl Default for SearchSection {
     fn default() -> Self {
-        Self { engine: Engine::DuckDuckGo, searx_url: String::new() }
+        Self { engine: Engine::DuckDuckGo, searx_url: String::new(), engines: None }
     }
 }
 
 /// The engines of `web_search` (web.md section 3).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Engine {
     #[default]
     DuckDuckGo,
     Brave,
     Searxng,
+    /// DuckDuckGo's result page read by the reader (web.md section 8); only in the chain.
+    Reader,
     /// The tool answers that search is off.
     None,
 }
@@ -47,15 +52,43 @@ impl Engine {
             Self::DuckDuckGo => "DuckDuckGo",
             Self::Brave => "Brave",
             Self::Searxng => "SearXNG",
+            Self::Reader => "the reader (DuckDuckGo)",
             Self::None => "none",
         }
     }
 }
 
 impl SearchSection {
+    /// The engines `web_search` tries, in order (web.md section 3.1): `engines` when set;
+    /// else the old single `engine` and then the default fallbacks, without repeats.
+    pub fn chain(&self) -> Vec<Engine> {
+        if let Some(list) = &self.engines {
+            return list.clone();
+        }
+        if self.engine == Engine::None {
+            return Vec::new();
+        }
+        let mut chain = vec![self.engine];
+        for fallback in [Engine::DuckDuckGo, Engine::Reader] {
+            if !chain.contains(&fallback) {
+                chain.push(fallback);
+            }
+        }
+        chain
+    }
+
     /// A `searxUrl` that is set but not an http(s) address makes the settings file
     /// invalid. Its address is not judged: the instance is the owner's.
     pub fn validate(&self) -> Result<(), SectionError> {
+        if let Some(list) = &self.engines {
+            let bad = |message: &str| SectionError::Invalid { key: "search".into(), message: message.into() };
+            if list.contains(&Engine::None) {
+                return Err(bad("engines lists duckduckgo, brave, searxng and reader; an empty list is search off"));
+            }
+            if list.iter().enumerate().any(|(n, e)| list[..n].contains(e)) {
+                return Err(bad("engines names an engine twice"));
+            }
+        }
         if self.searx_url.trim().is_empty() {
             return Ok(());
         }
@@ -212,10 +245,10 @@ mod tests {
     fn the_section_has_the_defaults_of_the_spec_and_refuses_what_is_not_an_address() {
         let mut s = Settings::defaults();
         assert_eq!(s.search_config(), SearchSection::default(), "a missing section has the defaults");
-        assert_eq!(serde_json::to_value(SearchSection::default()).unwrap(), json!({"engine": "duckduckgo", "searxUrl": ""}), "config.md section 11");
+        assert_eq!(serde_json::to_value(SearchSection::default()).unwrap(), json!({"engine": "duckduckgo", "searxUrl": "", "engines": null}), "config.md section 11");
         // The instance is the owner's: one on this machine is allowed.
         s.patch(json!({"search": {"engine": "searxng", "searxUrl": "http://127.0.0.1:8088/"}})).unwrap();
-        assert_eq!(s.search_config(), SearchSection { engine: Engine::Searxng, searx_url: "http://127.0.0.1:8088/".into() });
+        assert_eq!(s.search_config(), SearchSection { engine: Engine::Searxng, searx_url: "http://127.0.0.1:8088/".into(), engines: None });
         for engine in ["brave", "searxng", "none", "duckduckgo"] {
             s.patch(json!({"search": {"engine": engine}})).unwrap();
         }
@@ -230,13 +263,38 @@ mod tests {
         let typo = s.patch(json!({"search": {"engin": "brave"}})).unwrap_err();
         assert!(typo.contains("did you mean \"engine\"?"), "{typo}");
         assert!(s.patch(json!({"search": {"searxurl": "https://searx.example.org/"}})).unwrap_err().contains("did you mean \"searxUrl\"?"), "case does not hide a typo");
-        assert_eq!(s.search_config(), SearchSection { engine: Engine::DuckDuckGo, searx_url: "http://127.0.0.1:8088/".into() }, "nothing of a refused patch stays");
+        assert_eq!(s.search_config(), SearchSection { engine: Engine::DuckDuckGo, searx_url: "http://127.0.0.1:8088/".into(), engines: None }, "nothing of a refused patch stays");
 
         // An invalid value is refused on load as well, like every typed section.
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
         std::fs::write(&path, json!({"search": {"searxUrl": "searx"}}).to_string()).unwrap();
         assert!(Settings::load(&path).unwrap_err().to_string().contains("searxUrl must be an http or https address"), "refused on load");
+    }
+
+    /// An old settings file with the single engine means a chain of that engine plus the fallbacks.
+    #[test]
+    fn the_old_single_engine_setting_is_a_chain_with_the_default_fallbacks() {
+        let load = |search: serde_json::Value| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("settings.json");
+            std::fs::write(&path, json!({ "search": search }).to_string()).unwrap();
+            Settings::load(&path).unwrap().search_config()
+        };
+        use Engine::*;
+        assert_eq!(load(json!({"engine": "brave"})).chain(), [Brave, DuckDuckGo, Reader]);
+        assert_eq!(load(json!({"engine": "searxng", "searxUrl": "http://127.0.0.1:8088/"})).chain(), [Searxng, DuckDuckGo, Reader]);
+        assert_eq!(load(json!({"engine": "duckduckgo"})).chain(), [DuckDuckGo, Reader], "no repeats");
+        assert_eq!(load(json!({"engine": "none"})).chain(), Vec::<Engine>::new(), "off is off");
+        assert_eq!(load(json!({})).chain(), [DuckDuckGo, Reader], "no section at all");
+        assert_eq!(load(json!({"engine": "brave", "engines": ["searxng", "reader"]})).chain(), [Searxng, Reader], "the list wins once it is set");
+        assert_eq!(load(json!({"engines": []})).chain(), Vec::<Engine>::new(), "an empty list is off");
+        let mut s = Settings::defaults();
+        assert!(s.patch(json!({"search": {"engines": ["brave", "brave"]}})).unwrap_err().contains("twice"));
+        assert!(s.patch(json!({"search": {"engines": ["none"]}})).is_err());
+        assert!(s.patch(json!({"search": {"engines": ["bing"]}})).is_err());
+        s.patch(json!({"search": {"engines": ["reader", "brave"]}})).unwrap();
+        assert_eq!(s.search_config().chain(), [Reader, Brave]);
     }
 
     #[tokio::test]

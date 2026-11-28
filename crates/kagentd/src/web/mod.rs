@@ -9,6 +9,8 @@ mod guard;
 mod html;
 pub(crate) mod http;
 pub(crate) mod search;
+mod chain;
+mod page_reader;
 pub(crate) mod settings;
 
 use std::path::Path;
@@ -257,11 +259,13 @@ pub struct Engines {
     pub duckduckgo: String,
     /// Brave's Search API: needs the key.
     pub brave: String,
+    /// The page the reader reads as a search (web.md section 9): `?q=` is added.
+    pub reader: String,
 }
 
 impl Default for Engines {
     fn default() -> Self {
-        Self { duckduckgo: "https://html.duckduckgo.com/html/".into(), brave: "https://api.search.brave.com/res/v1/web/search".into() }
+        Self { duckduckgo: "https://html.duckduckgo.com/html/".into(), brave: "https://api.search.brave.com/res/v1/web/search".into(), reader: "https://html.duckduckgo.com/html/".into() }
     }
 }
 
@@ -272,6 +276,10 @@ pub struct Web {
     pub transport: Transport,
     pub engines: Engines,
     cache: Cache,
+    /// Cache, pacing and cooldowns of the search chain (web.md section 3.1).
+    pub(crate) chain: chain::Chain,
+    /// The reader, when there is one (web.md section 8).
+    reader: Option<Arc<dyn page_reader::PageReader>>,
 }
 
 impl Web {
@@ -289,7 +297,24 @@ impl Web {
             transport: Transport { egress, user_agent: format!("KAgent/{}", env!("CARGO_PKG_VERSION")), accept: ACCEPT.into(), timeout: TIMEOUT },
             engines,
             cache: Cache::default(),
+            chain: chain::Chain::default(),
+            reader: None,
         }
+    }
+
+    /// The reader the tools fall back to (web.md section 8).
+    pub fn with_page_reader(mut self, reader: Arc<dyn page_reader::PageReader>) -> Self {
+        self.reader = Some(reader);
+        self
+    }
+
+    pub(crate) fn page_reader(&self) -> Option<Arc<dyn page_reader::PageReader>> {
+        self.reader.clone()
+    }
+
+    /// Whether the reader may be used (Settings -> Web).
+    pub(crate) fn reader_enabled(&self) -> bool {
+        true
     }
 
     pub fn fetch_tool(self: &Arc<Self>) -> Arc<dyn Tool> {

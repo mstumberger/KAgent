@@ -33,6 +33,8 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "mikrotik",
     "sentinel",
     "search.searxUrl",
+    // web.md section 3.1: the chain decides where queries go and whether a browser reads pages.
+    "search.engines",
     "tasks.onApproval",
     "startup.autostart",
     "watchers.enabled",

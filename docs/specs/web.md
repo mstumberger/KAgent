@@ -94,7 +94,7 @@ Engines, by `settings.search.engine`:
   as the nearest end; a query over 400 characters is an error.
 - Failure: an error with the cause for one engine; with the chain (3.1), `not done` with
   what each engine said and what to do.
-- Assessment: read-only, side effect `Network`, timeout 30 s (a burst waits in a queue).
+- Assessment: read-only, side effect `Network`, timeout 45 s (a burst waits in a queue).
 
 ### 3.1 The chain: a search that does not fall over (R1)
 
