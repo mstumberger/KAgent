@@ -284,6 +284,8 @@ pub struct FakeAgent {
     pub sessions: Mutex<Vec<(String, String)>>,
     /// Every message of a turn: (session, text).
     pub sends: Mutex<Vec<(String, String)>>,
+    /// Every message with pictures: (session, text, the size of each picture).
+    pub image_sends: Mutex<Vec<(String, String, Vec<usize>)>>,
     pub resolved: Mutex<Vec<(String, ApprovalDecision)>>,
     pub acked: Mutex<Vec<String>>,
     pub stopped: AtomicUsize,
@@ -327,6 +329,11 @@ impl BotAgent for FakeAgent {
 
     async fn send(&self, session: &str, text: &str) -> anyhow::Result<()> {
         self.sends.lock().unwrap().push((session.to_string(), text.to_string()));
+        Ok(())
+    }
+
+    async fn send_images(&self, session: &str, text: &str, photos: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        self.image_sends.lock().unwrap().push((session.to_string(), text.to_string(), photos.iter().map(Vec::len).collect()));
         Ok(())
     }
 

@@ -16,7 +16,7 @@ use crate::bots::telegram::turns::final_text;
 use crate::bots::telegram_api::Button;
 use crate::bots::{Status, TurnEnd};
 
-const CHAT: i64 = 42;
+pub(super) const CHAT: i64 = 42;
 const T0: Duration = Duration::from_secs(1_800_000_000);
 
 /// A moment far from the epoch, for the pairing code.
@@ -24,14 +24,14 @@ fn t0() -> SystemTime {
     SystemTime::UNIX_EPOCH + T0
 }
 
-fn now(after: u64) -> SystemTime {
+pub(super) fn now(after: u64) -> SystemTime {
     t0() + Duration::from_secs(after)
 }
 
-struct Rig {
-    bot: Arc<Bot>,
-    api: Arc<FakeApi>,
-    agent: Arc<FakeAgent>,
+pub(super) struct Rig {
+    pub(super) bot: Arc<Bot>,
+    pub(super) api: Arc<FakeApi>,
+    pub(super) agent: Arc<FakeAgent>,
     _clock: Arc<GateClock>,
     dir: tempfile::TempDir,
 }
@@ -46,7 +46,7 @@ fn with(agent: FakeAgent) -> Rig {
 }
 
 /// A bot whose chat `CHAT` is paired, as `/start <code>` leaves it.
-fn paired() -> Rig {
+pub(super) fn paired() -> Rig {
     let r = with(FakeAgent::default());
     r.bot.set_username("kagent_bot");
     r.bot.pair(Pairing { bot_username: "kagent_bot".into(), chat_id: CHAT, user_id: 7, paired_at: "2026-11-26T10:00:00+00:00".into() }).unwrap();
@@ -299,9 +299,9 @@ async fn a_voice_note_needs_a_gemini_model_and_is_text_once_transcribed() {
 #[tokio::test]
 async fn attachments_and_updates_of_other_kinds_get_nothing_from_the_agent() {
     let r = paired();
-    let photo: Update = serde_json::from_value(json!({"update_id": 5, "message": {"message_id": 9, "chat": {"id": CHAT, "type": "private"}, "photo": [{"file_id": "p", "width": 1, "height": 1}], "caption": "what is this?"}})).unwrap();
-    r.bot.handle(&photo, now(0)).await;
-    assert_eq!(r.api.texts(), ["I cannot read attachments here yet."]);
+    let document: Update = serde_json::from_value(json!({"update_id": 5, "message": {"message_id": 9, "chat": {"id": CHAT, "type": "private"}, "document": {"file_id": "d"}, "caption": "what is this?"}})).unwrap();
+    r.bot.handle(&document, now(0)).await;
+    assert_eq!(r.api.texts(), ["I cannot read attachments here yet. Photos and voice notes work."]);
     let edited: Update = serde_json::from_value(json!({"update_id": 6, "edited_message": {"message_id": 9, "chat": {"id": CHAT}, "text": "typo"}})).unwrap();
     r.bot.handle(&edited, now(0)).await;
     r.bot.handled(&edited);

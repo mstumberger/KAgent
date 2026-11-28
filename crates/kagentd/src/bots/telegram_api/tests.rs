@@ -265,8 +265,8 @@ async fn updates_of_every_kind_are_read_and_the_rest_is_left() {
     assert_eq!((note.file_id.as_str(), note.mime_type.as_deref()), ("f1", Some("audio/ogg")));
     assert!(!voice.message.as_ref().unwrap().is_attachment(), "a voice note is not an attachment here: it is transcribed");
     let shot = photo.message.as_ref().unwrap();
-    assert!(shot.is_attachment() && shot.text.is_none(), "a photo is an attachment, and its caption is not text");
-    assert_eq!(shot.other["caption"], "what is this?");
+    assert!(!shot.is_attachment() && shot.text.is_none() && !shot.photo.is_empty(), "a photo is read as an image (vision.md section 2), and its caption is not text");
+    assert_eq!(shot.caption.as_deref(), Some("what is this?"));
     for update in [&text, &command, &callback, &voice, &photo] {
         assert_eq!(update.message.is_some() || update.callback_query.is_some(), true, "a kind the bot uses");
     }

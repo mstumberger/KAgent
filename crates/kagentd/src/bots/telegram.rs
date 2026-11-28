@@ -269,7 +269,10 @@ impl Bot {
         if let Some(voice) = &m.voice {
             return self.voice(chat, voice).await;
         }
-        self.say(chat, "I cannot read attachments here yet.").await;
+        if !m.photo.is_empty() {
+            return self.photo(chat, m).await;
+        }
+        self.say(chat, "I cannot read attachments here yet. Photos and voice notes work.").await;
     }
 
     async fn command(self: &Arc<Self>, chat: i64, m: &Message, command: Command, now: SystemTime) {
@@ -379,5 +382,7 @@ enum Verdict {
 mod press;
 mod turns;
 
+#[cfg(test)]
+mod photo_tests;
 #[cfg(test)]
 mod tests;

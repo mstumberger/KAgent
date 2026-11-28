@@ -59,7 +59,12 @@ stays as it is.
   `inlineData` (`audio/ogg`) with "Transcribe this voice message in its language." The
   transcript is handled as text. Without such a model the bot answers that voice notes
   need a Gemini model.
-- Photos and other attachments: "I cannot read attachments here yet."
+- Photos (vision.md section 2): the biggest size Telegram lets a bot download (20 MB) is
+  fetched like a voice note's file and becomes an image of the message that starts the
+  turn (or is steered into the running one); the caption is its text, and none is allowed.
+  The window's limits and readers apply: the Brain reads it, else the vision model
+  describes it, else the bot answers with the refusal of the turn.
+- Other attachments: "I cannot read attachments here yet. Photos and voice notes work."
 
 ## 4. Approvals from the phone
 
