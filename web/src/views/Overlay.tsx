@@ -148,7 +148,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
         {s.activeSession && (
           <button type="button" className={`widget-model${choice.none ? " none" : ""}`} title="Model and effort (Ctrl+M)" aria-label={`Model and effort: ${choice.none ? "no model" : modelLabel(choice.answering)}`} onClick={openModels}>
             {choice.none ? "No model" : modelLabel(choice.chosen ?? choice.chatModel)}
-            {choice.level && !choice.none ? ` · ${choice.level}` : ""}
+            {choice.level && choice.pos > 0 && !choice.none ? ` · ${choice.level}` : ""}
           </button>
         )}
       </div>
