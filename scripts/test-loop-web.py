@@ -40,11 +40,26 @@ async def checks(env, results, theme, label):
     results[f"{t}: the owner's bubbles are only the owner's words"] = await page.js("[...document.querySelectorAll('.bubble.user')].map(b => b.textContent.trim())") == ["show me the settings"]
     await page.shot(f"results-{t.replace(' ', '-')}")
     await streaming(page, results, t)
+    await new_build(page, results, t)
 
 
 EMIT = "window.__emit(%s)"
 USER = "[...document.querySelectorAll('.bubble.user')].map(b => b.textContent.trim())"
 ANSWERS = "[...document.querySelectorAll('.bubble.assistant')].map(b => b.textContent.trim())"
+
+
+async def new_build(page, results, t):
+    """A newer build of the page is told once, by a toast (the page's script name differs in the served index.html)."""
+    toast = "[...document.querySelectorAll('.toast')].filter(x => x.textContent.includes('newer version')).length"
+    await page.js("document.dispatchEvent(new Event('visibilitychange'))")
+    await asyncio.sleep(0.4)
+    results[f"{t}: the same build shows no notice"] = await page.js(toast) == 0
+    await page.js("(() => { const real = window.fetch; window.fetch = (u, ...r) => String(u).endsWith('/index.html') ? Promise.resolve(new Response('<script src=\"/assets/index-NEWBUILD1.js\"></script>')) : real(u, ...r); })()")
+    await page.js("document.dispatchEvent(new Event('visibilitychange'))")
+    await page.until(f"{toast} === 1", "the notice of a newer build")
+    await page.js("document.dispatchEvent(new Event('visibilitychange'))")
+    await asyncio.sleep(0.4)
+    results[f"{t}: a newer build is told once"] = await page.js(toast) == 1
 
 
 async def streaming(page, results, t):

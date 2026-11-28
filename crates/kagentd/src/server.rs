@@ -67,6 +67,25 @@ async fn host_check(req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
+/// How long a browser may keep a file of the page (`web/dist`). Build output under `/assets/` has its content's hash in
+/// its name and never changes; everything else (the page itself) is checked with the server on every load, so a new
+/// build is seen at the next reload. Without this the window kept showing the page of the build before.
+pub(crate) fn page_cache_control(path: &str) -> Option<&'static str> {
+    if ["/api/", "/ws", "/live"].iter().any(|p| path.starts_with(p)) {
+        return None;
+    }
+    Some(if path.starts_with("/assets/") { "public, max-age=31536000, immutable" } else { "no-cache" })
+}
+
+async fn page_cache(req: Request, next: Next) -> Response {
+    let rule = page_cache_control(req.uri().path());
+    let mut res = next.run(req).await;
+    if let Some(rule) = rule {
+        res.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_static(rule));
+    }
+    res
+}
+
 async fn bearer_auth(state: axum::extract::State<Arc<AppState>>, req: Request, next: Next) -> Response {
     let token = req
         .headers()
@@ -226,7 +245,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         let index = dist.join("index.html");
         let serve_dir = tower_http::services::ServeDir::new(&dist)
             .not_found_service(tower_http::services::ServeFile::new(index));
-        app.fallback_service(serve_dir)
+        app.fallback_service(serve_dir).layer(middleware::from_fn(page_cache))
     } else {
         app
     };
@@ -270,4 +289,20 @@ async fn shutdown_signal() {
         _ = term => {},
     }
     tracing::info!("shutdown requested");
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::page_cache_control;
+
+    #[test]
+    fn the_page_is_checked_on_every_load_and_hashed_files_are_kept() {
+        assert_eq!(page_cache_control("/"), Some("no-cache"));
+        assert_eq!(page_cache_control("/index.html"), Some("no-cache"));
+        assert_eq!(page_cache_control("/settings/models"), Some("no-cache"));
+        assert_eq!(page_cache_control("/assets/index-D9ITp-Ul.js"), Some("public, max-age=31536000, immutable"));
+        for api in ["/api/state", "/ws", "/live"] {
+            assert_eq!(page_cache_control(api), None, "{api}");
+        }
+    }
 }
