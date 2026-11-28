@@ -197,6 +197,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/ui/snapshot/{id}", post(crate::ui::http::snapshot))
         .route("/voice/levels", get(crate::voice_levels::http::levels))
         .route("/voice/demo", post(crate::voice_levels::http::demo))
+        .route("/voice/listen-start", post(crate::listen_start::route))
         .route("/browser/status", get(crate::browser::http::status))
         .route("/browser/attach/connect", post(crate::browser::http::connect))
         .route("/browser/attach/disconnect", post(crate::browser::http::disconnect))

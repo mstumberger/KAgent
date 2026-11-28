@@ -35,11 +35,15 @@ pub struct Greeting {
     /// Empty = auto ("Good morning/afternoon/evening, <address>. ...").
     #[serde(default)]
     pub text: String,
+    /// The same greeting is also said at the start of the session that Listen on start starts
+    /// (voice.md section 14.5). Protected key of the `settings` tool.
+    #[serde(default)]
+    pub spoken: bool,
 }
 
 impl Default for Greeting {
     fn default() -> Self {
-        Self { enabled: true, text: String::new() }
+        Self { enabled: true, text: String::new(), spoken: false }
     }
 }
 
@@ -240,7 +244,7 @@ mod tests {
         assert!(greeting_text(&auto, &p, 9).starts_with("Good morning, Marko."));
         assert!(greeting_text(&auto, &p, 14).starts_with("Good afternoon, Marko."));
         assert!(greeting_text(&auto, &p, 23).starts_with("Good evening, Marko."));
-        let custom = Greeting { enabled: true, text: "Pozdravljen!".into() };
+        let custom = Greeting { enabled: true, text: "Pozdravljen!".into(), spoken: false };
         assert_eq!(greeting_text(&custom, &p, 9), "Pozdravljen!");
         // No address: no name in the greeting, and it asks for one (voice-control.md section 5).
         let no_addr = Persona { address: String::new(), ..persona() };

@@ -292,6 +292,11 @@ impl AppWindows {
     /// Put the window into a mode, starting it when needed. The caller also tells the
     /// page to switch its layout (`uiCommand layout`).
     pub async fn set_mode(&self, mode: Mode, autostart_voice: bool) -> Result<(), String> {
+        self.set_mode_with(mode, autostart_voice, None).await
+    }
+
+    /// `set_mode`, with `extra` added to the address of a window that is started (`listen=<marker>`, voice.md section 14).
+    pub async fn set_mode_with(&self, mode: Mode, autostart_voice: bool, extra: Option<&str>) -> Result<(), String> {
         if !self.running().await {
             if mode == Mode::Hidden {
                 return Ok(());
@@ -302,7 +307,12 @@ impl AppWindows {
                 (_, true) => "autostart",
                 _ => "",
             };
-            self.launch(q, "").await?;
+            let q = match extra {
+                Some(extra) if q.is_empty() => extra.to_string(),
+                Some(extra) => format!("{q}&{extra}"),
+                None => q.to_string(),
+            };
+            self.launch(&q, "").await?;
         }
         let previous = *self.mode.lock().unwrap();
         // Leaving compact: remember where the user put the widget.

@@ -53,11 +53,13 @@ pub struct View {
     pub permission: kagent_core::permission::PermissionMode,
     /// Animation phase for the listening pulse.
     pub pulse: bool,
+    /// The session was started by Listen on start (voice.md section 14.4).
+    pub at_login: bool,
 }
 
 impl Default for View {
     fn default() -> Self {
-        Self { voice: String::new(), muted: false, speaking: false, volume: 0.6, alerts: 0, mode: Mode::Hidden, full: false, permission: Default::default(), pulse: false }
+        Self { voice: String::new(), muted: false, speaking: false, volume: 0.6, alerts: 0, mode: Mode::Hidden, full: false, permission: Default::default(), pulse: false, at_login: false }
     }
 }
 
@@ -83,6 +85,7 @@ impl View {
     pub fn tooltip(&self) -> String {
         let v = match self.look() {
             Look::Idle => "not listening (right click: Listen)".to_string(),
+            Look::Listening if self.at_login => "listening (started at login)".to_string(),
             Look::Listening => format!("listening ({}% volume)", (self.volume * 100.0).round()),
             Look::Speaking => "speaking".into(),
             Look::Muted => "mic muted".into(),
@@ -264,7 +267,12 @@ fn layout(mode: Mode) -> Value {
 
 /// Switch the app window and tell the page which layout to show.
 pub async fn set_window(st: &AppState, mode: Mode, autostart_voice: bool) {
-    if let Err(e) = st.windows.set_mode(mode, autostart_voice).await {
+    set_window_with(st, mode, autostart_voice, None).await;
+}
+
+/// `set_window` with more in the address of a window that is started (`appwin::set_mode_with`).
+pub async fn set_window_with(st: &AppState, mode: Mode, autostart_voice: bool, extra: Option<&str>) {
+    if let Err(e) = st.windows.set_mode_with(mode, autostart_voice, extra).await {
         tracing::warn!("window: {e}");
         return;
     }
@@ -376,6 +384,7 @@ pub async fn start(st: Arc<AppState>) -> bool {
                 full: st2.settings.read().unwrap().permission_mode == kagent_core::permission::PermissionMode::Full,
                 permission: st2.settings.read().unwrap().permission_mode,
                 pulse: false,
+                at_login: st2.listen_start.at_login(),
             };
             // Only the listening look animates; other states repaint only on change.
             view.pulse = pulse && view.look() == Look::Listening;
@@ -403,6 +412,14 @@ mod tests {
         assert_eq!(v("error", false, false).look(), Look::Error);
         assert_eq!(v("live", false, false).tooltip(), "KAgent: listening (40% volume), 2 open alerts");
         assert_eq!(v("live", false, false).volume_index(), 1);
+    }
+
+    #[test]
+    fn a_session_started_at_login_is_said_in_the_tooltip_while_it_listens() {
+        let login = |status: &str, muted, speaking| View { at_login: true, ..v(status, muted, speaking) };
+        assert_eq!(login("live", false, false).tooltip(), "KAgent: listening (started at login), 2 open alerts");
+        assert_eq!(login("live", true, false).tooltip(), "KAgent: mic muted, 2 open alerts", "the other looks say what they say");
+        assert_eq!(login("", false, false).tooltip(), "KAgent: not listening (right click: Listen), 2 open alerts");
     }
 
     #[test]

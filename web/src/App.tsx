@@ -17,6 +17,7 @@ import WatchChip from "./components/WatchChip";
 import SidePane from "./components/work/SidePane";
 import { usePane } from "./components/work/state";
 import { voice } from "./voice/controller";
+import { startIfAsked } from "./voice/listenStart";
 import { useVoice } from "./voice/useVoice";
 import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
 import SettingsPage from "./settings/SettingsPage";
@@ -105,6 +106,7 @@ export default function App() {
       startRouter({ view: initialView, section: initialSection, session: initialSession });
       init();
       installDiagnostics();
+      void startIfAsked();
       voice.onSession((id) => void refreshSessions().then(() => openSession(id)));
     }
     const onTheme = (e: Event) => {
