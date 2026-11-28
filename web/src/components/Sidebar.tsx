@@ -30,6 +30,8 @@ interface BodyProps {
 export function SidebarBody({ rail = false, onView = showFromSidebar, foot = false }: BodyProps) {
   const s = useStore();
   const [query, setQuery] = useState("");
+  // The search leaves archived conversations out unless this filter is pressed (shell.md section 5).
+  const [archived, setArchived] = useState(false);
   const views = VIEWS.filter((v): v is Exclude<View, "chat"> => v !== "chat");
   const alerts = s.state?.alertsOpen ?? 0;
   const item = (v: Exclude<View, "chat">) => (
@@ -73,6 +75,9 @@ export function SidebarBody({ rail = false, onView = showFromSidebar, foot = fal
                 }
               }}
             />
+            <button type="button" className="sb-filter" aria-pressed={archived} title="Include archived sessions in the search" onClick={() => setArchived(!archived)}>
+              Archived
+            </button>
           </div>
           <div className="sb-switch" role="group" aria-label="List">
             {(["projects", "recent"] as const).map((v) => (
@@ -81,7 +86,7 @@ export function SidebarBody({ rail = false, onView = showFromSidebar, foot = fal
               </button>
             ))}
           </div>
-          <SessionList query={query} />
+          <SessionList query={query} archived={archived} />
         </>
       )}
       {rail && <div className="sb-fill" />}

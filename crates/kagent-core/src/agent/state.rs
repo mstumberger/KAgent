@@ -303,9 +303,12 @@ impl Agent {
         meta.message_count += messages.len();
         meta.updated_at = chrono::Utc::now();
         if let Some(t) = self.refined.lock().unwrap().remove(session_id) {
-            meta.title = t;
+            // A title the owner chose is not replaced by the automatic one.
+            if !meta.renamed {
+                meta.title = t;
+            }
         }
-        if title::is_placeholder(&meta.title) {
+        if title::is_placeholder(&meta.title) && !meta.renamed {
             if let Some(first) = messages.iter().find(|m| m.is_user_turn() && title::meaningful(&m.content)) {
                 if let Some(q) = title::quick_title(&first.content) {
                     meta.title = q;
@@ -348,6 +351,8 @@ mod tests {
                 project: None,
                 pinned: false,
                 images_notice_shown: false,
+                archived: false,
+                renamed: false,
             },
             vec![],
         )

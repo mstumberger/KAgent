@@ -83,6 +83,12 @@ pub struct SessionMeta {
     /// to <provider>.", vision.md section 2); a reload does not show the line again.
     #[serde(default)]
     pub images_notice_shown: bool,
+    /// The owner put the session away (shell.md section 5): the sidebar lists it under "Archived" and the search leaves it out.
+    #[serde(default)]
+    pub archived: bool,
+    /// The owner chose the title: the automatic titles (the quick one and the model's) never replace it.
+    #[serde(default)]
+    pub renamed: bool,
 }
 
 #[derive(Clone)]
@@ -129,6 +135,8 @@ impl SessionStore {
             project: None,
             pinned: false,
             images_notice_shown: false,
+            archived: false,
+            renamed: false,
         };
         self.save_meta(&meta).await?;
         tokio::fs::write(self.log_path(&meta.id), b"").await?;

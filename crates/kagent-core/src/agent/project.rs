@@ -78,6 +78,31 @@ impl Agent {
         .await
     }
 
+    /// The owner chose a title for session `id` (shell.md section 5): trimmed and joined on one line by the caller; the automatic titles never replace it.
+    pub async fn set_title(&self, id: &str, title: &str) -> anyhow::Result<SessionMeta> {
+        self.change_meta(id, |meta| {
+            if meta.origin == SessionOrigin::Subagent {
+                anyhow::bail!("the session of a subagent is not in the list: it cannot be renamed");
+            }
+            let changed = meta.title != title || !meta.renamed;
+            meta.title = title.to_string();
+            meta.renamed = true;
+            Ok(changed)
+        })
+        .await
+    }
+
+    /// Put session `id` away, or bring it back (shell.md section 5).
+    pub async fn set_archived(&self, id: &str, archived: bool) -> anyhow::Result<SessionMeta> {
+        self.change_meta(id, |meta| {
+            if meta.origin == SessionOrigin::Subagent {
+                anyhow::bail!("the session of a subagent is not in the list: it cannot be archived");
+            }
+            Ok(std::mem::replace(&mut meta.archived, archived) != archived)
+        })
+        .await
+    }
+
     /// The composer told the owner where images go: remembered in the meta, so a reload does not show the line again.
     pub async fn set_images_notice_shown(&self, id: &str) -> anyhow::Result<SessionMeta> {
         self.change_meta(id, |meta| Ok(!std::mem::replace(&mut meta.images_notice_shown, true))).await

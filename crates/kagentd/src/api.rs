@@ -134,6 +134,9 @@ pub async fn get_session(State(st): State<Arc<AppState>>, Path(id): Path<String>
 }
 
 pub async fn delete_session(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
+    // An unknown session is a 404, and a running one (or one with a running subagent) a 409: stop it first (shell.md section 5).
+    st.agent.store().meta(&id).await.map_err(|_| not_found(format!("session {id} not found")))?;
+    crate::project_api::refuse_running(&st.agent, &id).await?;
     // Cancels and deletes the subagents of the session too (agents.md section 2).
     let gone = st.widgets.family(st.agent.store(), &id).await;
     st.agent.delete_session(&id).await.map_err(internal)?;

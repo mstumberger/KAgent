@@ -10,6 +10,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use kagent_core::agent::hooks::protect;
@@ -23,6 +24,10 @@ use crate::AppState;
 
 const PATH_SHAPE: &str = "expected {path: a folder, or null to detach}";
 const PIN_SHAPE: &str = "expected {pinned: true or false}";
+const TITLE_SHAPE: &str = "expected {title: 1 to 120 characters}";
+const ARCHIVE_SHAPE: &str = "expected {archived: true or false}";
+/// The longest title the owner may give a conversation.
+pub const TITLE_CHARS: usize = 120;
 
 fn internal(e: anyhow::Error) -> HttpError {
     HttpError(StatusCode::INTERNAL_SERVER_ERROR, "internal", format!("{e:#}"))
@@ -95,6 +100,66 @@ pub async fn set_pinned(agent: &Arc<Agent>, id: &str, body: &Value) -> Result<Se
     agent.set_pinned(id, pinned).await.map_err(internal)
 }
 
+/// The body of `PUT /api/sessions/:id/title`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TitleBody {
+    title: String,
+}
+
+/// The body of `PUT /api/sessions/:id/archive`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ArchiveBody {
+    archived: bool,
+}
+
+/// The title a body asks for: its words on one line, 1 to `TITLE_CHARS` characters.
+pub fn title_of(body: &Value) -> Result<String, String> {
+    let given: TitleBody = serde_json::from_value(body.clone()).map_err(|_| TITLE_SHAPE.to_string())?;
+    let title = given.title.split_whitespace().collect::<Vec<_>>().join(" ");
+    match title.chars().count() {
+        0 => Err("the title is empty".into()),
+        n if n > TITLE_CHARS => Err(format!("the title has {n} characters: at most {TITLE_CHARS}")),
+        _ => Ok(title),
+    }
+}
+
+/// 409 while session `id` or one of its subagents has a turn running: it cannot be deleted or archived then.
+pub async fn refuse_running(agent: &Arc<Agent>, id: &str) -> Result<(), HttpError> {
+    let mut family = vec![id.to_string()];
+    family.extend(agent.store().list().await.map_err(internal)?.into_iter().filter(|m| m.parent.as_deref() == Some(id)).map(|m| m.id));
+    for sid in family {
+        if agent.is_running(&sid).await {
+            return Err(conflict("the conversation is running: stop it first"));
+        }
+    }
+    Ok(())
+}
+
+/// Rename session `id`; the answer is its meta.
+pub async fn set_title(agent: &Arc<Agent>, id: &str, body: &Value) -> Result<SessionMeta, HttpError> {
+    let current = agent.store().meta(id).await.map_err(|_| not_found(format!("session {id} not found")))?;
+    if current.origin == SessionOrigin::Subagent {
+        return Err(conflict("the session of a subagent is not in the list: it cannot be renamed"));
+    }
+    let title = title_of(body).map_err(bad_request)?;
+    agent.set_title(id, &title).await.map_err(internal)
+}
+
+/// Archive or unarchive session `id`; archiving needs the conversation idle.
+pub async fn set_archived(agent: &Arc<Agent>, id: &str, body: &Value) -> Result<SessionMeta, HttpError> {
+    let current = agent.store().meta(id).await.map_err(|_| not_found(format!("session {id} not found")))?;
+    if current.origin == SessionOrigin::Subagent {
+        return Err(conflict("the session of a subagent is not in the list: it cannot be archived"));
+    }
+    let given: ArchiveBody = serde_json::from_value(body.clone()).map_err(|_| bad_request(ARCHIVE_SHAPE))?;
+    if given.archived {
+        refuse_running(agent, id).await?;
+    }
+    agent.set_archived(id, given.archived).await.map_err(internal)
+}
+
 /// The line "Images are sent to <provider>." was shown in session `id`: remembered once.
 pub async fn set_images_notice(agent: &Arc<Agent>, id: &str) -> Result<SessionMeta, HttpError> {
     agent.store().meta(id).await.map_err(|_| not_found(format!("session {id} not found")))?;
@@ -161,6 +226,14 @@ pub async fn put_project(State(st): State<Arc<AppState>>, Path(id): Path<String>
 
 pub async fn put_pin(State(st): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
     Ok(Json(set_pinned(&st.agent, &id, &body).await?).into_response())
+}
+
+pub async fn put_title(State(st): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
+    Ok(Json(set_title(&st.agent, &id, &body).await?).into_response())
+}
+
+pub async fn put_archive(State(st): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
+    Ok(Json(set_archived(&st.agent, &id, &body).await?).into_response())
 }
 
 pub async fn put_images_notice(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {

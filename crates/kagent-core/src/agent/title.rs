@@ -92,6 +92,9 @@ async fn apply_title(sessions: &super::Sessions, store: &crate::session::Session
     match loaded {
         Some(state) => {
             let mut meta = state.meta.lock().await;
+            if meta.renamed {
+                return;
+            }
             let before = std::mem::replace(&mut meta.title, title.to_string());
             if let Err(e) = store.save_meta(&meta).await {
                 tracing::warn!(session_id = sid, "the title could not be saved: {e:#}");
@@ -102,8 +105,10 @@ async fn apply_title(sessions: &super::Sessions, store: &crate::session::Session
             // Loaded while this ran: the title reaches its meta at the next save.
             refined.lock().unwrap().insert(sid.to_string(), title.to_string());
             if let Ok(mut meta) = store.meta(sid).await {
-                meta.title = title.to_string();
-                let _ = store.save_meta(&meta).await;
+                if !meta.renamed {
+                    meta.title = title.to_string();
+                    let _ = store.save_meta(&meta).await;
+                }
             }
             if sessions.lock().unwrap().get(sid).is_none() {
                 refined.lock().unwrap().remove(sid);
