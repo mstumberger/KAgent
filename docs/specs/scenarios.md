@@ -829,3 +829,47 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
    bars, "resets at" and source; the bar on each row of Settings -> Models; the Usage block with the known-limit fields; the line
    above the composer shown once at 90 % and not again; the widget shows the ring only; dark and light; 1200x820 and 340x460.
 8. The owner: ask the agent "how much do I have left on Gemini?"; type a daily limit on the provider card and watch the bar.
+
+## S-tickets Tickets (tickets.md)
+1. **[auto]** The store: a ticket round trips through `<data>/tickets/<id>.json`; the write is atomic (no half file); a key is never
+   reused after a delete; the prefix of `KAgent` is `KA`, a second project with the same initials gets `KA2`; the Inbox is `IN`; a
+   damaged file is skipped and never overwritten.
+2. **[auto]** Each limit refuses with its message: a title of 0 or 201 characters, a description over 20 000, the 501st ticket, 21
+   labels, a parent that does not exist or makes a cycle, a state that is not one of the six; the history names `owner` or `agent`.
+3. **[auto]** The API functions: create, list with each filter, change one field and keep the rest, a note, delete (children lose the
+   parent), 404, `project` cannot change, `ticketChanged` after each.
+4. **[auto]** The tool `tickets`: `add`, `update`, `list`, `close` worded per `agent-loop.md` B; the project of the calling session
+   (a subagent: its parent's), else the Inbox; `list` is read-only and the others ask; group `agent`; the prompt sentence and its row.
+5. **[auto]** `scripts/test-tickets-web.py` (mocked API; dark and light, 1200x820 and 700x500): the sidebar entry opens the view; the
+   list groups by state; quick add in a section and the `c` key; the board has six columns and a card moves with drag and with the
+   "Move to" menu (keyboard: Enter, arrows, Escape); "Mine now"; the filters (project, label, text); the detail pane saves each field
+   with one PUT and shows the history and links; the Changes tab; refusals are shown; no horizontal scroll at 700x500.
+6. The owner: say "add to the todo: renew the certificate" in a conversation of a project; the ticket appears in Tickets of that project.
+
+## S-diff The diff view (diff.md)
+1. **[auto]** The line diff on fixed pairs (insert, delete, change, CRLF, identical, a middle over the cell limit) and the intra-line
+   ranges (a changed word, an inserted piece).
+2. **[auto]** The ref check: a ref starting with `-`, with `..`, with a space, unknown; a valid one resolves. A project that is not in the
+   projects list is refused; a folder that is not a git repository is 409.
+3. **[auto]** `POST /api/diff` on temporary repositories: two commits, an added, a deleted and a renamed file, a binary file, a file
+   over 1 MB (summary only), the working tree against a ref; nothing in the repository changed afterwards (`git status` equal).
+4. **[auto]** `GET /api/changes/:id/diff` for a journal `edit_file` and `write_file` change (stored before and after), for one from
+   before this stage (after = the file now), and a 409 for a change that is not a file edit.
+5. **[auto]** `scripts/test-diff-web.py` (mocked API; dark and light, 1200x820): the tree with marks and counts; side by side and
+   unified, the toggle remembered after a reload; intra-line marks; a collapsed region expands; F7 and Shift+F7 move between changes
+   across files; binary and large files show a summary; Revert file and Open in editor call their routes; the Diff button on the Changes view and the Changes tab of a ticket.
+
+## S-steering Steering a subagent (steering.md)
+1. **[auto]** Scripted model: a message is delivered at the next request as `[from the owner] ...`, once, in order, with the receipts
+   `queued` then `delivered`; the stored message is `via: "note"` and not a turn; it survives compaction.
+2. **[auto]** It answers no approval: a worker waiting for a card, a message that says "yes", the card stays pending.
+3. **[auto]** A worker cannot message another worker or the owner's conversation (no `agent_tell` in a child's tools, refused when
+   called; another session's child is not found).
+4. **[auto]** Interrupt during a tool call: the call has a result, the session resumes with the message first, the child keeps running,
+   the parent is told once at the end; Stop still ends the worker.
+5. **[auto]** The live view: `lastAction`, `files`, `steering` in `subagentUpdated` and the detail route; every subagent prompt has the
+   acknowledge line and its row.
+6. **[auto]** `scripts/test-steering-web.py` (mocked API; dark and light, 1200x820): the Agents line shows the last action; the worker
+   pane shows the job, todo, files and transcript tail; Send and Interrupt post the right body; receipts change from queued to delivered
+   on `subagentUpdated`; the box is disabled for an ended worker.
+7. The owner: start a subagent, tell it "leave the tests alone" and watch it acknowledge; interrupt it during a long command.

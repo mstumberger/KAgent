@@ -53,6 +53,9 @@ is planned next is in `docs/TODO.md` and the current milestone is `docs/mileston
 | `docs/specs/screen-watch.md` | screen watch (S48) |
 | `docs/specs/chooser.md` | the model chooser: providers first, search, filters, used in every place a model is picked |
 | `docs/specs/usage.md` | usage counters and limits of the model in use: ring, card, bars, the `usage` tool |
+| `docs/specs/tickets.md` | tickets per project: store, API, the `tickets` tool, list, board, detail pane (I1) |
+| `docs/specs/diff.md` | the diff view: the daemon's diff (journal changes, git ranges), `DiffView` (I2) |
+| `docs/specs/steering.md` | see, correct and interrupt a running subagent; `agent_tell` (I3) |
 | `docs/specs/agent-loop.md` | the agent loop: enforced rules, tool results as messages, notes into a running turn (v0.0.3) |
 | `docs/milestones/v0.0.2.md` | the current milestone: scope, order, open items |
 | `docs/TODO.md` | everything planned beyond the current milestone, one list |
