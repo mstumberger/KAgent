@@ -20,6 +20,8 @@ import { showFromSidebar } from "../components/sidebar/store";
 import { startDrag } from "../frame";
 import Orb, { ORB_THEMES, normalizeTheme, type OrbTheme } from "../voice/Orb";
 import { label as modelLabel } from "../picker";
+import UsageRingFor from "../components/UsageRing";
+import { providerOfRef } from "../usage";
 import { closeSheet, getStore, openSheet, refreshModels, useStore } from "../store";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
@@ -147,6 +149,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
         {label}
         {s.activeSession && (
           <button type="button" className={`widget-model${choice.none ? " none" : ""}`} title="Model and effort (Ctrl+M)" aria-label={`Model and effort: ${choice.none ? "no model" : modelLabel(choice.answering)}`} onClick={openModels}>
+            <UsageRingFor providerId={providerOfRef(choice.answering)} card={false} />
             {choice.none ? "No model" : modelLabel(choice.chosen ?? choice.chatModel)}
             {choice.level && choice.pos > 0 && !choice.none ? ` · ${choice.level}` : ""}
           </button>
@@ -207,7 +210,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
 
       {s.sheet === "models" && (
         <Sheet title="Model and effort" onClose={closeSheet}>
-          <ModelBody sessionId={s.activeSession} />
+          <ModelBody sessionId={s.activeSession} ringOnly />
         </Sheet>
       )}
 

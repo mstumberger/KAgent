@@ -4,6 +4,7 @@ import { api, initialSection, initialSession, initialView, type StateView } from
 import { events, type AgentEvent } from "./events";
 import { notify, pushNotice } from "./components/toasts";
 import { refreshWatch } from "./screenWatch";
+import { readUsage } from "./usageLine";
 import { onBackgroundTask } from "./components/work/state";
 import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState, showView } from "./store";
 
@@ -104,6 +105,10 @@ export function handleEvent(ev: AgentEvent) {
       // A task was added, changed, claimed or finished (automations.md section 3): Tasks reads the list again.
       set({ tasksTick: getStore().tasksTick + 1 });
       break;
+    case "usageChanged":
+      // The limits or the counters of a provider moved (usage.md section 4): the rings and the cards read again.
+      void readUsage();
+      break;
     case "skillsChanged":
       // A skill was written, removed or switched: Skills reads the list again.
       set({ skillsTick: getStore().skillsTick + 1 });
@@ -122,6 +127,7 @@ export function init() {
   void refreshWatch();
   void refreshSkills();
   void refreshModels(true);
+  void readUsage();
   void refreshSessions().then(() => {
     if (initialSession) {
       void openSession(initialSession);

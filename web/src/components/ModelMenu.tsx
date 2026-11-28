@@ -3,10 +3,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { api, type ProviderView } from "../api";
 import { label } from "../picker";
+import { providerOfRef } from "../usage";
 import { refreshModels, setSessionModel, showView } from "../store";
 import { unusableWhy } from "../settings/sections/models/present";
 import Icon from "./Icon";
 import ModelChooser from "./chooser/ModelChooser";
+import UsageRingFor from "./UsageRing";
 import { useChoice } from "./useChoice";
 import "./popup.css";
 import "./model-menu.css";
@@ -28,10 +30,12 @@ interface BodyProps {
   /** Closes the menu (Manage models). */
   onClose?: () => void;
   onEscape?: () => void;
+  /** The widget's sheet: the ring of a provider without its card. */
+  ringOnly?: boolean;
 }
 
 /** The chooser, the effort and "Manage models" of the menu (picker.md section 5.2, chooser.md). */
-export function ModelBody({ sessionId, onPicked, onClose, onEscape }: BodyProps) {
+export function ModelBody({ sessionId, onPicked, onClose, onEscape, ringOnly = false }: BodyProps) {
   const c = useChoice(sessionId);
   const why = useWhy(c.chosen, c.missing);
   const listId = useId();
@@ -70,6 +74,7 @@ export function ModelBody({ sessionId, onPicked, onClose, onEscape }: BodyProps)
         focusRef={c.answering}
         none={{ label: "Default", hint: c.chatModel ? label(c.chatModel) : "none: pick a model" }}
         kept={c.missing && c.chosen ? { label: label(c.chosen), hint: why } : undefined}
+        ring={ringOnly ? (id) => <UsageRingFor providerId={id} card={false} /> : undefined}
         onPick={(ref) => void pick(ref)}
         onEscape={onEscape}
       />
@@ -171,6 +176,7 @@ export default function ModelMenu({ sessionId, onOpenChange }: { sessionId: stri
         <span className="mm-chevron">
           <Icon name="chevron" size={14} />
         </span>
+        <UsageRingFor providerId={providerOfRef(c.answering)} up />
         <span className="mm-name">{name}</span>
         {effort && <span className="mm-effort-tag">· {effort}</span>}
       </button>

@@ -1,0 +1,195 @@
+/* The limits ring, its card and the line above the composer (usage.md section 7). The colours are the page's. */
+.ur {
+  flex: 0 0 auto;
+  display: block;
+}
+.ur-track {
+  stroke: color-mix(in srgb, var(--dim) 35%, transparent);
+}
+.ur-fine .ur-fill {
+  stroke: var(--ok);
+}
+.ur-close .ur-fill {
+  stroke: var(--signal);
+}
+.ur-nearlyOut .ur-fill,
+.ur-out .ur-fill {
+  stroke: var(--bad);
+}
+.ur-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.ur-card {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  top: calc(100% + 6px);
+  width: 260px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--glass);
+  border: 1px solid var(--rim-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+.ur-card.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.uc {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.uc-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.uc-none {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.uc-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+}
+.uc-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.uc-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.uc-amount {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.uc-pct {
+  font-variant-numeric: tabular-nums;
+}
+.uc-bar {
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--dim) 25%, transparent);
+}
+.uc-bar i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.uc-close .uc-bar i {
+  background: var(--signal);
+}
+.uc-nearlyOut .uc-bar i,
+.uc-out .uc-bar i {
+  background: var(--bad);
+}
+.uc-meta {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* The line above the composer */
+.ul {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--signal);
+  background: color-mix(in srgb, var(--signal) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--signal) 40%, transparent);
+  border-radius: 8px;
+}
+.ul-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ul-close {
+  padding: 2px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  display: inline-flex;
+}
+
+/* Beside a provider's name in a list */
+.ur-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.ur-bar .uc-bar {
+  width: 34px;
+  height: 4px;
+}
+
+/* The Usage block of a provider card (UsageBlock.tsx) */
+.ub {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rim);
+}
+.ub-title {
+  margin: 0;
+  font-size: 13px;
+}
+.ub-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+.ub-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+}
+.ub-models {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ub-models th,
+.ub-models td {
+  padding: 3px 12px 3px 0;
+  text-align: left;
+  font-weight: 400;
+  color: var(--dim);
+}
+.ub-models td:first-child {
+  color: var(--ink);
+}
+.ub-known {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ub-known-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ub-known-row input {
+  width: 110px;
+}

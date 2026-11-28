@@ -6,6 +6,7 @@ import Icon from "../Icon";
 import Chips from "./Chips";
 import ModelColumn from "./ModelColumn";
 import ProviderColumn from "./ProviderColumn";
+import UsageRingFor from "../UsageRing";
 import { RECENT, groupsOf, type ChipKey, type ChooserModel, type Group } from "./data";
 import { pushRecent, readRecent } from "./recent";
 import "../popup.css";
@@ -33,7 +34,7 @@ interface Props {
   kept?: ChooserKept;
   /** The ref whose provider is shown first when it opens (the answering model, when `value` is the default); `value` by default. */
   focusRef?: string | null;
-  /** The limits ring of a provider. */
+  /** The limits ring of a provider: the ring and its card by default. */
   ring?: (providerId: string) => ReactNode;
   onEscape?: () => void;
   /** The focus goes to the search box when it opens. */
@@ -42,7 +43,7 @@ interface Props {
 
 type Col = "none" | "p" | "m";
 
-export default function ModelChooser({ models, value, focusRef, onPick, none, kept, ring, onEscape, autoFocus = true }: Props) {
+export default function ModelChooser({ models, value, focusRef, onPick, none, kept, ring = (providerId) => <UsageRingFor providerId={providerId} />, onEscape, autoFocus = true }: Props) {
   const uid = useId();
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");

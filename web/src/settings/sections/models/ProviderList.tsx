@@ -2,6 +2,8 @@
 // Under 900 px of viewport width the list is a dropdown, as the settings menu is.
 import type { ProviderView } from "../../../api";
 import Icon from "../../../components/Icon";
+import { UsageBar } from "../../../components/UsageCard";
+import { usageOf, useUsage } from "../../../usage";
 import Dropdown from "../../Dropdown";
 import { useDragList } from "../../dragList";
 import { Logo } from "./Catalog";
@@ -25,6 +27,7 @@ export default function ProviderList({
   onAdd: () => void;
   onReorder: (order: string[]) => void;
 }) {
+  const usage = useUsage();
   const drag = useDragList(
     () => providers.map((p) => p.id),
     onReorder,
@@ -53,6 +56,7 @@ export default function ProviderList({
               <button className="pv-nav-main" aria-current={active ? "page" : undefined} onClick={() => onSelect(p.id)}>
                 <Logo name={p.name} />
                 <span className="pv-nav-name">{p.name}</span>
+                <UsageBar limit={usageOf(usage, p.id)?.tightest ?? p.tightestLimit} />
                 <span className={`pv-dot ${statusOf(p)}`} title={STATUS_LABEL[statusOf(p)]} />
               </button>
             </div>

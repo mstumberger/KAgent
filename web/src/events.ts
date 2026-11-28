@@ -34,6 +34,8 @@ export type AgentEvent =
   | { type: "screenWatchChanged"; watch: import("./screenWatch").Watch }
   /** The downloads of local models changed (local-models.md section 3). */
   | { type: "localModelsChanged"; pulls: import("./settings/local-models/api").Pull[] }
+  /** The limits of a provider changed level, or its counters moved (usage.md section 4). */
+  | { type: "usageChanged"; provider: string }
   /** A background shell task of `sessionId` changed status (work-windows.md section 3). */
   | { type: "backgroundTask"; taskId: string; sessionId: string; status: string }
   /** A subagent of `sessionId` changed state (agents.md section 3). */
