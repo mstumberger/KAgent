@@ -35,6 +35,9 @@ pub struct Fake {
     pub cloud_frames: AtomicUsize,
     pub local_calls: AtomicU32,
     pub told: Mutex<Vec<String>>,
+    pub restarts: Mutex<Vec<String>>,
+    /// The capture goes through `capture::grab` (with `KAGENT_FAKE_SCREENSHOT`), like the daemon's.
+    pub real_grab: AtomicBool,
     pub locked: AtomicBool,
     pub busy: AtomicBool,
     pub cards: AtomicUsize,
@@ -56,6 +59,8 @@ impl Fake {
             cloud_frames: AtomicUsize::new(0),
             local_calls: AtomicU32::new(0),
             told: Mutex::new(Vec::new()),
+            restarts: Mutex::new(Vec::new()),
+            real_grab: AtomicBool::new(false),
             locked: AtomicBool::new(false),
             busy: AtomicBool::new(false),
             cards: AtomicUsize::new(0),
@@ -90,7 +95,10 @@ impl Env for Fake {
     async fn active_window(&self) -> Result<WindowInfo, String> {
         Ok(WindowInfo { id: "0x0460000a".into(), title: "konsole: cargo build".into(), own: self.own_window.load(Ordering::SeqCst) })
     }
-    async fn capture(&self, _target: Target, _window_id: Option<&str>) -> Result<Vec<u8>, CaptureError> {
+    async fn capture(&self, target: Target, window_id: Option<&str>) -> Result<Vec<u8>, CaptureError> {
+        if self.real_grab.load(Ordering::SeqCst) {
+            return capture::grab(target, window_id).await;
+        }
         if self.gone.load(Ordering::SeqCst) {
             return Err(CaptureError::WindowGone);
         }
@@ -128,6 +136,9 @@ impl Env for Fake {
     async fn tell(&self, _watch: &Watch, text: &str) {
         self.told.lock().unwrap().push(text.to_string());
     }
+    async fn restarted(&self, _watch: &Watch, text: &str) {
+        self.restarts.lock().unwrap().push(text.to_string());
+    }
 }
 
 pub struct Rig {
@@ -139,7 +150,7 @@ pub struct Rig {
 pub fn rig() -> Rig {
     let fake = Fake::new();
     let (tx, events) = broadcast::channel(1024);
-    Rig { sw: ScreenWatch::new(fake.clone(), tx), fake, events }
+    Rig { sw: ScreenWatch::new(fake.clone(), tx, None), fake, events }
 }
 
 pub fn args(goal: &str) -> StartArgs {
@@ -170,4 +181,5 @@ pub fn states(rx: &mut broadcast::Receiver<AgentEvent>) -> Vec<(String, u64)> {
 mod guards;
 mod hits;
 mod models;
+mod telling;
 mod tool;
