@@ -889,7 +889,7 @@ class Env:
             time.sleep(0.2)
         server = Quiet(("127.0.0.1", PORT), Mock)
         threading.Thread(target=server.serve_forever, daemon=True).start()
-        profile = tempfile.mkdtemp(prefix=f"{self.prefix}-chrome-")
+        profile = self.profile = tempfile.mkdtemp(prefix=f"{self.prefix}-chrome-")
         self.chrome = subprocess.Popen(["google-chrome", "--headless=new", f"--remote-debugging-port={CDP}", f"--user-data-dir={profile}", "--use-fake-device-for-media-stream",
                                         "--use-fake-ui-for-media-stream", "--no-first-run", "--disable-gpu", "--hide-scrollbars", "--window-size=1200,820", "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         tabs = []
@@ -935,7 +935,28 @@ class Env:
         for p in (self.chrome, self.proc):
             if p:
                 p.terminate()
+        # The browser's profile is about 170 MB, and /tmp is memory on many machines: every run of every suite left
+        # one behind until /tmp was full (561 of them, 29 GB). Wait for the browser to go, then remove it.
+        if self.chrome:
+            try:
+                self.chrome.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.chrome.kill()
+                self.chrome.wait(timeout=5)
+        remove_profile(getattr(self, "profile", ""))
         shutil.rmtree(self.home, ignore_errors=True)
+
+
+def remove_profile(path):
+    """Remove a test browser's profile. Its helper processes may still write for a moment after the browser ended and
+    bring the folder back, so: remove, look again, a few times."""
+    if not path:
+        return
+    for _ in range(10):
+        shutil.rmtree(path, ignore_errors=True)
+        time.sleep(0.3)
+        if not os.path.exists(path):
+            return
 
 
 def report(results):
