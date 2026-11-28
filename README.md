@@ -1,251 +1,129 @@
 # KAgent
 
-A local AI agent for your Linux machine. It diagnoses from real system data (kernel,
-services, journal, hardware, network), changes things only after you approve them
-(with undo), controls the desktop, apps, media, editor and a browser by text or voice,
-and watches for problems and intruders.
+KAgent is an AI agent that runs on your own Linux machine. It looks at real system data (kernel, services, journal, hardware, network), makes changes only after you approve them, and can be driven by typing or by voice.
 
-Rust daemon (`kagentd`) + small root helper (`kagent-priv`) + React web UI, with KDE
-and GNOME integration. Runs on systemd Linux: Ubuntu/Debian (apt), Fedora/RHEL (dnf),
-Arch (pacman). KDE Plasma 6 is the best-supported desktop; GNOME works with a few
-extras (see [platform support](#platform-support)).
+It is a Rust daemon with a small optional root helper and a React window, and it keeps your data and keys on your machine.
 
-## Contents
+![KAgent: a conversation with a tool card and the work panel](docs/images/chat.png)
 
-- [Quick start](#quick-start)
-- [Using it](#using-it)
-- [One-time setup](#one-time-setup-you-run-these-kagent-never-runs-sudo)
-- [What it can do](#what-it-can-do)
-- [Safety model](#safety-model)
-- [Settings](#settings)
-- [Platform support](#platform-support)
-- [Files, ports, environment](#files-ports-environment)
-- [Troubleshooting](#troubleshooting)
-- [Development](#development)
+## What it does
 
-## Quick start
+- Diagnoses and changes the machine with typed, audited tools (packages, services, sysctl, kernel modules, files, power, audio, network and more).
+- Every change asks first, shows a dry run where there is one, and can be undone from the change journal.
+- Voice with spoken confirmation: it says what it is about to do and waits for your "yes" or "confirm".
+- Watchers and intrusion alerts: kernel warnings, failed services, disk space, SSH brute force, decoy files, changes to autostart and SSH keys.
+- A sidebar of projects and conversations, with a model chosen per conversation.
+- Google Calendar (read, add, change, delete events) and a morning report.
+- Images in chat (paste or drop one) and "look at my screen" in a voice session.
+- Screen watch: "tell me when the build finishes", checked frame by frame by a local vision model.
+- Local models that fit your graphics card, with a recommended list and a Download button (they run in Ollama).
+- A Telegram bot, so you can talk to it from your phone.
+- Skills (playbooks), memory, subagents, background commands, todo lists, plan mode and hooks.
+- An MCP server, so a coding agent such as Claude Code can use KAgent's tools.
 
-Prerequisites: Rust (stable, via rustup), Node 22 + pnpm, systemd. No system
-libraries are needed to build (TLS is rustls, D-Bus is pure Rust, SQLite is bundled;
-the binary links only glibc). For a local model: [Ollama](https://ollama.com) with a
-tool-calling model, e.g. `ollama pull qwen2.5:7b-instruct`.
+## How safety works
+
+- **Permission modes.** `read-only` allows no changes. `ask` (the default) shows an approval card for every change. `trusted` skips the card for ordinary changes but still asks for root actions and for tools that always ask (typing into a terminal, sending messages, reboot). `full` skips every card except root actions. Per-tool rules (allow, ask, deny) apply on top.
+- **Approval cards and spoken confirmation.** In the `live` and `auto` voice modes a call that would ask does not run until you confirm out loud, in every permission mode; in `routed` mode the card is answered by voice. Only your own speech counts, never the model's words.
+- **The root helper.** Root actions go only through `kagent-priv`, a root-owned program started with `sudo -n`. It accepts a fixed set of typed, validated operations, computes their undo and refuses everything else. There is no root shell unless you create `/etc/kagent/allow-root-shell`. Without the helper, everything read-only still works. Spec: `docs/specs/priv-ops.md`.
+- **The token guard.** The API listens on 127.0.0.1 and needs a bearer token. The agent cannot read the token file or other credential files, shell commands that name them or the API port ask in every mode, and the token is replaced in every tool output before the model sees it. Spec: `docs/specs/token-guard.md`.
+- **The audit log.** Every tool call, approval and change is written to a hash-chained log. `kagentd audit verify` checks that the chain is intact.
+- **Undo.** Changes go to the change journal (the Changes view); each one can be undone.
+
+Limits, stated plainly:
+
+- A model can be wrong, and it can misread what you asked. Read the card before you approve it.
+- In `full` mode, non-root changes run in chat without asking. Use `ask` unless you want that.
+- The agent runs with your user's privileges. The token guard is defence in depth, not a sandbox: code that runs as you can reach what you can reach.
+- Tool output, files and web pages are treated as data, never as instructions, but a model can still be misled by them.
+
+## Requirements
+
+- Linux with systemd. Systems without systemd are not supported.
+- A desktop: KDE Plasma (X11) is the tested one. GNOME is supported through the platform layer, with limits: on Wayland, window control needs the Window Calls extension. Other desktops get the diagnostics, changes, watchers and voice, but no dark mode switch and fewer window features. See `docs/specs/platform.md`.
+- A package manager: apt (Ubuntu, Debian), dnf (Fedora, RHEL) or pacman (Arch). Arch has no security advisories, so it reports an update count instead.
+- A Chromium-family browser (Chrome, Chromium, Brave, Edge) to show the window as an app, or any browser to open the page.
+- Rust (stable, through rustup) and Node with pnpm, to build.
+- A model provider: a cloud key (Anthropic, OpenAI, Google Gemini, OpenRouter and others) or [Ollama](https://ollama.com) for local models. Voice uses Gemini Live and needs a Gemini key.
+
+## Build and first start
+
+There are no packages and no release binaries yet. KAgent is built from source.
 
 ```bash
-# On this machine Rust is not on PATH:
-export PATH=$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH
+git clone https://github.com/mstumberger/KAgent.git
+cd KAgent
 cargo build --release -p kagentd -p kagent-priv
 (cd web && pnpm install && pnpm build)
-./target/release/kagentd            # prints http://127.0.0.1:7878/#token=...
+./target/release/kagentd
 ```
 
-Open the printed URL (the token is in the link; it is also in
-`~/.config/kagent/token`). Then in **Providers** add a model:
+`kagentd` serves the window and the API on `http://127.0.0.1:7878`. When started from a terminal it prints a link with the token in it. The token is also in `~/.config/kagent/token`. Open the link, then add a model under Settings, Models: pick a template, paste a key (kept in the desktop keyring) and press Fetch models. For a local model, use the "Ollama (local)" template.
 
-- **Ollama (local)**: template "Ollama (local)", Fetch models, enable one with tool
-  support (e.g. `qwen2.5:7b-instruct`), "Use for chat". KAgent uses Ollama's native API
-  with a 16k window: the OpenAI-compatible endpoint silently truncates prompts to the
-  server default (4k) and the model starts looping.
-- **Anthropic / OpenAI / Gemini / OpenRouter / Z.ai / ...**: pick the template, paste
-  the key (stored in the desktop keyring: KWallet or GNOME Keyring), Fetch models.
+Optional steps, which you run yourself because KAgent never runs `sudo`:
 
-Without the root helper everything read-only works; changes that need root show the
-command to install it (`kagentd sudoers`).
-
-## Using it
-
-| Where | How |
+| What | How |
 |---|---|
-| Web UI | `http://127.0.0.1:7878/#token=...` - tabs: chat, voice, alerts, changes, security, system, providers, tools, settings |
-| Tray icon | KAgent lives in the tray and starts as a small widget (always on top, all desktops, draggable; `settings.startWidget`). Icon: grey idle, green pulsing listening, blue speaking, red mic muted, orange dot = alerts. Left click: show/hide the window; middle click: mute; scroll: voice volume; menu: Widget / Full window / Only in tray, listen, mute, volume, full control, alerts, stop all, quit |
-| Widget and full window | one window, two layouts, voice keeps running: the widget's expand button opens chat, transcript and settings; the full window's "widget" / "tray" buttons go back |
-| Voice | tray "Listen", the Voice tab, or the orb widget (Space: talk, M: mute, Esc: stop); keeps running when you switch tabs (header: listening / mute / end) |
-| KDE | panel widget "KAgent Voice" (waveform + alert badge); KRunner: Alt+Space, `ka <question>`, `ka doctor`, `ka stop` |
-| GNOME | Super+Alt+Space push-to-talk (after `scripts/desktop-integrate.sh`), app menu entry |
-| Other agents | MCP over stdio: `claude mcp add kagent -- /path/to/kagentd mcp` |
-| CLI | `kagentd [serve]`, `kagentd audit verify`, `kagentd sudoers`, `kagentd mcp`, `kagentd mikrotik-setup <PC-IP>`, `kagentd router-unblock <IP>` |
+| Root actions (packages, system services, sysctl, kernel modules) | `./target/release/kagentd sudoers` prints the lines to paste into a terminal |
+| Menu entries, KRunner and a push-to-talk shortcut | `scripts/desktop-integrate.sh` |
+| Start with your session | `scripts/install-service.sh` (a systemd user service) |
+| KDE panel widget with a voice waveform and alert badge | `kpackagetool6 -t Plasma/Applet -i plasmoid/org.kde.kagent.voice` |
+| A small always-on-top window | `scripts/kagent-overlay.sh` |
+| Use KAgent from Claude Code | `claude mcp add kagent -- /path/to/kagentd mcp` |
 
-Things to ask:
+The Tauri shell in `app/` is written but needs GTK and WebKit development packages; see `app/README.md`.
 
-- Diagnose: "my machine feels slow", "what changed since yesterday?", "is the NVIDIA
-  driver OK after the kernel update?", "what is writing to my disk?", "who is using my
-  microphone?"
-- Change (with approval + undo): "lower swappiness to 10", "restart bluetooth",
-  "install htop", "turn on dark mode"
-- Apps and media: "pause", "next song", "play the newest video from Downloads in VLC",
-  "open this file in Kate"
-- Code: "open ReelGen in VS Code where the Gemini websocket is opened", "which file in
-  KAgent defines the tool budget?" (finds without opening)
-- Browser: "open github.com in your browser and search for kagent", "read this page"
-- Security: "anything suspicious?", "who tried to log in over SSH?"
-- Other apps and terminals: "tell the Claude Code session in KAgent: ...", "what is on my
-  screen?", "export this conversation", "reboot in 10 minutes"
-- Its own UI: "the voice page looks broken, what is wrong?" (reads its console errors
-  and the page), "switch to the alerts tab", "use the KITT look"
+## Screenshots
 
-**Kill switch**: the red "stop all" button in the header (shown while anything runs),
-`ka stop` in KRunner, or `POST /api/stop-all`. It cancels every turn and running tool.
+![Projects and conversations in the sidebar](docs/images/sidebar-projects.png)
 
-## One-time setup (you run these; KAgent never runs sudo)
+The sidebar groups conversations by project, with pinned ones on top.
 
-| What | Command |
-|---|---|
-| Root actions (sysctl, modules, system services, packages, SMART, firewall, eBPF) | `./target/release/kagentd sudoers` prints ONE line: paste it into a terminal (asks your password once) |
-| Typing into Konsole tabs (terminal tool) | Konsole -> Settings -> Configure Konsole -> General -> "Enable the security sensitive parts of the DBus API", restart Konsole |
-| Voice | Providers: add Google Gemini with your key; Voice tab: pick the live model |
-| App menu; KDE: KRunner plugin; GNOME: Super+Alt+Space push-to-talk | `scripts/desktop-integrate.sh` (KDE: bind a key to "KAgent Talk" in System Settings -> Shortcuts) |
-| KDE panel widget (voice waveform, alert badge) | `kpackagetool6 -t Plasma/Applet -i plasmoid/org.kde.kagent.voice`, add "KAgent Voice" to the panel (update: `-u`) |
-| Start with your session (systemd user service) | `scripts/install-service.sh` |
-| "KAgent stopped" alarm | `scripts/install-heartbeat.sh` |
-| GNOME on Wayland: window control and "active window" | install the [Window Calls](https://extensions.gnome.org/extension/4724/window-calls/) extension |
-| Keyboard/mouse input tool (optional) | X11: `xdotool`; Wayland: `ydotool` + the ydotoold service |
-| Window control on X11 outside KDE (optional) | `wmctrl` |
-| MikroTik traffic monitoring | `./target/release/kagentd mikrotik-setup <this-PC-IP>`, paste into RouterOS, then Security -> Network |
-| Agent browser | the first browser request opens KAgent's own Brave/Chrome window; sign in there to sites the agent should use |
-| Desktop app (tray, overlay window, Super+Space) | see `app/README.md` (needs GTK/WebKit dev packages) |
+![Settings, Models](docs/images/settings-models.png)
 
-## What it can do
+Providers and their models, and which model does which job.
 
-56 typed tools in groups (Settings -> Tools the agent may use):
+![Settings, Calendar](docs/images/settings-calendar.png)
 
-- **Diagnose** (system, kernel, services, hardware): processes, kernel (taint,
-  modules, log), sysctl, systemd + boot analysis, journal, disks + SMART, network,
-  sensors, power, audio (PipeWire), Bluetooth, GPU/drivers/DKMS, crashes,
-  `what_changed` timeline (packages, boots, /etc, KAgent changes), `doctor` health
-  score 0-100 (pressure stall info, failed units, errors, heat, swap, reboot needed,
-  security updates), eBPF traces (who does the I/O, run-queue latency, syscall hot
-  spots, TCP retransmits, exec/open snoop).
-- **Change safely** (change): packages (apt/dnf/pacman), sysctl, kernel modules,
-  systemd units, power profile, files; every change shows a dry run, is journaled and
-  undoable from the Changes tab.
-- **Desktop and apps** (desktop): audio devices and volume, Bluetooth, Wi-Fi/VPN,
-  brightness, dark/light mode, windows, notifications; open URLs/files/apps, also in a
-  chosen app; media players over MPRIS (play, pause, next, seek, volume; paused while
-  you talk); clipboard; "this file" (`focus_context`: active window and its open files,
-  Dolphin copy, recent files, downloads); keyboard/mouse input (asks first).
-- **Code**: `projects` (your project folders, code search), `open_in_editor` (VS Code,
-  Kate, IntelliJ/PyCharm/WebStorm/PhpStorm/CLion, Zed, GNOME Text Editor, gedit) at a
-  file and line.
-- **Browser**: KAgent's own Brave/Chrome window over DevTools: open, search, read the
-  page, click, type, keys, screenshot.
-- **Voice**: Gemini Live through the daemon (the key never reaches the browser),
-  barge-in, session resumption, tool calls with the same approvals (answerable by
-  voice); live visualizer looks: orb (glass sphere with your waveform inside and a
-  spectrum corona), spectrum, wave, KITT, HAL; ice = KAgent speaking, green = you.
-- **Watch and warn**: OOM kills, kernel warnings, crashes, failed services, disk
-  space, heat, NVIDIA/DKMS after kernel updates, SSH brute force, security updates;
-  grouped, rate-limited, quiet hours.
-- **Intrusion detection** (security): honeytoken decoys (any read = high alert),
-  persistence watch (SSH keys, units, autostart, cron, SUID, ld.so.preload, sudo/PAM,
-  shell rc, foreign kernel modules), heartbeat; with a MikroTik: new LAN devices, port
-  scans from inside, traffic spikes, night-time new destinations, router login traps,
-  IP blocking.
-- **Skills**: diagnostic playbooks in `skills/` (and `~/.config/kagent/skills/`) the
-  agent loads on demand.
+Google Calendar connected: which calendars the agent may see, and where the morning report goes.
 
-## Safety model
+![Settings, Local models](docs/images/settings-local-models.png)
 
-- **Permission modes** (Tools tab, tray "Full control"): `read-only` (no changes at
-  all), `ask` (default: every change shows an approval card), `trusted` (no cards except
-  root actions and "always ask" tools such as typing into terminals, messages, reboot),
-  `full` (full control: no cards at all except root actions). Per-tool overrides
-  (allow/ask/deny) and "allow for this session" on the card.
-- **Voice approvals**: in a voice session answer a card by saying "yes" / "go ahead" /
-  "ja" or "no" / "wait" / "ne"; root actions need "approve" / "potrdi". Only your own
-  speech transcript counts, never the model's words.
-- **Harmless actions** (opening a page/folder/app, playback control, opening the
-  editor) need no card but are still blocked in read-only mode. Acting inside apps
-  (synthetic input, browser clicks/typing) asks; browser `eval` and root actions ask
-  every time, even in trusted mode.
-- **Root** only through `kagent-priv`: a root-owned helper started with `sudo -n` that
-  accepts a fixed set of typed, validated operations, computes their undo and refuses
-  everything else (no root shell unless you create `/etc/kagent/allow-root-shell`).
-  Spec: `docs/specs/priv-ops.md`.
-- **Undo**: every change goes to the change journal (`Changes` tab, `list_changes`,
-  `undo_change`).
-- **Audit**: hash-chained log of every tool call, approval and change;
-  `kagentd audit verify` checks the chain.
-- **Network**: the API listens on 127.0.0.1 only, needs the bearer token and checks
-  the Host header. Tool output, files and web pages are treated as data, never as
-  instructions.
-- **Secrets**: provider keys in the desktop keyring (Secret Service); the agent browser
-  uses its own profile, never your main one.
+Local models, judged against the graphics card and its free memory.
 
-## Settings
+![The voice view](docs/images/voice.png)
 
-Settings tab, or `~/.config/kagent/settings.json` (full format: `docs/specs/config.md`): fallback chat model (used when the chat model is busy), vision model,
-chat/fast/live model, voice and orb theme, permission mode, rules and per-tool
-overrides, tool groups (for chat and for MCP), persona (name, how to address you,
-language: auto/sl/en), preferred editor and project folders, agent browser port,
-pause media while talking, watcher quiet hours, sentinel and MikroTik options.
+The voice view: the orb, the transcript and the talk button.
 
-## Platform support
+![The small widget](docs/images/widget.png)
 
-| | KDE Plasma 6 | GNOME | other desktops |
-|---|---|---|---|
-| diagnostics, changes, watchers, security, voice, browser, media, editor | yes | yes | yes |
-| dark/light mode | Plasma color schemes | gsettings (+ GTK3 theme) | no |
-| windows | KWin (X11 + Wayland) | Wayland: Window Calls extension; X11: wmctrl | X11: wmctrl |
-| clipboard | Klipper | wl-clipboard / xclip | wl-clipboard / xclip |
-| launcher | KRunner, panel widget | push-to-talk shortcut | menu entries |
+The always-on-top widget, the same window in a compact layout.
 
-| | apt (Ubuntu, Debian, Mint) | dnf (Fedora, RHEL, Rocky) | pacman (Arch, Manjaro) |
-|---|---|---|---|
-| install/remove with dry run + undo | yes | yes | yes |
-| security updates | yes | yes | no advisories on Arch (update count instead) |
-| package history | dpkg log | rpm | pacman log |
-| firewall status | ufw | firewalld | nftables |
+![Notices as toasts](docs/images/toasts.png)
 
-Distros without systemd are not supported. Details: `docs/specs/platform.md`.
+An error stays until closed; a recovery fades after a few seconds.
 
-## Files, ports, environment
+The screenshots are taken from the real window against a mocked API with invented data: `scripts/take-screenshots.py`.
 
-| | |
-|---|---|
-| config | `~/.config/kagent/` (token, settings.json, providers.json, skills/) |
-| data | `~/.local/share/kagent/` (sessions, audit.jsonl, changes, alerts, logs, sentinel, net.sqlite, browser-profile, screenshots) |
-| ports | 7878 web UI + API (127.0.0.1), 9333 agent browser DevTools (127.0.0.1), UDP 2055 NetFlow from the router (only when MikroTik is configured) |
+## Status
 
-| Variable | Effect |
-|---|---|
-| `KAGENT_HOME` | put config and data under one folder (tests, second instance); such an instance never uses the desktop keyring (`KAGENT_KEYRING=1` to opt in) |
-| `KAGENT_NO_NOTIFY` | no desktop notifications for alerts |
-| `KAGENT_PRIV` | path of the root helper (default `/usr/local/libexec/kagent-priv`) |
-| `KAGENT_DESKTOP` | force `kde`, `gnome` or `other` |
-| `KAGENT_PM` | force `apt`, `dnf` or `pacman` |
-| `KAGENT_GEMINI_WS` | Gemini Live WebSocket URL (tests use a fake server) |
-| `RUST_LOG` | log level, e.g. `kagentd=debug` (logs: `<data>/logs/kagentd.log`) |
+KAgent is an early project by one person. The version is 0.1.0 and milestone v0.0.2 is in progress. What is planned next is in `docs/TODO.md`.
 
-## Troubleshooting
+What is not verified: parts of it were tested only against fakes. The Google Calendar module was tested against a fake Google, not a real account. The local-model download was tested against a fake Ollama. The Telegram bot, some voice and subagent checks with cloud models, and the Tauri shell have not been run end to end. Expect rough edges, and check the scenarios in `docs/specs/scenarios.md` for what each stage covered.
 
-| Symptom | Fix |
-|---|---|
-| Page says "No token" | open the URL kagentd printed, or `#token=$(cat ~/.config/kagent/token)` |
-| Local model loops or ignores tools | use the "Ollama (local)" template (native API, 16k window) and a tool-calling model; small models handle fewer tools, so KAgent advertises the groups your request mentions first |
-| "root helper missing" / "unsafe" | run `kagentd sudoers` and the printed lines (the helper must be root-owned and not writable by others) |
-| Window or input commands fail on Wayland | GNOME: Window Calls extension; input: ydotool + ydotoold; KDE: activate/close by name works, listing needs X11 |
-| Browser tool says the port did not open | another Chrome/Brave instance is using `browser-profile`, or the port (Settings -> Desktop and apps) is taken |
-| Voice does not connect | add Google Gemini in Providers and pick the live model in the Voice tab; check `<data>/logs/kagentd.log` |
-| Port 7878 in use | another kagentd is running: `pkill -x kagentd` |
-| UI blank or frozen | ask KAgent "what is wrong with the UI?" (it reads the page's console via the `ui` tool), or tray -> Open KAgent; crashes show a card with "Try again" |
-| No tray icon on GNOME | install the AppIndicator extension |
+## Documentation
 
-## Development
+- `docs/IMPLEMENTATION.md`: the stages, the rules, the decisions log and the owner actions.
+- `docs/specs/`: one spec per area (tools, API, config, the root helper, alerts, platform, voice, calendar, and more).
+- `docs/milestones/v0.0.2.md`: the current milestone.
+- `docs/TODO.md`: what is planned.
+- `GLOSSARY.md`: the words the project uses.
+- `AGENTS.md`: the rules for coding agents working in this repository.
 
-`crates/kagent-core` (agent loop, permissions, tools, platform backends),
-`crates/kagent-providers` (provider registry from ZCode's catalog, streaming adapters),
-`crates/kagent-priv` (root helper), `crates/kagentd` (daemon: API, voice, watchers,
-sentinel, network, browser, MCP, KRunner), `web/` (React UI), `plasmoid/` (KDE widget),
-`app/` (Tauri shell, separate workspace), `skills/` (playbooks), `scripts/` (setup and
-test scripts), `docs/`.
+## Contributing
 
-```bash
-cargo test --workspace                      # ~160 unit/integration tests, no root/network
-KAGENT_IT=1 cargo test -p kagent-providers --test ollama   # live Ollama round trip
-bash scripts/smoke-api.sh                   # daemon + Ollama end to end
-python3 scripts/test-live.py                # voice bridge against a fake Gemini server
-(cd web && pnpm lint && pnpm build)
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
-Docs: `AGENTS.md` (rules for coding agents), `docs/IMPLEMENTATION.md` (stages,
-decisions log, owner actions), `docs/specs/` (tools, API, config, root helper ops,
-alerts, platform, scenarios), `docs/PLAN.md` (product background).
+## Licence
+
+GPL-3.0-or-later. The full text is in [LICENSE](LICENSE).
