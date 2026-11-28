@@ -24,6 +24,8 @@ mod run;
 mod steer;
 
 pub(crate) use registry::{Children, Restriction};
+/// Tools only a worker of a run has: offered to it, and refused to every other session when they run.
+pub const WORKER_ONLY: [&str; 2] = ["report_progress", "ask"];
 pub use steer::{TellError, MAX_MESSAGE_CHARS};
 
 /// The built-in profiles (agents.md section 1).
@@ -202,6 +204,8 @@ pub struct ChildRequest {
     pub profile: Profile,
     /// The model the call named; it wins over the profile's.
     pub model: Option<String>,
+    /// A worker of a workflow run: it is offered `report_progress` and `ask` (workflows.md section 4.1).
+    pub worker: bool,
 }
 
 /// The line of a subagent's prompt about the owner's corrections (steering.md section 3).

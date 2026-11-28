@@ -13,7 +13,7 @@ use super::*;
 use crate::tool::CallAssessment;
 
 /// Tools a subagent does not have: it cannot start or manage subagents (the depth limit).
-const ORCHESTRATION: [&str; 5] = ["agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell"];
+const ORCHESTRATION: [&str; 9] = ["agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell", "workflow_run", "workflow_status", "workflow_stop", "workflow_answer"];
 
 /// What a session may do beyond the enabled groups: a subagent's profile.
 #[derive(Debug, Clone, Default)]
@@ -24,11 +24,14 @@ pub(crate) struct Restriction {
     pub read_only: bool,
     /// A subagent: it has no tools over subagents.
     pub child: bool,
+    /// A worker of a workflow run: it has `report_progress` and `ask`.
+    pub worker: bool,
 }
 
 impl Restriction {
     pub(crate) fn allows(&self, tool: &str) -> bool {
         !(self.child && ORCHESTRATION.contains(&tool))
+            && (self.worker || !WORKER_ONLY.contains(&tool))
             && self.groups.as_ref().is_none_or(|groups| groups.iter().any(|g| g == crate::tools::group_of(tool)))
     }
 }
@@ -141,7 +144,12 @@ impl Children {
     /// Why a call of `session_id` is refused, when its restriction refuses it.
     pub(super) fn refusal(&self, session_id: &str, tool: &str, call: &CallAssessment) -> Option<String> {
         let inner = self.lock();
-        let r = inner.restrictions.get(session_id)?;
+        let Some(r) = inner.restrictions.get(session_id) else {
+            return WORKER_ONLY.contains(&tool).then(|| format!("{tool} is for a worker of a workflow run"));
+        };
+        if WORKER_ONLY.contains(&tool) && !r.worker {
+            return Some(format!("{tool} is for a worker of a workflow run"));
+        }
         if r.child && ORCHESTRATION.contains(&tool) {
             return Some("a subagent cannot start or manage subagents: do the work with your own tools and end with a complete answer".into());
         }
@@ -171,6 +179,29 @@ impl Children {
         let view = child.view.clone();
         inner.children.insert(id, child);
         (run_now, view)
+    }
+
+    /// A child that ended starts again with `text` in the same session (workflows.md section 3.3): its status is `queued`
+    /// or `running` again, with a new end to wait for. `Err` says why not. Whether it runs now.
+    pub(super) fn revive(&self, id: &str, text: String) -> Result<bool, String> {
+        let mut inner = self.lock();
+        let run_now = inner.running < inner.max;
+        let child = inner.children.get_mut(id).ok_or_else(|| format!("no worker '{id}'"))?;
+        if child.view.status != ChildStatus::Done {
+            return Err(format!("the worker is {}, only a finished one can go on", child.view.status.label()));
+        }
+        child.view.status = if run_now { ChildStatus::Running } else { ChildStatus::Queued };
+        child.view.started_at = None;
+        child.view.ended_at = None;
+        child.job.text = Some(text);
+        child.end = watch::channel(None).0;
+        child.interrupted = false;
+        if run_now {
+            inner.running += 1;
+        } else {
+            inner.queue.push_back(id.to_string());
+        }
+        Ok(run_now)
     }
 
     pub(super) fn take_text(&self, id: &str) -> Option<String> {

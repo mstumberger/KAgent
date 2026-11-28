@@ -205,13 +205,13 @@ async fn a_subagent_cannot_start_subagents() {
     assert!(r.agent.children_of(&child.id).is_empty() && children(&r).len() == 1, "no grandchild");
     assert!(!r.model.seen().iter().any(|s| s.tag == "grandchild"));
     let deeper = r.agent
-        .start_child(ChildRequest { parent: child.id.clone(), description: "by hand".into(), prompt: "p".into(), profile: Profile::general(), model: None })
+        .start_child(ChildRequest { parent: child.id.clone(), description: "by hand".into(), prompt: "p".into(), profile: Profile::general(), model: None, worker: false })
         .await
         .err()
         .expect("the agent refuses it too");
     assert!(format!("{deeper:#}").contains("a subagent cannot start subagents"), "{deeper:#}");
     // And a session that does not exist.
-    let nowhere = r.agent.start_child(ChildRequest { parent: "no-such-session".into(), description: "d".into(), prompt: "p".into(), profile: Profile::general(), model: None }).await.err().unwrap();
+    let nowhere = r.agent.start_child(ChildRequest { parent: "no-such-session".into(), description: "d".into(), prompt: "p".into(), profile: Profile::general(), model: None, worker: false }).await.err().unwrap();
     assert!(format!("{nowhere:#}").contains("there is no session 'no-such-session'"), "{nowhere:#}");
 }
 
@@ -299,6 +299,6 @@ async fn a_planning_session_starts_only_read_only_subagents_and_they_get_the_pla
     assert!(!meta.planning && !mine[0].system.contains("PLAN MODE"), "the child's own flag stays off: no plan prompt, so no plan card from a subagent");
 
     // By hand, a general profile is refused the same way.
-    let by_hand = r.agent.start_child(ChildRequest { parent: r.session.clone(), description: "job-x".into(), prompt: "look".into(), profile: Profile::general(), model: None }).await;
+    let by_hand = r.agent.start_child(ChildRequest { parent: r.session.clone(), description: "job-x".into(), prompt: "look".into(), profile: Profile::general(), model: None, worker: false }).await;
     assert_eq!(by_hand.unwrap_err().to_string(), kagent_core::plan::PLAN_SUBAGENT_DENIED);
 }

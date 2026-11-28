@@ -307,6 +307,10 @@ pub enum AgentEvent {
     /// A ticket was created, changed or deleted (tickets.md section 4); `project` is the folder, `None` for the Inbox.
     #[serde(rename_all = "camelCase")]
     TicketChanged { key: String, project: Option<String>, removed: bool },
+    /// A workflow run or one of its tasks changed (workflows.md section 6); a window reads the run again. `state` is the
+    /// run's state word (`working`, `awaiting_approval`, ...), `done` and `total` count its tasks.
+    #[serde(rename_all = "camelCase")]
+    RunUpdated { run_id: String, project: String, state: String, done: usize, total: usize },
 }
 
 impl AgentEvent {

@@ -97,7 +97,7 @@ mod tests {
     async fn the_route_refuses_what_it_cannot_deliver_with_a_status_that_says_why() {
         let (agent, parent, _dir) = agent().await;
         // A child that failed at once (no model): it ended.
-        let child = agent.start_child(ChildRequest { parent: parent.clone(), description: "job".into(), prompt: "look".into(), profile: Profile::general(), model: None }).await.unwrap();
+        let child = agent.start_child(ChildRequest { parent: parent.clone(), description: "job".into(), prompt: "look".into(), profile: Profile::general(), model: None, worker: false }).await.unwrap();
         for _ in 0..200 {
             if agent.children_of(&parent).iter().all(|c| c.status.ended()) {
                 break;

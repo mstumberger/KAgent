@@ -211,7 +211,7 @@ impl Tool for AgentRun {
             Ok(profile) => profile,
             Err(reason) => return Ok(ToolOutput::error(reason)),
         };
-        let request = ChildRequest { parent: ctx.session_id.clone(), description: args.description, prompt: args.prompt, profile, model: args.model };
+        let request = ChildRequest { parent: ctx.session_id.clone(), description: args.description, prompt: args.prompt, profile, model: args.model, worker: false };
         let started = match agent.start_child(request).await {
             Ok(view) => view,
             Err(e) => return Ok(ToolOutput::error(format!("the subagent was not started: {e:#}"))),

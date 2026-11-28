@@ -55,7 +55,7 @@ impl Agent {
         self.tools
             .specs()
             .into_iter()
-            .filter(|t| self.tool_enabled(&t.name) && restriction.as_ref().is_none_or(|r| r.allows(&t.name)))
+            .filter(|t| self.tool_enabled(&t.name) && restriction.as_ref().map_or(!WORKER_ONLY.contains(&t.name.as_str()), |r| r.allows(&t.name)))
             .collect()
     }
 
@@ -137,7 +137,7 @@ impl Agent {
         // the engine's flag for its own session id, without the prompt block of plan mode.
         self.state(&id).await?;
         self.permissions.set_planning(&id, parent.planning);
-        let restriction = Restriction { groups: (!req.profile.tool_groups.is_empty()).then(|| req.profile.tool_groups.clone()), read_only: req.profile.read_only, child: true };
+        let restriction = Restriction { groups: (!req.profile.tool_groups.is_empty()).then(|| req.profile.tool_groups.clone()), read_only: req.profile.read_only, child: true, worker: req.worker };
         self.children.restrict(&id, restriction);
         let view = ChildView::new(id.clone(), description.into(), req.profile.name.clone(), ChildStatus::Queued);
         let job = Job {
@@ -154,6 +154,27 @@ impl Agent {
         }
         // A turn that could not start ended the child already.
         Ok(self.children.get(&id).map_or(view, |(_, view, _, _)| view))
+    }
+
+    /// Start child `id` again with `text` (workflows.md section 3.3): the same session, so it keeps its context. `Err` when it
+    /// is unknown, belongs to another session or has not finished.
+    pub async fn resume_child(self: &Arc<Self>, parent: &str, id: &str, text: &str) -> anyhow::Result<ChildView> {
+        match self.children.get(id) {
+            Some((owner, _, _, _)) if owner == parent => {}
+            _ => anyhow::bail!("no worker '{id}' belongs to this session"),
+        }
+        let run_now = self.children.revive(id, text.to_string()).map_err(anyhow::Error::msg)?;
+        if run_now {
+            self.launch_child(id).await;
+        } else if let Some((owner, view, _, _)) = self.children.get(id) {
+            self.child_event(&owner, &view);
+        }
+        self.children.get(id).map(|(_, view, _, _)| view).ok_or_else(|| anyhow::anyhow!("the worker is gone"))
+    }
+
+    /// Send an event to the windows (the engine of workflows uses it).
+    pub fn emit(&self, event: AgentEvent) {
+        let _ = self.events.send(event);
     }
 
     pub(crate) fn child_event(&self, parent: &str, view: &ChildView) {
