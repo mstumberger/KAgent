@@ -10,6 +10,7 @@ import { voice } from "./voice/controller";
 import { resolveView, type View } from "./nav";
 import * as picker from "./picker";
 import { notify } from "./components/toasts";
+import { quiet } from "./router/quiet";
 import { forgetSession } from "./components/work/state";
 import type { Watch } from "./screenWatch";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
@@ -26,6 +27,10 @@ export interface Store {
   view: View;
   /** The open settings page (`settings/registry.ts`); "" until the settings page decides. */
   settingsSection: string;
+  /** What the address names beyond the view (shell.md section 2): a settings item, a ticket key, a run. `null`: none. */
+  placeId: string | null;
+  /** A task of the open run. */
+  placeSub: string | null;
   reasoning: Record<string, string>; // sessionId -> thinking text of the running turn
   alertsTick: number; // bumps on alert events so views refetch
   changesTick: number;
@@ -72,6 +77,8 @@ let store: Store = {
   state: null,
   view: "chat",
   settingsSection: "",
+  placeId: null,
+  placeSub: null,
   reasoning: {},
   alertsTick: 0,
   changesTick: 0,
@@ -139,7 +146,7 @@ export async function refreshSessions() {
   const { sessions } = await api.get<{ sessions: SessionRow[] }>("/api/sessions");
   patch({ sessions });
   if (!store.activeSession && sessions.length > 0) {
-    void openSession(sessions[0].id);
+    quiet(() => void openSession(sessions[0].id));
   }
 }
 
@@ -216,7 +223,8 @@ export async function deleteSession(id: string) {
   // The daemon deleted the subagents of the session with it (agents.md section 2).
   const without = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id));
   forgetSession(id);
-  patch({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
+  // The next conversation takes the place of the deleted one in the history (a replace), not a new entry.
+  quiet(() => patch({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession }));
   if (store.activeSession) void openSession(store.activeSession);
 }
 
@@ -320,17 +328,24 @@ export async function decideApproval(requestId: string, decision: "allowOnce" | 
 }
 
 export function setView(view: View) {
-  patch({ view });
+  // A different view drops what the old one had open (a ticket, a run): the address names the view alone.
+  patch(view === store.view ? { view } : { view, placeId: null, placeSub: null });
+}
+
+/** Open an item of the view (a ticket, a run, a task of it, a settings item): a place of its own, so a history entry. */
+export function setPlace(id: string | null, sub: string | null = null) {
+  patch({ placeId: id, placeSub: sub });
 }
 
 /** Open a view as a deep link or `ui show` names it (nav.ts `resolveView`). */
 export function showView(name: string, section: string | null = null) {
   const target = resolveView(name, section);
   if (!target) return;
-  patch(target.section ? { view: target.view, settingsSection: target.section } : { view: target.view });
+  const same = target.view === store.view;
+  patch({ view: target.view, ...(target.section ? { settingsSection: target.section } : {}), ...(same ? {} : { placeId: null, placeSub: null }) });
 }
 
 /** Open a settings page. The page remembers it (localStorage `kagent.settings.section`). */
 export function setSection(id: string) {
-  patch({ settingsSection: id });
+  patch(id === store.settingsSection ? { settingsSection: id } : { settingsSection: id, placeId: null });
 }

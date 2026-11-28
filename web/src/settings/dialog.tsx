@@ -4,6 +4,7 @@
 // goes back to where it was.
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import "./dialog.css";
+import { useOverlay } from "../router/overlays";
 
 const FOCUSABLE = "input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]";
 
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function Dialog({ title, children, footer, onClose, wide = false }: Props) {
+  useOverlay(true, onClose);
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
   // The latest `onClose`, so that the effect below starts once and not on every render.

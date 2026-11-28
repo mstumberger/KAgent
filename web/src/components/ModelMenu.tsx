@@ -12,6 +12,7 @@ import UsageRingFor from "./UsageRing";
 import { useChoice } from "./useChoice";
 import "./popup.css";
 import "./model-menu.css";
+import { useOverlay } from "../router/overlays";
 
 /** Why a chosen model that is not in the list cannot answer (the providers say). */
 function useWhy(ref: string | null, missing: boolean): string {
@@ -113,6 +114,7 @@ export default function ModelMenu({ sessionId, onOpenChange }: { sessionId: stri
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popId = useId();
+  useOverlay(open, () => setOpen(false));
   const setOpen = (next: boolean, refocus = false) => {
     setOpenState(next);
     onOpenChange?.(next);

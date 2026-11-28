@@ -5,6 +5,7 @@ import type { ImageRef } from "../api";
 import { useImageUrl } from "../images";
 import Icon from "./Icon";
 import "./images.css";
+import { useOverlay } from "../router/overlays";
 
 function Thumb({ sessionId, image, onOpen }: { sessionId: string | null; image: ImageRef; onOpen: (url: string) => void }) {
   const url = useImageUrl(sessionId, image.id);
@@ -17,6 +18,7 @@ function Thumb({ sessionId, image, onOpen }: { sessionId: string | null; image: 
 
 export default function MessageImages({ sessionId, images }: { sessionId: string | null; images: ImageRef[] }) {
   const [open, setOpen] = useState<string | null>(null);
+  useOverlay(!!open, () => setOpen(null));
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

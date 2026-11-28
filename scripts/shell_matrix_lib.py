@@ -35,6 +35,7 @@ def data():
                        {"role": "user", "content": "A path with no spaces: " + "/very/long/path/without/any/break/" * 8}]}
     changes = [{"id": f"c{i}", "at": T0, "tool": "write_file", "summary": f"write /home/me/code/kagent/src/a/very/long/path/to/a/file/number/{i}.rs", "status": "applied", "undoable": True, "session": "s1"} for i in range(8)]
     sessions = {"s1": {"title": "Free the disk", "updatedAt": "2026-11-28T08:00:00Z", "project": KA}, "s2": {"title": "Unit tests for the loop", "updatedAt": "2026-11-28T07:00:00Z", "project": KA},
+                "ab12": {"title": "A conversation with a hex id", "updatedAt": "2026-11-26T07:00:00Z"},
                 "s3": {"title": "Why is the fan loud and what can be done about it in the long run", "updatedAt": "2026-11-27T07:00:00Z"}}
     return dict(sessions=sessions, dirs=[KA], messages=messages, runs=runs, workflows=workflows, tickets=tickets, ticket_projects=projects, changes=changes, alerts=2,
                 projects=[{"path": KA, "name": "kagent", "agentsMd": True}])

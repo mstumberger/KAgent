@@ -10,20 +10,23 @@ export let initialView: string | null = null;
 /** Settings page to open from the URL (`#view=settings&section=tools`). */
 export let initialSection: string | null = null;
 
+/**
+ * The token in `#token=` goes to localStorage and the fragment is removed with `replaceState` before the router reads
+ * anything, so the token is never in an address the router writes and never in the history. The old fragments
+ * (`#view=..&section=..&session=..`) are kept for the router, which turns them into a path (shell.md section 2).
+ */
 export function captureToken(): string | null {
-  const m = window.location.hash.match(/token=([0-9a-f]+)/);
-  const sess = window.location.hash.match(/session=([0-9a-f-]+)/);
+  const hash = window.location.hash;
+  const m = hash.match(/token=([0-9a-f]+)/);
+  const sess = hash.match(/session=([0-9a-f-]+)/);
   if (sess) initialSession = sess[1];
-  const view = window.location.hash.match(/view=([a-z]+)/);
+  const view = hash.match(/view=([a-z]+)/);
   if (view) initialView = view[1];
-  const section = window.location.hash.match(/section=([a-z-]+)/);
+  const section = hash.match(/section=([a-z-]+)/);
   if (section) initialSection = section[1];
-  if (m) {
-    localStorage.setItem(TOKEN_KEY, m[1]);
-    history.replaceState(null, "", window.location.pathname + window.location.search);
-    return m[1];
-  }
-  return localStorage.getItem(TOKEN_KEY);
+  if (m) localStorage.setItem(TOKEN_KEY, m[1]);
+  if (hash) history.replaceState(history.state, "", window.location.pathname + window.location.search);
+  return m ? m[1] : localStorage.getItem(TOKEN_KEY);
 }
 
 export class ApiError extends Error {

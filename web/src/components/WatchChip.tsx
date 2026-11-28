@@ -6,6 +6,7 @@ import Icon from "./Icon";
 import { minutesLeft, refreshWatch, stopWatch, whatOf, type Watch } from "../screenWatch";
 import { useStore } from "../store";
 import "./watch.css";
+import { useOverlay } from "../router/overlays";
 
 /** The page reads the daemon again this often, so a missed event cannot leave a chip behind or hide a watch. */
 const REREAD_MS = 30_000;
@@ -30,6 +31,7 @@ export default function WatchChip({ compact = false }: { compact?: boolean }) {
 function Chip({ w, compact }: { w: Watch; compact: boolean }) {
   const now = useSecond();
   const [open, setOpen] = useState(false);
+  useOverlay(open, () => setOpen(false));
   const box = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {

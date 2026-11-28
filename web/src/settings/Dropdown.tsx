@@ -5,6 +5,7 @@
 import { useEffect, useId, useLayoutEffect, isValidElement, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import "../components/popup.css";
 import "./dropdown.css";
+import { useOverlay } from "../router/overlays";
 
 export interface DropdownOption {
   value: string;
@@ -79,6 +80,7 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
     setOpen(true);
   };
   const close = () => setOpen(false);
+  useOverlay(open, close);
   const pick = (i: number) => {
     const option = options[i];
     if (!option || option.disabled) return;

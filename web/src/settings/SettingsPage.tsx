@@ -16,6 +16,10 @@ export default function SettingsPage() {
   useEffect(() => {
     localStorage.setItem(REMEMBERED, section.id);
   }, [section.id]);
+  // A plain `/settings` is the page used last: the address is filled in (a replace, not a new entry).
+  useEffect(() => {
+    if (!s.settingsSection) setSection(section.id);
+  }, [s.settingsSection, section.id]);
 
   const groups = GROUPS.filter((g) => SECTIONS.some((x) => x.group === g));
   const item = (x: (typeof SECTIONS)[number]) => (

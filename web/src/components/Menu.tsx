@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import "./popup.css";
 import "./menu.css";
+import { useOverlay } from "../router/overlays";
 
 export interface MenuItem {
   id: string;
@@ -41,6 +42,7 @@ const MARGIN = 8;
 export default function Menu({ items, anchor, placement = "below", label, onPick, onClose }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
+  useOverlay(true, () => onClose(true));
   // The cursor starts on the current choice (the checked item), else on the first.
   const [cursor, setCursor] = useState(() => Math.max(0, items.findIndex((i) => i.checked)));
   const [pos, setPos] = useState<CSSProperties>({ left: anchor.left, top: anchor.bottom + 4, opacity: 0 });
