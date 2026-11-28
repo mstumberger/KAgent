@@ -1,5 +1,6 @@
 //! Tool implementations, grouped as in `docs/specs/tools.md`.
 
+pub mod agent_tell;
 pub mod agents;
 pub mod apps;
 pub mod background;
@@ -63,7 +64,7 @@ pub fn group_of(name: &str) -> &'static str {
         // The agent's own tools (tools.md sections 19 and 21): its lists and plans, and
         // the subagents and background tasks it starts.
         "todo_write" | "todo_read" | "plan_enter" | "plan_exit" => "agent",
-        "agent_run" | "agent_wait" | "agent_stop" | "agent_list" | "task_output" | "task_stop" => "agent",
+        "agent_run" | "agent_wait" | "agent_stop" | "agent_list" | "agent_tell" | "task_output" | "task_stop" => "agent",
         // Settings by chat or voice (tools.md section 19a, voice-control.md).
         "settings" | "local_models" | "usage" | "tickets" => "agent",
         // Memory and earlier conversations (tools.md section 18).
@@ -154,7 +155,7 @@ mod group_tests {
     /// the loop over `builtin_registry` above does not see them.
     #[test]
     fn the_agent_tools_belong_to_the_agent_group() {
-        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "task_output", "task_stop", "settings", "local_models", "usage", "tickets"] {
+        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "agent_tell", "task_output", "task_stop", "settings", "local_models", "usage", "tickets"] {
             assert_eq!(super::group_of(name), "agent", "{name} is a tool of the agent group");
         }
         assert!(crate::context::GROUP_PRIORITY.contains(&"agent"), "and the group is among those kept when the window is small");

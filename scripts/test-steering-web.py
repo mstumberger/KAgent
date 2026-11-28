@@ -82,12 +82,87 @@ async def see_checks(env, results, theme):
     results[f"{t}: and a finished call reads Last in the pane (the label follows the status)"] = await page.js("getComputedStyle(document.querySelector('.worker-doing'), '::before').content") == '"Last: "'
 
 
+async def tell_checks(env, results, theme):
+    page = env.page
+    t = f"1200x820 {theme}"
+    await env.size(1200, 820)
+    await env.open(theme, **cfg())
+    await child(page, "c1", "Disk usage", "explore", "running", lastAction=ACTION, files=FILES)
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule")
+    await page.click(".work-capsule")
+    await page.js("document.querySelector('.agent-row[data-child=c1] .work-line-main').click()")
+    await page.until("!!document.querySelector('form.worker-tell')", "the message box")
+    box = await page.js("""(() => { const f = document.querySelector('form.worker-tell'); const [send, interrupt] = f.querySelectorAll('button'); return {label: f.querySelector('textarea').getAttribute('aria-label'), send: send.textContent, interrupt: interrupt.textContent,
+        offEmpty: send.disabled && interrupt.disabled, inPane: !!f.closest('aside.side-pane')}; })()""")
+    results[f"{t}: the pane has a message box under the transcript with Send and Interrupt, both off while it is empty"] = box == {"label": "Tell Disk usage", "send": "Send", "interrupt": "Interrupt", "offEmpty": True, "inPane": True}
+    await page.shot(f"worker-tell-{theme}")
+    set_text = lambda v: f"""(() => {{ const i = document.querySelector('form.worker-tell textarea'); i.focus(); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(i, {json.dumps(v)}); i.dispatchEvent(new Event('input', {{bubbles: true}})); }})()"""
+    await page.js(set_text("leave the tests alone"))
+    results[f"{t}: typing enables both buttons"] = await page.js("[...document.querySelectorAll('form.worker-tell button')].every(b => !b.disabled)")
+    await page.js("document.querySelector('form.worker-tell button.primary').click()")
+    await page.until("document.querySelector('form.worker-tell textarea').value === ''", "the box clears")
+    results[f"{t}: Send posts the text with interrupt false and clears the box"] = 'POST /api/agents/c1/message {"text": "leave the tests alone", "interrupt": false}' in calls()
+    await page.js(set_text("use the other branch"))
+    await page.key("Enter", "Enter", 13, text="\r")
+    await page.until("document.querySelector('form.worker-tell textarea').value === ''", "Enter sends")
+    results[f"{t}: Enter in the box sends (a correction)"] = 'POST /api/agents/c1/message {"text": "use the other branch", "interrupt": false}' in calls()
+    await page.js(set_text("first line"))
+    await page.key("Enter", "Enter", 13, 8, text="\r")
+    results[f"{t}: Shift+Enter does not send"] = await page.js("document.querySelector('form.worker-tell textarea').value.startsWith('first line')") and len([c for c in calls() if "/message" in c]) == 2
+    await page.js(set_text("stop and do X"))
+    await page.js("document.querySelector('form.worker-tell button.danger').click()")
+    await page.until("document.querySelector('form.worker-tell textarea').value === ''", "the interrupt is sent")
+    results[f"{t}: Interrupt posts the text with interrupt true"] = 'POST /api/agents/c1/message {"text": "stop and do X", "interrupt": true}' in calls()
+    results[f"{t}: a message answers no approval: no call to the approvals route was made"] = not any("/api/approvals" in c for c in calls())
+    # receipts follow the events
+    st = lambda *states: [{"id": f"st_{i}", "text": txt, "interrupt": intr, "state": state, "at": NOW, "deliveredAt": NOW if state == "delivered" else None} for i, (txt, intr, state) in enumerate(states)]
+    await child(page, "c1", "Disk usage", "explore", "running", lastAction=ACTION, files=FILES, steering=st(("leave the tests alone", False, "queued"), ("stop and do X", True, "queued")))
+    await page.until("document.querySelectorAll('.worker-receipts li').length === 2", "the receipts")
+    got = await page.js("[...document.querySelectorAll('.worker-receipts li')].map(l => l.dataset.state + ':' + l.querySelector('.worker-receipt').textContent + ':' + !!l.querySelector('.worker-receipt-tag'))")
+    results[f"{t}: the owner's messages show with a receipt: queued, and the interrupt tagged"] = got == ["queued:queued:false", "queued:queued:true"]
+    await child(page, "c1", "Disk usage", "explore", "running", lastAction=ACTION, files=FILES, steering=st(("leave the tests alone", False, "delivered"), ("stop and do X", True, "queued")))
+    await page.until("document.querySelector('.worker-receipts li').dataset.state === 'delivered'", "the receipt changes")
+    results[f"{t}: a subagentUpdated turns the receipt from queued to delivered"] = await page.js("document.querySelector('.worker-receipts li .worker-receipt').textContent") == "delivered"
+    await page.shot(f"worker-receipts-{theme}")
+    # a refusal of the daemon
+    await env.open(theme, **dict(cfg(), tell_error=(409, "the worker already ended (done)")))
+    await child(page, "c1", "Disk usage", "explore", "running", lastAction=ACTION, files=FILES)
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule again")
+    await page.click(".work-capsule")
+    await page.js("document.querySelector('.agent-row[data-child=c1] .work-line-main').click()")
+    await page.until("!!document.querySelector('form.worker-tell')", "the box again")
+    await page.js(set_text("too late"))
+    await page.js("document.querySelector('form.worker-tell button.primary').click()")
+    await page.until("!!document.querySelector('.worker-tell-error')", "the refusal")
+    results[f"{t}: a refusal of the daemon is shown as an alert and the text stays"] = "the worker already ended (done)" in await page.js("document.querySelector('.worker-tell-error').textContent") and await page.js("document.querySelector('form.worker-tell textarea').value") == "too late"
+    # an ended worker, and one that waits for a slot
+    await child(page, "c1", "Disk usage", "explore", "done", lastAction=ACTION, files=FILES, steering=st(("never read", False, "queued")))
+    await page.until("document.querySelector('form.worker-tell textarea').disabled", "the box is off for an ended worker")
+    off = await page.js("(() => { const t = document.querySelector('form.worker-tell textarea'); return [t.placeholder, [...document.querySelectorAll('form.worker-tell button')].every(b => b.disabled), document.querySelector('.worker-receipts li .worker-receipt').textContent]; })()")
+    results[f"{t}: for an ended worker the box is off, says why, and a message it never read says so"] = off == ["The worker ended (done): it cannot read a message.", True, "ended before it read this"]
+    await child(page, "c1", "Disk usage", "explore", "queued")
+    await page.until("document.querySelector('form.worker-tell textarea').placeholder.includes('has not started')", "the box is off for a queued worker")
+    results[f"{t}: for a worker that waits for a slot it says it has not started"] = await page.js("document.querySelector('form.worker-tell textarea').disabled")
+    # keyboard: the box and its buttons are in the tab order, and have names
+    await child(page, "c1", "Disk usage", "explore", "running", lastAction=ACTION, files=FILES)
+    await page.until("!document.querySelector('form.worker-tell textarea').disabled", "the box is on again")
+    await page.js(set_text("x"))
+    await page.js("document.querySelector('form.worker-tell textarea').focus()")
+    seen = []
+    for _ in range(3):
+        seen.append(await page.js("(() => { const a = document.activeElement; return a.getAttribute('aria-label') || a.textContent.trim(); })()"))
+        await page.key("Tab", "Tab", 9)
+    results[f"{t}: the box, Send and Interrupt are reachable by keyboard, in that order"] = seen == ["Tell Disk usage", "Send", "Interrupt"]
+
+
 async def main():
     results = {}
     async with Env("kagent-steer", "/tmp/kagent-v003-steer-shots") as env:
         for theme in ("dark", "light"):
             await see_checks(env, results, theme)
-        errors = env.page.errors
+            await tell_checks(env, results, theme)
+        # The refusal the checks cause on purpose is logged by the browser as a failed load.
+        errors = [e for e in env.page.errors if not ("/api/agents/c1/message" in e and "status of 409" in e)]
         results["no console errors"] = not errors
         if errors:
             print("ERRORS", errors[:5])

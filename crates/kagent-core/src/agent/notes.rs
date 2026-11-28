@@ -33,6 +33,9 @@ pub enum NoteKind {
     Todo,
     /// The Brain's model changed.
     Brain,
+    /// The owner's message to a subagent (steering.md section 3): delivered at its next model request as
+    /// `[from the owner] ...`, never expires, is not counted in `MAX_PER_REQUEST` and is not an approval.
+    Steer,
 }
 
 impl NoteKind {
@@ -150,10 +153,15 @@ impl Notes {
         let s = all.get_mut(session)?;
         s.request += 1;
         let now = s.request;
-        s.pending.retain(|n| now.saturating_sub(n.queued_at) <= EXPIRES_AFTER);
+        s.pending.retain(|n| n.kind == NoteKind::Steer || now.saturating_sub(n.queued_at) <= EXPIRES_AFTER);
         let mut taken: Vec<Note> = Vec::new();
         let mut kept: Vec<Note> = Vec::new();
         for n in std::mem::take(&mut s.pending) {
+            // The owner's messages to a worker are `drain_steer`'s.
+            if n.kind == NoteKind::Steer {
+                kept.push(n);
+                continue;
+            }
             let cooling = s.last.get(&(n.kind, n.key.clone())).is_some_and(|at| now - at <= n.kind.cooldown());
             if taken.len() < MAX_PER_REQUEST && !cooling {
                 taken.push(n);
@@ -172,10 +180,35 @@ impl Notes {
         Some(Message::user(format!("{HEADER}\n{}", lines.join("\n"))).with_via(Via::Note))
     }
 
+    /// The owner's message `text` to a worker (steering.md section 3), under the receipt `id`.
+    pub fn push_steer(&self, session: &str, id: &str, text: &str) {
+        let mut all = self.sessions.lock().unwrap();
+        let s = all.entry(session.to_string()).or_default();
+        let queued_at = s.request;
+        s.pending.push(Note { kind: NoteKind::Steer, key: id.to_string(), text: text.to_string(), queued_at });
+    }
+
+    /// Take the owner's messages to a worker, oldest first: `(receipt id, text)`. All of them: they never wait for a
+    /// later request, and they are not counted in `MAX_PER_REQUEST`.
+    pub fn drain_steer(&self, session: &str) -> Vec<(String, String)> {
+        let mut all = self.sessions.lock().unwrap();
+        let Some(s) = all.get_mut(session) else { return Vec::new() };
+        let (steer, rest): (Vec<Note>, Vec<Note>) = std::mem::take(&mut s.pending).into_iter().partition(|n| n.kind == NoteKind::Steer);
+        s.pending = rest;
+        steer.into_iter().map(|n| (n.key, n.text)).collect()
+    }
+
     /// The session is gone.
     pub fn forget(&self, session: &str) {
         self.sessions.lock().unwrap().remove(session);
     }
+}
+
+/// The one stored message the owner's steering messages become: a line `[from the owner] <text>` each, `via: note`
+/// (it is not a turn). Compaction keeps it (`compact::without_notes`): it is an instruction, not about a moment.
+pub fn steer_message(texts: &[String]) -> Message {
+    let lines: Vec<String> = texts.iter().map(|t| format!("{STEER_PREFIX}{}", t.trim().replace('\n', " "))).collect();
+    Message::user(lines.join("\n")).with_via(Via::Note)
 }
 
 /// The note of an owner message that arrived while the turn runs (`text` is cut to 200 characters).
@@ -280,6 +313,29 @@ mod tests {
         assert!(text(&n.drain("s").unwrap()).ends_with("- The Brain is now qwen2.5:7b."));
         n.brain_check("s", "ollama::qwen2.5:7b");
         assert!(n.drain("s").is_none(), "once");
+    }
+
+    #[test]
+    fn the_owners_messages_to_a_worker_never_expire_are_not_capped_and_come_as_their_own_message() {
+        let n = Notes::default();
+        for i in 0..5 {
+            n.push_steer("s", &format!("st_{i}"), &format!("message {i}"));
+        }
+        n.push("s", NoteKind::Setting, "k", "a daemon note".into());
+        for _ in 0..EXPIRES_AFTER + 5 {
+            let _ = n.drain("s");
+        }
+        // The drain of the daemon's notes never takes them, however long they wait.
+        let got = n.drain_steer("s");
+        assert_eq!(got.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), ["st_0", "st_1", "st_2", "st_3", "st_4"], "all five, in order, past the cap of three and the expiry");
+        assert!(n.drain_steer("s").is_empty(), "once");
+        let m = steer_message(&got.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>());
+        assert_eq!((m.role, m.via, m.is_user_turn()), (crate::protocol::Role::User, Via::Note, false));
+        assert_eq!(m.content.lines().next(), Some("[from the owner] message 0"));
+        assert_eq!(m.content.lines().count(), 5);
+        assert!(!m.content.contains("not from the owner"), "not the daemon's header");
+        // A newline inside a message does not start a second line.
+        assert_eq!(steer_message(&["a\nb".into()]).content, "[from the owner] a b");
     }
 
     #[test]

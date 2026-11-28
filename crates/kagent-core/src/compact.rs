@@ -135,9 +135,9 @@ pub fn should_compact(h: &History<'_>, t: &Trigger) -> Plan {
 }
 
 /// The messages a summary is made of: the notes of the daemon are left out (agent-loop.md C.1), they
-/// were about the moment they were written.
+/// were about the moment they were written. The owner's messages to a worker are kept (steering.md section 3).
 pub fn without_notes(messages: &[Message]) -> Vec<Message> {
-    messages.iter().filter(|m| m.via != crate::protocol::Via::Note).cloned().collect()
+    messages.iter().filter(|m| m.via != crate::protocol::Via::Note || m.content.starts_with(crate::agent::notes::STEER_PREFIX)).cloned().collect()
 }
 
 /// The cut of a compaction by hand or on a capacity error (compaction.md sections 1

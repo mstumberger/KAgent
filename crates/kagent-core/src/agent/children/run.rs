@@ -146,7 +146,7 @@ impl Agent {
             block: subagent_block(description, &req.profile),
             text: Some(job_text(&digest, prompt)),
         };
-        let (run_now, view) = self.children.insert(Child { parent: req.parent.clone(), view, job, started: None, end: watch::channel(None).0, last_emit: None });
+        let (run_now, view) = self.children.insert(Child { parent: req.parent.clone(), view, job, started: None, end: watch::channel(None).0, last_emit: None, interrupted: false });
         if run_now {
             self.launch_child(&id).await;
         } else {
@@ -198,6 +198,14 @@ impl Agent {
     /// child tells nobody: it was stopped on purpose), then tell the UI, so that whoever
     /// hears a child ended knows its parent was told.
     async fn child_ended(self: &Arc<Self>, id: &str, result: TurnResult) {
+        // The owner interrupted it (steering.md section 4): the cancelled turn was followed by one that holds the
+        // owner's message, started where the session settled. The child goes on; what ends is the last of them.
+        let mut result = result;
+        if self.children.take_interrupt(id) {
+            let read = self.children.queued_interrupts(id);
+            self.steer_delivered(id, &read);
+            result = self.wait_idle(id).await;
+        }
         let answer = self.answer(id).await;
         let (status, output) = match result.status {
             TurnStatus::Completed => (ChildStatus::Done, answer),

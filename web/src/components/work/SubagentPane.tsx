@@ -9,6 +9,7 @@ import Icon from "../Icon";
 import { Bubble } from "../transcript";
 import { readSession, type SideTab } from "./state";
 import WorkerInfo from "./WorkerInfo";
+import WorkerTell from "./WorkerTell";
 import { useFollow } from "./useFollow";
 
 const NO_MESSAGES: Message[] = [];
@@ -63,6 +64,7 @@ export default function SubagentPane({ tab }: { tab: SideTab }) {
         ))}
         {running && streaming && messages[messages.length - 1]?.role === "user" && <Bubble m={{ role: "assistant", content: "" }} streaming={streaming} />}
       </div>
+      <WorkerTell child={card} title={card?.title ?? tab.title} />
       {!following && (
         <button type="button" className="pane-jump" aria-label="Jump to the end" title="Jump to the end" onClick={resume}>
           <Icon name="arrowDown" size={14} />
