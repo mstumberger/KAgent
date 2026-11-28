@@ -165,6 +165,12 @@ title, the profile (`general`, `explore`, `claude-edit`...), the state, the time
 `stopSubagent`). The count in the header: "2 of 3 running", or "3". A click on the line
 opens its Subagent tab (5.4). With no child: "No agents yet".
 
+Since v0.0.3 (`steering.md` section 6) a line that has a last action shows a second line under it, "Doing: <summary>" while a call
+runs and "Last: <summary>" after, with the count of files its calls named; the Subagent tab becomes the worker pane: a block above
+the transcript (job, what it is doing, files, its own todo list, recent steps, from `GET /api/sessions/:id/subagents/:child`) and a
+message box under it (Send corrects, Interrupt cancels and resumes) with the receipts of the owner's messages. The transcript
+itself is unchanged, and the pane has no composer.
+
 **Background** (`components/work/BackgroundSection.tsx`). One line per task of
 `GET /api/sessions/:id/background`: the `terminal` icon, the command (one line,
 monospace, 12 px, cut with an ellipsis, the whole command in `title`), the state

@@ -23,10 +23,11 @@ only renders it. Comments on lines and "Approve" belong to the workflow stage an
 - Three lines of context. Hunks are what the view shows; the lines between hunks are "collapsed unchanged regions": the view
   shows "N unchanged lines" with an expand button that asks for nothing more when the file text is also sent (section 3).
 - A **binary** file (git says so, or the text has a NUL byte) and a file whose text is over 1 MB (each side for a text diff;
-  the git patch of one file for a repository) carry only `path`, `status`, `binary` or `tooLarge` and the line counts
-  (`added`, `removed`: `null` for a binary file), with no `hunks`.
-- The total patch read from git is capped at 8 MB: more sets `truncated: true` and drops the files that do not fit (their
-  names stay with `tooLarge`). At most 500 files; the rest set `truncated`.
+  the git patch of one file for a repository) carry only `path`, `status`, `binary` or `tooLarge` and the line counts, with no
+  `hunks`. The counts are `null` for a binary file and for a text diff that is too large; a git patch that is too large keeps
+  the counts of its `+` and `-` lines.
+- The total patch read from git is capped at 8 MB (the exec helper keeps the end of what it captured): more sets `truncated: true`
+  and drops what came before the first whole file it kept. At most 500 files; the rest set `truncated`.
 
 ## 2. The line diff (`kagentd/src/diff/lines.rs`)
 
@@ -58,27 +59,29 @@ Body (`deny_unknown_fields`): `{"project": "<path>", "from": "<ref>", "to"?: "<r
 - `project` must be **one of the projects list** (`xdg::projects` over `settings.desktop.projectRoots`, as `GET /api/projects`
   lists them), compared after `canonicalize`; else 400 "not a known project". It must be a git work tree (`git rev-parse
   --is-inside-work-tree`), else 409 `conflict` "not a git repository".
-- A ref is validated before git sees it: 1 to 200 characters of `A-Z a-z 0-9 . _ / ~ ^ @ { } -`, not starting with `-`, no
-  `..`, no `@{` followed by anything but `u`, `upstream`, `push` or digits and `}`. Anything else is 400 (`a ref cannot
+- A ref is validated before git sees it (`kagentd/src/gitref.rs`, also used for the `range` links of a ticket): 1 to 200 characters
+  of `A-Z a-z 0-9 . _ / ~ ^ @ { } -`, not starting with `-`, no `..`, no `//`, no trailing `/` or `.lock`, no `@{` followed by
+  anything but `u`, `upstream`, `push` or digits and `}`. Anything else is 400 (`a ref cannot
   start with '-'`, ...). Then `git rev-parse --verify --quiet <ref>^{commit}` with `--end-of-options`; a ref that does not
   resolve is 400 "unknown ref".
 - With `to`: the changes from `from` to `to` (`git diff from to`). Without it: the **working tree** against `from`.
 - Everything runs through the one exec helper (`kagent_core::tools::exec`, a timeout of 20 s, `git -C <project>`, never a
-  shell, `GIT_OPTIONAL_LOCKS=0`, `--no-ext-diff --no-textconv --no-color -M`, `-c core.quotepath=false`), read-only: no
+  shell, `GIT_OPTIONAL_LOCKS=0`, `--no-ext-diff --no-textconv --no-color -M`, `--no-pager --no-optional-locks -c core.quotepath=false -c core.fsmonitor=false`,
+  so nothing a repository's own configuration names runs), read-only: no
   `git add`, `checkout`, `reset`, `stash` or any write; the daemon never writes into the repository. The commands are
   `rev-parse`, `diff --numstat`, `diff -U3`.
 - The parser reads the unified output: `diff --git` blocks, `new file mode`, `deleted file mode`, `rename from/to`,
   `Binary files ... differ`, `@@ -a,b +c,d @@ header`, `\ No newline at end of file`. A path with spaces or a non-ASCII name
   works (no quoting, `core.quotepath=false`).
 
-The answer is `{"project", "from", "to", "diff": Diff}`.
+The answer is `{"project", "from", "to", "diff": Diff}`. A single `range` link `x` of a ticket (no `..`) is the working tree against `x`.
 
 ## 5. The component `DiffView` (`web/src/components/diff/`)
 
 - Props: a `Diff`, optionally the two texts of each file, `onOpenEditor(path, line)`, `onRevert(path)`.
 - Left: a **file tree** (folders collapsed by their common prefix), each file with a mark (`A`, `M`, `D`, `R`) and `+n -m`;
   a click scrolls to the file; the focused file is marked `aria-current`.
-- Right: per file a header (path, counts) and its hunks as **side by side** (two columns with line numbers; a changed pair
+- Right: per file a header (path, counts, **Open in editor** and, on a journal change, **Revert file**) and its hunks as **side by side** (two columns with line numbers; a changed pair
   on one row, an addition or a removal against an empty cell) or **unified**. A toggle **Side by side | Unified**, remembered
   in this browser (`localStorage`, wrapped in try/catch). Intra-line ranges are drawn as a stronger background of the
   characters. Colours work in dark and light and never carry the meaning alone (a `+` and a `-` sign in the gutter).
@@ -88,6 +91,9 @@ The answer is `{"project", "from", "to", "diff": Diff}`.
   with labels; they move the focus to the next or previous change block across files and show "change 3 of 12".
 - No syntax colours: `web/package.json` has no highlighter and none is added.
 - Binary and too-large files show their summary line ("binary file, not shown", "over 1 MB, not shown").
+- A line number of the new side opens the editor at that line (the old side is no link: the editor shows the file as it is now); the
+  file header's **Open in editor** opens its first changed line. The tree is a `role=navigation` region, not a `nav` element (the
+  global `nav` style is the sidebar's pill).
 - Actions: **Open in editor** on a line (the `open_in_editor` path, `POST /api/ui/tools/open_in_editor/call {path, line}`), and
   **Revert file** on a journal change (the existing undo, `POST /api/changes/:id/undo`, which asks). Comments and Approve are not
   built.

@@ -30,6 +30,7 @@ first three are done first.
 - [ ] A list of tickets per project (key, state, priority, notes), beside the
   conversation's working todo list; "add to the todo" goes there; the board shows it
   as the project's backlog.
+  Built: the store, `/api/tickets`, the tool `tickets` and the Tickets view (list, board, Mine now, detail pane) (v0.0.3, `specs/tickets.md`).
 - [ ] Footprint: a hidden window is closed, scans follow package changes, helper
   programs become file reads, idle timers stretch, old data is pruned by settings;
   workers run in their own systemd scopes.
@@ -101,6 +102,7 @@ first three are done first.
   run creates); side-by-side diffs per ticket with comments that go back to the
   worker; seeing, correcting and interrupting a running worker; a change to a ticket
   proposes starting a worker or telling the one already on it.
+  Built: tickets per project, the side-by-side diff view (journal changes and git ranges) and steering of today's subagents (see, tell, interrupt) (v0.0.3, `specs/tickets.md`, `diff.md`, `steering.md`); runs as tickets, comments, related work, align on change and the Jira mirror are not built.
 - [ ] Models of every kind: each model declares what it takes and makes (text, image,
   audio, video, embedding); image, speech, listening, music and video are jobs with
   routes; four tools make media; every result is an artifact shown in chat; speech

@@ -473,3 +473,32 @@ Changes to earlier answers (additions only):
 
 `usageChanged` is sent at once when a limit of the provider appeared, went away or changed level, and otherwise at most every 30
 seconds per provider while answers keep coming (the counters moved). A window reads `GET /api/usage` again.
+
+## 12. Tickets, diffs and steering (v0.0.3)
+
+Specs: `tickets.md`, `diff.md`, `steering.md`. Same transport, auth and error shape as section 3.
+
+| Method path | Request | Response |
+|---|---|---|
+| GET `/api/tickets` | query `project` (a path or `inbox`), `state`, `label`, `q` | `{projects: [{id, path, name, prefix, count}], tickets: [Ticket]}` |
+| POST `/api/tickets` | `{project?, title, description?, state?, priority?, labels?, parent?, links?, assignee?, doneWhen?}` | `201` Ticket; 400 for a folder that is not one, a limit, a bad field; 409 at 500 tickets |
+| PUT `/api/tickets/:key` | any of those but `project`, and `note?` | Ticket; 404 unknown key |
+| DELETE `/api/tickets/:key` | | `204`; 404 |
+| GET `/api/changes/:id/diff` | | `{id, path, after: "stored" \| "now", before, afterText, diff: Diff}`; 404; 409 when the change is no file edit or its copy is gone |
+| POST `/api/diff` | `{project, from, to?}` | `{project, from, to, diff: Diff}`; 400 for a project that is not in the projects list or a ref that is refused; 409 for a folder that is not a git repository |
+| GET `/api/sessions/:id/subagents` | | `{children: [ChildView]}` with `lastAction`, `files`, `steering` |
+| GET `/api/sessions/:id/subagents/:child` | | `{child: ChildView, job, todo: [TodoItem], transcript: [{role, kind, text, status?}]}`; 404 for a child of another session |
+| POST `/api/agents/:id/message` | `{text, interrupt?}` | `202 {id, state}`; 404 not a subagent; 409 it ended or has not started; 400 an empty or too long text |
+
+`Diff` is `{files: [{path, oldPath, status, binary, tooLarge, added, removed, hunks: [{oldStart, oldLines, newStart, newLines, header,
+lines: [{kind, old, new, text, ranges?}]}]}], added, removed, truncated}` (`diff.md` section 1). `ChildView` gains `lastAction`
+(`{tool, summary, status, at}`), `files` (`[{path, changed}]`) and `steering` (`[{id, text, interrupt, state, at, deliveredAt}]`),
+each left out when empty.
+
+```json
+{"type":"ticketChanged","key":"KA-12","project":"/home/me/code/kagent","removed":false}
+```
+
+`ticketChanged` goes out after every create, change and delete, also one by the `tickets` tool; a window reads `GET /api/tickets`
+again. `subagentUpdated` is also sent for the progress of a running subagent (its last action, its files, the receipts of the owner's
+messages) with an unchanged `status`; the start of a call at most every 500 ms per child.

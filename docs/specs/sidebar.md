@@ -525,6 +525,12 @@ differ.
   things; the permission mode changes from the sidebar foot in the full and the
   collapsed state; the keyboard order is toggle, Stop all, voice chip, then the sidebar.
 
+### Amendment 2026-11-28 (v0.0.3): the Tickets entry
+
+The views under the list are now eight: Voice, Tasks, **Tickets**, Alerts, Changes, Security, System, Settings (`nav.ts` `VIEWS`,
+the daemon's `ui.rs` allow-list, the icon `list`). The view is `tickets.md` section 6. `scripts/test-sidebar-web.py` expects the
+eight and, since the list is one entry shorter, scrolls the row it right-clicks into view.
+
 ### Amendment 2026-11-28 (v0.0.3): the window controls come last
 
 In the app window the window controls (Shrink to widget, Hide to tray, Maximize) come last in
