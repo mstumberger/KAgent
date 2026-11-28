@@ -87,10 +87,69 @@ async def marker_checks(env, results):
     await page.shot("refused")
 
 
+ROW = lambda label: f"[...document.querySelectorAll('.ui-row')].find(r => r.querySelector('.ui-row-label').textContent === {json.dumps(label)})"
+
+
+def saved():
+    """What the daemon (or its stand-in) holds now: (listenOnStart, idle minutes, spoken)."""
+    s = json.loads(lib.daemon("GET", "/api/state")[1])["settings"]
+    return ((s.get("voice") or {}).get("listenOnStart", False), (s.get("voice") or {}).get("listenOnStartIdleMinutes", 10), ((s.get("startup") or {}).get("greeting") or {}).get("spoken", False))
+
+
+async def card_checks(env, results, theme, w, h):
+    page = env.page
+    t = f"{theme} {w}x{h}"
+    await env.size(w, h)
+    lib.STUB["settings"].pop("voice", None)
+    lib.STUB["settings"].get("startup", {}).get("greeting", {}).pop("spoken", None)
+    await env.open(theme, ready=".ui-section-scroll", hash="&view=settings&section=voice")
+    await page.until(f"!!{ROW('Listen on start')}", "the card At start")
+    toggle = lambda label: f"{ROW(label)}.querySelector('input[type=checkbox]')"
+    idle = f"{ROW('Stop after')}.querySelector('input')"
+    results[f"{t}: the card has its three controls and the sentence"] = await page.js(
+        f"!!{toggle('Listen on start')} && !!{idle} && !!{toggle('Say the greeting out loud')} && document.body.textContent.includes(\"The microphone turns on by itself after login. The chip in the title bar and the tray icon show it; say 'stop listening' or click the chip to end it.\")")
+    results[f"{t}: everything is off by default and the idle time is 10"] = await page.js(f"!{toggle('Listen on start')}.checked && !{toggle('Say the greeting out loud')}.checked && {idle}.value === '10'") and saved() == (False, 10, False)
+    results[f"{t}: the greeting switch and the idle time are disabled and say why"] = await page.js(f"{toggle('Say the greeting out loud')}.disabled && {idle}.disabled && {ROW('Say the greeting out loud')}.textContent.includes('Needs Listen on start')")
+    await page.shot(f"card-off-{theme}-{w}")
+    await page.js(f"{toggle('Listen on start')}.click()")
+    await page.until(f"{toggle('Listen on start')}.checked && !{toggle('Say the greeting out loud')}.disabled", "Listen on start saved and the others enabled")
+    results[f"{t}: Listen on start is saved by the daemon"] = saved()[0] is True
+    results[f"{t}: with it on, the greeting switch and the idle time are enabled"] = await page.js(f"!{idle}.disabled")
+    await page.js(f"{toggle('Say the greeting out loud')}.click()")
+    await page.until(f"{toggle('Say the greeting out loud')}.checked", "the greeting switch")
+    results[f"{t}: the spoken greeting is saved under startup.greeting"] = saved()[2] is True
+    await page.js(f"(() => {{ const i = {idle}; i.focus(); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, '45'); i.dispatchEvent(new Event('input', {{bubbles: true}})); }})()")
+    await page.js(f"{idle}.dispatchEvent(new FocusEvent('focusout', {{bubbles: true}}))")
+    for _ in range(50):
+        if saved()[1] == 45:
+            break
+        await asyncio.sleep(0.1)
+    results[f"{t}: 45 minutes is saved"] = saved()[1] == 45
+    type_in = lambda text: f"(() => {{ const i = {idle}; i.focus(); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, {json.dumps(text)}); i.dispatchEvent(new Event('input', {{bubbles: true}})); }})()"
+    for bad in ("0", "121", ""):
+        # The field is made again when a save comes back (its key is the saved value): type until the text stays.
+        for _ in range(40):
+            await page.js(type_in(bad))
+            if await page.js("document.body.textContent.includes('A whole number from 1 to 120.')"):
+                break
+            await asyncio.sleep(0.1)
+        await page.until("document.body.textContent.includes('A whole number from 1 to 120.')", f"the refusal of {bad!r}")
+        await page.js(f"{idle}.dispatchEvent(new FocusEvent('focusout', {{bubbles: true}}))")
+        await asyncio.sleep(0.3)
+        results[f"{t}: {bad!r} minutes is refused and nothing is saved"] = saved()[1] == 45
+    await page.js(f"{toggle('Listen on start')}.click()")
+    await page.until(f"!{toggle('Listen on start')}.checked", "Listen on start off again")
+    results[f"{t}: switched off again, saved, and the greeting switch is disabled"] = saved()[0] is False and await page.js(f"{toggle('Say the greeting out loud')}.disabled")
+    await page.shot(f"card-{theme}-{w}")
+
+
 async def main():
     results = {}
     async with Env("kagent-listen", SHOTS) as env:
         await marker_checks(env, results)
+        for theme in ("dark", "light"):
+            await card_checks(env, results, theme, 1200, 820)
+        await card_checks(env, results, "dark", 700, 500)
         results["no console errors"] = not env.page.errors
         if env.page.errors:
             print("ERRORS", env.page.errors[:5])

@@ -215,9 +215,9 @@ export interface Settings {
   approvalTimeoutSec?: number;
   options: { reasoningLevel?: string | null; maxOutputTokens?: number | null; temperature?: number | null };
   persona: { name: string; address: string; language: string };
-  startup?: { autostart: boolean; greeting: { enabled: boolean; text: string } };
+  startup?: { autostart: boolean; greeting: { enabled: boolean; text: string; spoken?: boolean } };
   /** Who thinks in a voice session (voice.md section 1). */
-  voice?: { brain?: VoiceBrain; toolGroups?: string[]; context?: boolean; vocabulary?: boolean; pauseMedia?: boolean; volume?: number };
+  voice?: { brain?: VoiceBrain; toolGroups?: string[]; context?: boolean; vocabulary?: boolean; pauseMedia?: boolean; volume?: number; listenOnStart?: boolean; listenOnStartIdleMinutes?: number };
   /** settings.browser: the DevTools port and binary of KAgent's own window (empty = detect); `backend` (S27): `own` = that window, `attach` = the owner's running browser, with `attachProfile` = its user data folder (empty: the first found) and `attachTrust` `strict` | `normal` (browser.md). */
   browser?: { port?: number; binary?: string; backend?: "own" | "attach"; attachProfile?: string; attachTrust?: "strict" | "normal" };
   /** settings.telegram (bots.md): the Telegram bot, off until the owner pairs a chat. */
