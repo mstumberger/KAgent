@@ -6,6 +6,13 @@ import { voice } from "../voice/controller";
 
 export type NoticeKind = "error" | "recovery" | "info";
 
+/** A button of a notice: the window posts `body` to `path` of the daemon when it is pressed. */
+export interface NoticeAction {
+  label: string;
+  path: string;
+  body?: unknown;
+}
+
 export interface Toast {
   id: number;
   /** What makes two notices the same one; `null` is never merged. */
@@ -18,6 +25,7 @@ export interface Toast {
   /** The time of the latest, ms since the epoch. */
   at: number;
   sessionId: string | null;
+  action: NoticeAction | null;
 }
 
 /** A notice as the event carries it; the page's own failures give `text` alone. */
@@ -27,6 +35,7 @@ export interface Notice {
   key?: string | null;
   sessionId?: string | null;
   kind?: NoticeKind | string | null;
+  action?: NoticeAction | null;
 }
 
 /** An `info` or `recovery` toast closes after this long (notices.md section 2). */
@@ -101,10 +110,10 @@ export function pushNotice(n: Notice) {
   let list = kind === "recovery" && key ? toasts.filter((t) => !(t.key === key && t.kind === "error")) : toasts;
   const same = key ? list.find((t) => t.key === key && t.kind === kind) : undefined;
   if (same) {
-    const merged = { ...same, count: same.count + 1, text: n.text, at, sessionId: n.sessionId ?? same.sessionId };
+    const merged = { ...same, count: same.count + 1, text: n.text, at, sessionId: n.sessionId ?? same.sessionId, action: n.action ?? same.action };
     list = [merged, ...list.filter((t) => t !== same)];
   } else {
-    list = [{ id: next++, key, level: n.level ?? "info", kind, text: n.text, count: 1, at, sessionId: n.sessionId ?? null }, ...list];
+    list = [{ id: next++, key, level: n.level ?? "info", kind, text: n.text, count: 1, at, sessionId: n.sessionId ?? null, action: n.action ?? null }, ...list];
   }
   set(list);
   // An error is said once per key in a live session, by the status line of the voice.

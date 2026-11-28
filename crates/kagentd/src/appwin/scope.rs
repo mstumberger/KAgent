@@ -43,4 +43,13 @@ mod tests {
         assert_eq!(in_own_scope(argv.clone(), false, Some(run)), argv, "not under systemd: as it is");
         assert_eq!(in_own_scope(argv.clone(), true, None), argv, "no systemd-run: as it is");
     }
+
+    #[test]
+    fn the_reader_names_its_own_scope() {
+        let argv = vec!["/usr/bin/brave-browser".to_string(), "--headless=new".into()];
+        let a = in_scope_named(argv.clone(), true, Some(Path::new("/usr/bin/systemd-run")), "KAgent reader");
+        assert_eq!(a[5], "--description=KAgent reader");
+        assert_eq!(a[7..], argv[..]);
+        assert_eq!(in_scope_named(argv.clone(), false, Some(Path::new("/usr/bin/systemd-run")), "KAgent reader"), argv);
+    }
 }

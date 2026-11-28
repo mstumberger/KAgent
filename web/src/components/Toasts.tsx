@@ -3,7 +3,8 @@
 // key is one toast with a count. Escape closes the focused one.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Icon from "./Icon";
-import { dismiss, dismissAll, INFO_MS, SHOWN, useToasts, type Toast } from "./toasts";
+import { api } from "../api";
+import { dismiss, dismissAll, INFO_MS, notify, SHOWN, useToasts, type Toast } from "./toasts";
 import { openSession, setView, useStore } from "../store";
 import "./toasts.css";
 
@@ -51,6 +52,22 @@ function ToastItem({ toast, open }: { toast: Toast; open: boolean }) {
           {(clipped || more) && (
             <button type="button" className="toast-link" aria-expanded={more} onClick={() => setMore(!more)}>
               {more ? "less" : "more"}
+            </button>
+          )}
+          {toast.action && (
+            <button
+              type="button"
+              className="toast-link toast-action"
+              onClick={() => {
+                const action = toast.action;
+                if (!action) return;
+                api.post(action.path, action.body).then(
+                  () => dismiss(toast.id),
+                  (e) => notify(`${action.label} failed: ${e instanceof Error ? e.message : String(e)}`),
+                );
+              }}
+            >
+              {toast.action.label}
             </button>
           )}
           {open && (

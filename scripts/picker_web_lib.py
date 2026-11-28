@@ -48,6 +48,8 @@ UPLOADS = []
 # The local models page (S47; set with `reset(local=<the view of GET /api/local-models>)`): the view the mock answers and changes
 # as the page downloads, cancels, removes and sets a model. Empty: the routes fall through to the daemon.
 LOCAL = {}
+# Routes a suite adds to the mock: callables (method, path, body) -> (status, body) or None; checked before the daemon routes.
+ROUTES = []
 # The model keys the page saved with PUT /api/settings (chooser.md section 1), in order, as JSON text.
 SETTING_PUTS = []
 # The screen watch (S48; set with `reset(watch=<the watch of GET /api/screen-watch>, watch_model=<GET /api/screen-watch/model>)`):
@@ -356,6 +358,26 @@ def stub(method, path, body):
         return j(200, {"templates": []})
     if path == "/api/ui/report":
         return j(200, {"ok": True})
+    # What views and settings pages read when they open: the stand-in has nothing, which is an empty answer, not a 404 (the browser logs a 404 as a console error).
+    if method == "GET" and path == "/api/agents":
+        return j(200, {"agents": [], "invalid": []})
+    if method == "GET" and path == "/api/tools":
+        return j(200, {"tools": []})
+    if method == "GET" and path == "/api/usage":
+        return j(200, {"providers": []})
+    if method == "GET" and path == "/api/screen-watch":
+        return j(200, None)
+    if method == "GET" and path == "/api/sentinel":
+        return j(200, {"honeytokens": [], "baseline": False})
+    if method == "GET" and path == "/api/doctor":
+        return j(200, {"score": 100, "checks": []})
+    if method == "GET" and path == "/api/net":
+        return j(200, {"configured": False, "config": {"host": "", "user": "kagent-ro", "fingerprint": "", "flowPort": 2055, "honeypotIp": "", "trapUser": "", "https": True}, "router": {"ok": False}})
+    if method == "GET" and path == "/api/system":
+        return j(200, {"hostname": "stub", "distro": "Linux", "kernel": "0", "arch": "x86_64", "user": "me", "uptimeHours": 1, "loadAvg": ["0", "0", "0"], "cpu": {"model": "stub", "logicalCores": 1},
+                       "memoryMiB": {"total": 1, "available": 1, "swapTotal": 0, "swapFree": 0}, "temperatures": [], "battery": None})
+    if method == "GET" and path == "/api/local-models":
+        return j(200, {"ollama": {"reachable": False, "version": None, "baseUrl": "http://127.0.0.1:11434"}, "gpu": None, "ramTotalMb": 0, "installed": [], "recommended": [], "pulls": []})
     return j(404, {"error": {"code": "not_found", "message": f"{path} (stub)"}})
 
 
@@ -454,6 +476,10 @@ class Mock(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/api/usage" and method == "GET":
             return self.send(200, CFG.get("usage") or {"providers": []})
+        for extra in ROUTES:
+            out = extra(method, path, body)
+            if out:
+                return self.send(out[0], out[1], "application/json")
         if path == "/__settingputs":
             return self.send(200, {"puts": SETTING_PUTS})
         if path == "/api/settings" and method == "PUT" and any(k in (body or {}) for k in ("chatModel", "fallbackModel", "fastModel", "visionModel", "usage")):
