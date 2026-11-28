@@ -7,6 +7,7 @@ mod bots;
 mod calendar;
 mod local_models;
 mod usage;
+mod diff;
 mod gitref;
 mod tickets;
 mod background_api;

@@ -316,7 +316,9 @@ impl Tool for WriteFile {
         tokio::fs::write(&path, &new_content).await?;
         super::seen::remember(&ctx.session_id, &path.display().to_string());
         let undo = json!({"kind": "user", "action": "restore_file", "path": path, "backup": backup});
-        record_user(&ctx, "write_file", &format!("{mode} {}", path.display()), json!({"kind": "user", "action": "write_file", "path": path, "bytes": new_content.len()}), true, Some(undo), prev.map(|p| format!("{} bytes", p.len())), Some(format!("{} bytes", new_content.len())), "")
+        // The text that was written, for the diff view (diff.md section 3).
+        let after_backup = backup_file(&ctx, &new_content)?;
+        record_user(&ctx, "write_file", &format!("{mode} {}", path.display()), json!({"kind": "user", "action": "write_file", "path": path, "bytes": new_content.len(), "afterBackup": after_backup}), true, Some(undo), prev.map(|p| format!("{} bytes", p.len())), Some(format!("{} bytes", new_content.len())), "")
     }
 }
 
@@ -407,7 +409,8 @@ impl Tool for EditFile {
         tokio::fs::write(&p, &updated).await?;
         super::seen::remember(&ctx.session_id, &p.display().to_string());
         let undo = json!({"kind": "user", "action": "restore_file", "path": p, "backup": backup});
-        record_user(&ctx, "edit_file", &format!("edit {}", p.display()), json!({"kind": "user", "action": "edit_file", "path": p}), true, Some(undo), None, None, &diff)
+        let after_backup = backup_file(&ctx, &updated)?;
+        record_user(&ctx, "edit_file", &format!("edit {}", p.display()), json!({"kind": "user", "action": "edit_file", "path": p, "afterBackup": after_backup}), true, Some(undo), None, None, &diff)
     }
 }
 
