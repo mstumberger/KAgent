@@ -252,7 +252,7 @@ async fn run() -> anyhow::Result<()> {
     let settings_cell = Arc::new(std::sync::OnceLock::new());
     registry.register(Arc::new(screen::Screen::new(providers.clone(), settings_cell.clone(), &paths.data)));
     // The web tools (web.md): they read settings.search from the same cell.
-    let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config));
+    let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config, &paths.data));
     registry.register(web.fetch_tool());
     registry.register(web.search_tool());
     // Google Calendar (calendar.md): the tools are registered now and find the module once it exists.
@@ -514,7 +514,10 @@ async fn run() -> anyhow::Result<()> {
         });
     }
     let audit_on_exit = audit.clone();
+    let web_on_exit = state.web.clone();
     let r = server::serve(state).await;
+    // The reader's browser is closed with the daemon (web.md section 8).
+    web_on_exit.shutdown().await;
     // Every background task gets TERM, and KILL if it is still there 2 s later (agents.md section 4).
     kagent_core::tools::background::Background::shared().shutdown().await;
     watch_cancel.cancel();

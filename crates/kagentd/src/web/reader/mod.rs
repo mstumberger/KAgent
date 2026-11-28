@@ -126,7 +126,7 @@ impl PageReader for Reader {
             *state = Some(browser::start_headless(&bin, &self.profile()).await.map_err(ReaderError::Failed)?);
         }
         let port = state.as_ref().map(|r| r.port).unwrap_or_default();
-        let result = tokio::time::timeout(READ_LIMIT, drive::read(port, url, Duration::from_millis(self.challenge_wait_ms.load(Ordering::SeqCst)))).await.unwrap_or(Err(ReaderError::Timeout));
+        let result = tokio::time::timeout(READ_LIMIT, drive::read(port, url, self.egress.clone(), Duration::from_millis(self.challenge_wait_ms.load(Ordering::SeqCst)))).await.unwrap_or(Err(ReaderError::Timeout));
         if !state.as_mut().is_some_and(Running::alive) {
             *state = None;
         }

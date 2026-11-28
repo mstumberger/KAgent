@@ -111,3 +111,5 @@ async fn a_challenge_that_clears_is_read_and_one_that_stays_is_a_challenge() {
     assert_eq!(reader.render(&fake.url("/stays")).await, Err(ReaderError::Challenge(fake.url("/stays"))));
     reader.shutdown().await;
 }
+
+mod guard_tests;
