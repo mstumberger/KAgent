@@ -260,3 +260,27 @@ impl Driver {
         Ok(snapshot)
     }
 }
+
+/// Delete the cookies of `host` (and of the domains that cover it) from the profile of the
+/// browser on `port`; how many went (web.md section 9).
+pub async fn forget_cookies(port: u16, host: &str) -> Result<usize, ReaderError> {
+    let tabs = cdp::tabs(port).await.map_err(failed)?;
+    let tab = match tabs.first() {
+        Some(tab) => tab.clone(),
+        None => cdp::new_tab(port, "about:blank").await.map_err(failed)?,
+    };
+    let mut session = Session::connect(&tab).await.map_err(failed)?;
+    let all = session.call("Network.getAllCookies", json!({})).await.map_err(failed)?;
+    let mut gone = 0;
+    for cookie in all.get("cookies").and_then(Value::as_array).into_iter().flatten() {
+        let text = |key: &str| cookie.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+        let domain = text("domain");
+        let bare = domain.trim_start_matches('.');
+        if !(super::config::host_matches(host, bare) || super::config::host_matches(bare, host)) {
+            continue;
+        }
+        session.call("Network.deleteCookies", json!({"name": text("name"), "domain": domain, "path": text("path")})).await.map_err(failed)?;
+        gone += 1;
+    }
+    Ok(gone)
+}

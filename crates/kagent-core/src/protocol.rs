@@ -185,6 +185,15 @@ pub struct Usage {
     pub output_tokens: u64,
 }
 
+/// The button of a notice: the window posts `body` to `path` (an `/api/...` route of the daemon).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoticeAction {
+    pub label: String,
+    pub path: String,
+    pub body: serde_json::Value,
+}
+
 /// Everything the UI needs to render a session live. One broadcast stream for all
 /// sessions; clients filter by `session_id`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,6 +273,9 @@ pub enum AgentEvent {
         /// `error`, `recovery` or `info`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         kind: Option<String>,
+        /// A button of the toast: a request the window makes when it is pressed (notices.md section 1).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action: Option<NoticeAction>,
     },
     /// A command for the open web UI (from the `ui` tool or the tray).
     UiCommand { command: String, args: serde_json::Value },
@@ -318,15 +330,23 @@ impl AgentEvent {
     /// follows the level: `error` and `warn` are `error`, `info` is `info`.
     pub fn notice(level: &str, text: impl Into<String>) -> Self {
         let kind = if level == "info" { "info" } else { "error" };
-        AgentEvent::Notice { level: level.into(), text: text.into(), key: None, session_id: None, kind: Some(kind.into()) }
+        AgentEvent::Notice { level: level.into(), text: text.into(), key: None, session_id: None, kind: Some(kind.into()), action: None }
     }
 
     /// The same notice, merged by `key` while its toast is open.
     pub fn keyed_notice(level: &str, text: impl Into<String>, key: impl Into<String>) -> Self {
         match Self::notice(level, text) {
-            AgentEvent::Notice { level, text, session_id, kind, .. } => AgentEvent::Notice { level, text, key: Some(key.into()), session_id, kind },
+            AgentEvent::Notice { level, text, session_id, kind, action, .. } => AgentEvent::Notice { level, text, key: Some(key.into()), session_id, kind, action },
             other => other,
         }
+    }
+
+    /// The toast gets a button: `label` posts `body` to `path` of the daemon's API when pressed.
+    pub fn with_action(mut self, label: &str, path: &str, body: serde_json::Value) -> Self {
+        if let AgentEvent::Notice { action, .. } = &mut self {
+            *action = Some(NoticeAction { label: label.into(), path: path.into(), body });
+        }
+        self
     }
 
     /// The notice belongs to a turn of this session.
@@ -339,6 +359,6 @@ impl AgentEvent {
 
     /// The thing that went wrong works again: it closes the open error toast of the same `key`.
     pub fn recovery(text: impl Into<String>, key: impl Into<String>) -> Self {
-        AgentEvent::Notice { level: "info".into(), text: text.into(), key: Some(key.into()), session_id: None, kind: Some("recovery".into()) }
+        AgentEvent::Notice { level: "info".into(), text: text.into(), key: Some(key.into()), session_id: None, kind: Some("recovery".into()), action: None }
     }
 }

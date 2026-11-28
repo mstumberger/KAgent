@@ -106,7 +106,10 @@ impl Web {
         let url = reqwest::Url::parse_with_params(&self.engines.reader, [("q", query)]).map_err(|e| EngineError::Reader(format!("the search address is not one ({e})")))?;
         match reader.render(url.as_str()).await {
             Ok(page) => read_duckduckgo(200, &page.html, FETCH),
-            Err(ReaderError::Challenge(_)) => Err(EngineError::Challenge),
+            Err(ReaderError::Challenge(_)) => {
+                self.note_challenge(url.as_str());
+                Err(EngineError::Challenge)
+            }
             Err(other) => Err(EngineError::Reader(format!("the reader could not read the results: {other}"))),
         }
     }

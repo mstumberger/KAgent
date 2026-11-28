@@ -96,6 +96,12 @@ pub async fn start_headless(bin: &str, profile: &Path) -> Result<Running, String
     Err("the browser started but its DevTools port did not open".into())
 }
 
+/// The owner's window: the same browser on the same profile, visible, on `url`.
+pub fn start_window(bin: &str, profile: &Path, url: &str) -> Result<Child, String> {
+    std::fs::create_dir_all(profile).map_err(|e| format!("the profile folder could not be made: {e}"))?;
+    command(bin, args(profile, false, Some(url)), "KAgent reader window").spawn().map_err(|e| format!("{bin} did not start: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -8,6 +8,9 @@ mod browser;
 pub mod challenge;
 pub mod config;
 mod drive;
+pub mod http;
+mod manage;
+pub mod sites;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,6 +42,9 @@ pub struct Reader {
     generation: AtomicU64,
     /// How long a challenge may take to clear, in milliseconds (a test shortens it).
     challenge_wait_ms: AtomicU64,
+    /// The host of the window the owner has open on the profile, if one is.
+    window: std::sync::Mutex<Option<String>>,
+    sites: sites::Sites,
     me: Weak<Reader>,
 }
 
@@ -52,6 +58,8 @@ impl Reader {
             state: tokio::sync::Mutex::new(None),
             generation: AtomicU64::new(0),
             challenge_wait_ms: AtomicU64::new(drive::CHALLENGE_WAIT.as_millis() as u64),
+            window: std::sync::Mutex::new(None),
+            sites: sites::Sites::new(data),
             me: me.clone(),
         })
     }
@@ -119,6 +127,9 @@ impl PageReader for Reader {
         if let Err(refusal) = self.egress.admit(url).await {
             return Err(ReaderError::Refused { refusal, redirected: false });
         }
+        if self.window.lock().unwrap().is_some() {
+            return Err(ReaderError::WindowOpen);
+        }
         let bin = (self.finder)().ok_or(ReaderError::NoBrowser)?;
         let mut state = self.state.lock().await;
         self.generation.fetch_add(1, Ordering::SeqCst);
@@ -138,4 +149,6 @@ impl PageReader for Reader {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_manage;
 

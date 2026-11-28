@@ -108,7 +108,10 @@ impl WebFetch {
         if render || self.web.web_config().is_reader_site(&host) {
             match self.web.read_rendered(url).await {
                 Ok((final_url, page)) => return Ok((final_url, page, note)),
-                Err(ReaderError::Challenge(_)) => return Err(Stopped::Challenge),
+                Err(ReaderError::Challenge(_)) => {
+                    self.web.note_challenge(url);
+                    return Err(Stopped::Challenge);
+                }
                 Err(e @ (ReaderError::Refused { .. } | ReaderError::Status(_) | ReaderError::TooLarge | ReaderError::Timeout)) => return Err(Stopped::Fail(e.to_string(), note)),
                 Err(e) => note = reader_note(&e, "the plain page is given"),
             }
@@ -122,7 +125,10 @@ impl WebFetch {
         if wanted && note.is_empty() && !render {
             match self.web.read_rendered(url).await {
                 Ok((final_url, page)) => return Ok((final_url, page, note)),
-                Err(ReaderError::Challenge(_)) => return Err(Stopped::Challenge),
+                Err(ReaderError::Challenge(_)) => {
+                    self.web.note_challenge(url);
+                    return Err(Stopped::Challenge);
+                }
                 Err(e) => note = reader_note(&e, "this is the plain answer"),
             }
         }

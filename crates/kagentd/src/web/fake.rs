@@ -31,6 +31,8 @@ pub struct Reply {
     chunked: bool,
     /// Never answers: a client has to give up on it.
     never: bool,
+    /// Answered only when the request carries this cookie; else the other reply is (a site that remembers a passed check).
+    gate: Option<(String, Box<Reply>)>,
 }
 
 impl Reply {
@@ -47,14 +49,19 @@ impl Reply {
     }
 
     pub fn with(status: u16, headers: Vec<(&'static str, String)>, body: &[u8]) -> Self {
-        Self { status, headers, body: body.to_vec(), chunked: false, never: false }
+        Self { status, headers, body: body.to_vec(), chunked: false, never: false, gate: None }
     }
 
     pub fn chunked(content_type: &str, body: Vec<u8>) -> Self {
-        Self { headers: vec![("content-type", content_type.to_string())], body, chunked: true, status: 200, never: false }
+        Self { headers: vec![("content-type", content_type.to_string())], body, chunked: true, status: 200, never: false, gate: None }
     }
 
-    pub const NEVER: Self = Self { status: 0, headers: Vec::new(), body: Vec::new(), chunked: false, never: true };
+    pub const NEVER: Self = Self { status: 0, headers: Vec::new(), body: Vec::new(), chunked: false, never: true, gate: None };
+
+    /// `self` for a request that carries the cookie `name`, `without` for one that does not.
+    pub fn when_cookie(self, name: &str, without: Reply) -> Self {
+        Self { gate: Some((name.to_string(), Box::new(without))), ..self }
+    }
 }
 
 /// One request the fake saw.
@@ -132,9 +139,15 @@ async fn serve(State(st): State<Served>, req: Request) -> Response {
     let body = axum::body::to_bytes(req.into_body(), 4 << 20).await.map(|b| b.to_vec()).unwrap_or_default();
     let path = target.split('?').next().unwrap_or("").to_string();
     st.seen.lock().unwrap().push(Seen { method, target, headers, body });
-    let Some(reply) = st.routes.get(&path).cloned() else {
+    let Some(mut reply) = st.routes.get(&path).cloned() else {
         return (StatusCode::NOT_FOUND, "no such path on the fake").into_response();
     };
+    if let Some((cookie, without)) = reply.gate.clone() {
+        let has = st.seen.lock().unwrap().last().is_some_and(|seen| seen.header("cookie").split(';').any(|c| c.trim().starts_with(&format!("{cookie}="))));
+        if !has {
+            reply = *without;
+        }
+    }
     if reply.never {
         return std::future::pending::<Response>().await;
     }
