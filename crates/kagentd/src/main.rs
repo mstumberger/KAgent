@@ -252,6 +252,9 @@ async fn run() -> anyhow::Result<()> {
     // Recommended local models (local-models.md): the tool finds the module once it exists.
     let local_models_cell: local_models::tool::LocalModelsCell = Default::default();
     registry.register(Arc::new(local_models::tool::LocalModelsTool::new(local_models_cell.clone())));
+    // Usage and limits (usage.md): the tool finds the hub once it exists.
+    let usage_cell: usage::tool::UsageCell = Default::default();
+    registry.register(Arc::new(usage::tool::UsageTool::new(usage_cell.clone())));
     // The screen watch (screen-watch.md): the tool finds the watch once it exists.
     let screen_watch_cell: screen_watch::tool::WatchCell = Default::default();
     registry.register(Arc::new(screen_watch::tool::ScreenWatchTool::new(screen_watch_cell.clone())));
@@ -296,6 +299,7 @@ async fn run() -> anyhow::Result<()> {
     let _ = settings_cell.set(settings_arc.clone());
     // Usage and limits (usage.md): the providers client reports every answer to the hub.
     let usage = usage::UsageHub::open(&paths.data, providers.clone(), settings_arc.clone(), events.clone());
+    let _ = usage_cell.set(usage.clone());
     // Hooks (hooks.md): the owner's own commands at the points of the agent's life. The agent
     // cannot write them (hooks.md section 5); a change applies from the next event.
     let hooks = Arc::new(hooks::HookHub::new(settings_arc.clone(), paths.settings(), audit.clone(), events.clone()));
