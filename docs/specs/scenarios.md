@@ -797,3 +797,35 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
 6. **[auto]** `scripts/test-live.py`: a noise fragment then a tool call is asked out loud and no card appears.
 7. **[auto]** Web: the tool card labels `not done`, `shown`, `partial`; a note message is dimmed.
 8. The owner: ask the voice "close all windows" with the television on in German; the agent asks first.
+
+## S-chooser The model chooser (chooser.md)
+1. **[auto]** `is_local_url` lives in `kagent-providers` and the screen watch uses it; `GET /api/models` rows carry `local` and
+   `free`, the provider rows `local`; a model id ending in `-free` is free.
+2. **[auto]** `scripts/test-chooser-web.py` (mocked API, dark and light, 1200x820 and 340x460, shots in
+   `/tmp/kagent-v003-chooser-shots/`): the two levels; search across both ("flash", "free", "vision"); each chip and two chips
+   together; Recent (last 5, newest first, kept after a reload, a gone model left out); the keyboard (arrows within and across the
+   columns, typing searches, Enter picks, Escape closes and returns the focus); the four places: the composer (model and
+   effort, the Default row, a gone model), the Defaults card (only chat models; vision only models that read images; a current
+   value outside the list stays), the subagent profile editor, the widget sheet; the task form has no model field.
+3. **[auto]** The suites of earlier stages still pass (picker checks changed only where the chooser replaces the flat list).
+4. The owner: open the composer's model menu, type "flash", pick a model, open it again and see it under Recent.
+
+## S-usage Usage and limits (usage.md)
+1. **[auto]** Counters (`usage/store.rs`, fake clock): a response adds one request and its tokens to the minute, day and month
+   rows of the provider and model; two sources stay apart; a day and a month rollover start new rows; rows past 13 months are
+   pruned; a failed request is not counted.
+2. **[auto]** Headers (`kagent-providers/src/usage/headers.rs`, samples from documentation, not recorded): the Anthropic and the
+   OpenAI-style families; each reset format (duration, seconds, epoch seconds, epoch milliseconds, RFC 3339); a missing
+   `remaining`, a non-number, `remaining > limit` and an unreadable reset give no limit.
+3. **[auto]** 429 bodies (`.../errors.rs`, samples from documentation): Gemini's `QuotaFailure` with `RetryInfo` (also in an array),
+   the OpenAI message with "Limit 3, Used 3" and "try again in 20s", `insufficient_quota`, Anthropic's `rate_limit_error` with
+   `retry-after`; a body that is not JSON gives only the `retry-after` limit; no invented number.
+4. **[auto]** Levels at 69, 70, 90, 90.1 and 100 %; a limit expires at its reset; a newer answer replaces the same id; a known
+   limit is counted from the counters; a local provider has no limits.
+5. **[auto]** `GET /api/usage`: every provider, counters, limits and `tightest`; `usageChanged` on a level change and at most every
+   30 s otherwise; no key or token anywhere in the answer; the provider rows carry `tightestLimit` and `local`.
+6. **[auto]** The tool `usage`: text for all providers and for one, an unknown provider is `not done`, group `agent`, read-only.
+7. **[auto]** `scripts/test-usage-web.py`: the ring at 69, 70, 90 and 100 % (colour and fill), none without a limit; the card with its
+   bars, "resets at" and source; the bar on each row of Settings -> Models; the Usage block with the known-limit fields; the line
+   above the composer shown once at 90 % and not again; the widget shows the ring only; dark and light; 1200x820 and 340x460.
+8. The owner: ask the agent "how much do I have left on Gemini?"; type a daily limit on the provider card and watch the bar.
