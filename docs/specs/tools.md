@@ -506,6 +506,7 @@ Profiles, completion notifications and limits: `agents.md`.
 | `agent_wait` | RO | `{ids: string[] (<= 8), timeout_sec?: 0..120 (default 60)}` | output (<= 6000 chars each) and state of the named agents when they finish or the time is up |
 | `agent_stop` | MUT, risk low, no approval | `{id: string}` | cancels the child's running turn |
 | `agent_list` | RO | `{}` | children of this session: id, profile, state, duration |
+| `agent_tell` | MUT, risk low, `always_ask` | `{id?: string, name?: part of the name of its job, text: string (<= 2000), interrupt?: boolean (default false)}` | the owner's message to a running child of this session (`steering.md`): read at its next model request as `[from the owner] ...` (it keeps going), or with `interrupt` after its current request or command is cancelled, and the session resumes with the message first. "Told \"<job>\": it will see it at its next step." Only the main agent has it: a subagent is refused (depth rule), another session's child is `not_done`. Never an approval |
 | `task_output` | RO | `{task_id: string, wait_sec?: 0..30 (default 0), tail?: 100..20000 (default 4000)}` | state and the last `tail` characters of a background shell task |
 | `task_stop` | MUT, risk low, no approval | `{task_id: string}` | kills the task's process group |
 
@@ -610,3 +611,14 @@ monitor"). Registered by the daemon like `local_models` (a cell the watch fills)
 | `usage` | RO | `{provider?: string}` (an id or a name, any case) | text for the model per provider: each limit as "Requests per day 47 of 50 (94 %, nearly out), resets 09:00." (a limit that is KAgent's own count says "counted by KAgent: other apps using this key are not included"; one known only to be out has no numbers), "No limits: a local provider." or "No limit known: ...", today's and this month's requests and tokens through KAgent, and the busiest models. An unknown provider is `not_done("no provider named x", "call usage without a provider to list them (providers: ...)")` (`agent-loop.md` section B). Live voice is not counted (`usage.md` section 6) |
 
 Registered by the daemon like `local_models` (it finds the usage module once it exists) and listed in `group_of` with `settings`.
+
+## 30. Tickets (group `agent`; v0.0.3)
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `tickets` | `list` RO; `add`, `update`, `close` MUT, risk low, `always_ask` (a card in chat in every mode but `full`; out loud from voice in every mode) | `{action: "add"\|"update"\|"list"\|"close", key?, title?, description?, state?, priority?, labels?, done_when?, parent?, note?, text?, label?, all_projects?}` | the owner's tickets of the calling session's project (a subagent: its parent's), else the Inbox. `add` "Added KA-14 \"Title\" (todo, medium) to kagent."; `update` "KA-14 updated: state: todo -> in_progress."; `close` "KA-14 is done."; `list` at most 30 lines `KA-14 [in_progress, high] Title (labels)` and "(N more: ...)"; refusals are `not_done` (`agent-loop.md` section B) |
+
+Details and the prompt rule ("Add to the todo ... makes a ticket; `todo_write` is only the working list of a multi-step job"):
+`tickets.md` section 5. Registered by the daemon like `usage` (a cell the store fills) and listed in `group_of` with `settings`.
+
+`agent_tell` (section 21, `steering.md` section 5) is the subagent tool added in the same item.

@@ -458,3 +458,23 @@ counters are kept in memory and a warning is logged.
 `{window, unit, total}` (`window`: `minute`, `day`, `month`; `unit`: `requests`, `tokens`; `total`: 1 to 1000000000000; one
 limit for each window and unit of a provider). Unknown keys and values are refused (`deny_unknown_fields`). KAgent counts its own
 requests and tokens of the current window against each and shows them with `source: "kagent"`. Never prefilled.
+
+## 16. tickets/<id>.json (v0.0.3)
+
+Spec: `tickets.md`. `<data>/tickets/<id>.json`, mode 0600, one file per project, written atomically (a temporary file in the same
+folder, then rename). `<id>` is `inbox`, or `<folder name, [a-z0-9-], at most 24>-<8 hex of the sha-256 of the path>`.
+
+```json
+{"project": "/home/me/code/kagent", "prefix": "KA", "next": 13, "tickets": [
+  {"key": "KA-12", "project": "/home/me/code/kagent", "title": "...", "description": "markdown", "state": "todo", "priority": "none",
+   "labels": [], "parent": null, "links": [{"kind": "range", "value": "master..v0.0.3", "label": ""}], "assignee": null, "doneWhen": [],
+   "notes": [{"at": "...", "by": "owner", "text": "..."}], "history": [{"at": "...", "by": "owner", "what": "created"}],
+   "createdAt": "...", "updatedAt": "..."}]}
+```
+
+`next` only grows, so a key is never reused after a delete. The prefix is fixed when the file is made. `state` is `backlog`, `todo`,
+`in_progress`, `in_review`, `done`, `dropped`; `priority` `none`, `low`, `medium`, `high`, `urgent`; a link `kind` `conversation`,
+`commit`, `range`, `url`. A file that cannot be read is skipped with a warning and never overwritten. There are no settings keys.
+
+The change journal (section 7) gains one field for a file edit: `op.afterBackup`, the path of `<data>/changes/aft_<uuid>`, the text
+that `write_file` or `edit_file` wrote (the text before is the backup of the undo). The diff view reads both (`diff.md` section 3).

@@ -3336,6 +3336,33 @@ Specs: `docs/specs/chooser.md` and `docs/specs/usage.md` (from `plans/providers-
   44/44. New: `scripts/test-chooser-web.py` (112) and `scripts/test-usage-web.py` (105). Web: loop 21, screen-watch 62,
   local-models 58, vision 117, work 233, sidebar 168, picker 106, calendar 60.
 
+### Session 2026-11-28 (v0.0.3: tickets, the diff view and steering; `specs/tickets.md`, `diff.md`, `steering.md`)
+
+Stages I1, I2 and I3 of `plans/tickets-and-steering.md` (local). Eight commits on `v0.0.3`. Decisions:
+
+- **Word and store**: "ticket" everywhere. `<data>/tickets/<id>.json` per project (`inbox` for no project), atomic write, mode 0600. The
+  prefix of a project is the initials of its folder name, fixed at creation, made unique with a digit (`KA`, `KA2`); a key is never reused
+  (`next` only grows). A damaged file is skipped and never overwritten. No settings key was added.
+- **The tool `tickets`** is `always_ask` for add, update and close (as the calendar changes): a card in chat in every mode but `full`, and
+  out loud from voice in every mode. Its input is snake_case (`done_when`, `all_projects`) like the other tools; the API is camelCase.
+  A tool call finds only its own project's tickets. One prompt line (guidance) says "add to the todo" makes a ticket.
+- **Diff**: in-process line diff (prefix and suffix cut, LCS over at most 4 million cells), no dependency; no syntax colours (no
+  highlighter in `web/`). Git runs through the exec helper with `--no-pager --no-optional-locks -c core.fsmonitor=false`, `--no-ext-diff`,
+  `--no-textconv`; refs are checked in `gitref.rs` before git sees them and again with `rev-parse --verify --end-of-options`. The project
+  must be in the projects list. `write_file` and `edit_file` now keep the text they wrote (`op.afterBackup`); older records use the file
+  as it is now. The exec helper keeps the end of a long output, so a cut patch drops what came before its first whole file.
+- **Steering**: the owner's message is a new note kind `steer`: one stored message `[from the owner] ...` (`via: note`), never expires,
+  not counted in the three per request, kept by compaction. An interrupt queues the message as the session's next input, marks the child,
+  and cancels its turn; the session settles into the next turn and `child_ended` waits for the last one, so the child stays `running` and
+  the parent is told once. A running call ends with a `cancelled` result, so the history stays consistent. `agent_tell` is `always_ask`, is
+  in the set of tools a subagent lacks, and finds only the calling session's children. `subagentUpdated` also carries progress
+  (`lastAction`, `files`, `steering`), the start of a call at most every 500 ms per child.
+- **Tests that changed on purpose**: `test-sidebar-web.py` lists eight views (count 168 unchanged) and scrolls the row it right-clicks into
+  view; `test-work-web.py` no longer asserts that the Subagent pane has no input at all, only no composer (count 233 unchanged); the
+  block of a subagent's prompt has one more line (`children/tests.rs`); `statuses()` of the subagent test rig ignores repeated statuses.
+- **Not built**: workflow runs as tickets, related work, "went off", align on change, the Jira mirror, comments on diff lines, Approve,
+  Revert hunk. Untracked files are not part of a working-tree diff.
+
 ## F. Progress
 
 - [x] S0 compile drafts

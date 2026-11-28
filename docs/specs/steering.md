@@ -26,21 +26,23 @@ optional and absent when empty:
  "steering": [{"id": "st_1a2b3c", "text": "leave the tests alone", "interrupt": false, "state": "queued", "at": "...", "deliveredAt": null}]}
 ```
 
-- `lastAction`: the latest tool call of the child's own session: its name, the summary the approval card would show, `running`
+- `lastAction`: the latest tool call of the child's own session: its name, the summary the approval card would show (without the
+  name of the job the card puts in front of it), `running`
   while it runs, then `done`, `error` or `refused` (the status of the result), and when it started.
-- `files`: the paths the child's tool calls named, at most 50, in the order first seen: `changed: true` for `write_file`,
-  `edit_file` and a `shell` call is not read (a path is taken only from a tool input field `path` of `read_file`, `list_dir`,
-  `search_files`, `write_file`, `edit_file`, `open_in_editor`); a path that was read and later changed is `changed: true`.
+- `files`: the paths the child's tool calls named, at most 50, in the order first seen: `changed: true` for `write_file` and
+  `edit_file`. A path is taken only from the input field `path` of `read_file`, `list_dir`, `search_files`, `write_file`,
+  `edit_file` and `open_in_editor` (a `shell` command is not read); a path that was read and later changed is `changed: true`.
 - `steering`: the owner's messages to this worker, newest last, at most 20 (section 3).
-- `subagentUpdated` is sent when `lastAction`, `files` or `steering` change, at most every 500 ms per child for tool progress
-  (the end of a call is never held back); a window that missed events reads the list again.
+- `subagentUpdated` is sent when `lastAction`, `files` or `steering` change, at most every 500 ms per child for the start of a
+  call (the end of a call is never held back); an event that repeats the status carries the progress, so a listener that wants
+  state changes compares the status. A window that missed events reads the list again.
 
-`GET /api/sessions/:id/subagents/:child` (the parent's id and the child's; 404 for a child of another session) answers the
-detail the worker pane draws:
+`GET /api/sessions/:id/subagents` answers `{children: [ChildView]}` for the session. `GET /api/sessions/:id/subagents/:child`
+(the parent's id and the child's; 404 for a child of another session) answers the detail the worker pane draws:
 
 ```json
 {"child": ChildView, "job": "<the description>", "todo": [{"content": "...", "status": "pending|in_progress|completed"}],
- "transcript": [{"role": "assistant|user|tool", "kind": "text|call|result|steer", "text": "...", "at": "..."}]}
+ "transcript": [{"role": "assistant|user|tool", "kind": "text|call|result|steer", "text": "...", "status": "ok|error (results)"}]}
 ```
 
 `transcript` is the live tail: the last 40 messages of the child's session in short form (text cut at 600 characters; a
@@ -50,7 +52,7 @@ section 1).
 
 ## 3. Correct: `POST /api/agents/:id/message {text, interrupt: bool}`
 
-`:id` is the child's session id. `text` 1 to 2000 characters. Answers `202 {id, state: "queued"}`; 404 for an unknown
+`:id` is the child's session id. `text` 1 to 2000 characters. Answers `202 {id, state}` (the receipt); 404 for an unknown
 worker, 409 `conflict` "the worker already ended (<status>)" for one that ended, and 409 "the worker is still queued: it
 has not started" for one that waits for a slot (the message would be lost; Stop it or wait). The route is the owner's: it
 is under the API token like every route, and the session that is the target is always a subagent (a session that is not

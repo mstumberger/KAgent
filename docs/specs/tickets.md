@@ -52,8 +52,10 @@ of 1..2000 characters, a `by` that is not `owner` or `agent` is not accepted fro
 project. File shape (`config.md` section 16):
 
 ```json
-{"project": "/home/me/code/kagent" | null, "prefix": "KA", "next": 13, "tickets": [ {Ticket without project} ]}
+{"project": "/home/me/code/kagent" | null, "prefix": "KA", "next": 13, "tickets": [ {Ticket} ]}
 ```
+
+Each stored ticket also carries `project` (the same value); the file's own `project` wins when the daemon reads it.
 
 - The **prefix** of a new project: the initials of the words of its folder name (split at `-`, `_`, space, `.` and at a
   lower-to-upper letter change), upper case, 2 to 4 letters; a one-word name gives its first two letters (`KAgent` is `KA`,
@@ -81,13 +83,14 @@ change and delete (also for a change by the tool). A window reads `GET /api/tick
 ## 5. The tool `tickets` (group `agent`)
 
 `tickets {action: add | update | list | close, ...}` (`tools.md` section 30). `list` is read-only; `add`, `update` and `close`
-are changes that ask like any mutating tool (risk low, `needs_approval`, and a call from live voice always asks out loud,
-`voice.md` section 12, `voice-control.md` section 4). The project is the folder of the calling session (a subagent has its
+are changes that ask like any mutating tool (risk low, `needs_approval`) and are `always_ask` like the calendar changes
+(`calendar.md`): a card in chat in every mode but `full`, and a call from live voice always asks out loud in every mode
+(`voice.md` section 12, `voice-control.md` section 4). The project is the folder of the calling session (a subagent has its
 parent's), else the Inbox; `project` in the input is not accepted. Results are worded per `agent-loop.md` section B:
 
-- `add {title, description?, state?, priority?, labels?, doneWhen?, parent?}`: "Added KA-14 \"Title\" (todo, medium) to the
+- `add {title, description?, state?, priority?, labels?, done_when?, parent?}`: "Added KA-14 \"Title\" (todo, medium) to the
   project kagent."
-- `update {key, title?, description?, state?, priority?, labels?, doneWhen?, parent?, note?}`: "KA-14 updated: state todo ->
+- `update {key, title?, description?, state?, priority?, labels?, done_when?, parent?, note?}`: "KA-14 updated: state todo ->
   in_progress." Nothing to change is `not_done("nothing to change on KA-14", "pass a field to change")`.
 - `close {key, note?}`: state `done`; "KA-14 is done." A ticket already done is `not_done`.
 - `list {state?, label?, text?, all_projects?}`: at most 30 lines `KA-14 [in_progress, high] Title (labels)`, and "(N more)"; a
@@ -122,7 +125,9 @@ The sidebar gets an entry **Tickets** (icon `list`, between Tasks and Alerts; `n
   with one PUT (title, description as a markdown text area with the rendered preview under it, state, priority, labels as
   chips, parent as a select of the project's tickets, assignee, `doneWhen` lines), notes (add), links (add and remove: a
   conversation opens in the chat), the history (newest first, "owner" or "agent", the time), Delete (asks "Delete KA-12?"),
-  and, when the ticket has a `range` or `commit` link, a tab **Changes** with the diff view (`diff.md` section 6).
+  and a tab **Changes** (next to **Details**) with the diff view (`diff.md` section 6): with a `range` or `commit` link it
+  shows its diff, without one it says so and has a field to link one. A refusal of the daemon is shown in the pane as an alert.
+  In a window narrower than 900 px the pane takes the whole view (the list is behind it) and Close goes back to the list.
 - The view reads `GET /api/tickets` when it opens and on every `ticketChanged`. An empty project says "No tickets yet.
   Press c to add one."; a refusal of the daemon is shown as its message under the field.
 - Accessibility: every control is reachable by keyboard, icon buttons have labels, the board has a keyboard way to move a

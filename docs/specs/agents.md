@@ -130,6 +130,20 @@ tool group, `maxIterations` outside 1..80 or a model the providers do not know),
 - Settings -> Subagents: the list (built-ins marked), an editor (name, description,
   model, tool groups as chips, max iterations, prompt), max concurrent, Delete.
 
+## 6a. Steering (v0.0.3, `steering.md`)
+
+- What a running child is doing: `ChildView` carries `lastAction`, `files` and `steering`; `subagentUpdated` is also sent for the
+  progress of a running child; `GET /api/sessions/:id/subagents[/:child]` answers the live state, the child's job, its own todo
+  list and the tail of its transcript.
+- The owner's message: `POST /api/agents/:id/message {text, interrupt}` and the tool `agent_tell` (`Agent::tell_child`). A message
+  is pushed to the notes queue as the kind `steer` and read at the child's next model request as ONE stored message
+  `[from the owner] ...` (`via: note`, never expires, kept by compaction); the receipt goes from `queued` to `delivered`. With
+  `interrupt` the child's turn is cancelled (a running call ends with a `cancelled` result, so every call keeps its result), and the
+  session settles into a new turn that holds the message first; the child stays `running` and the parent is told once, when it ends.
+- Every subagent's system prompt carries `STEER_RULE`: a line that starts with `[from the owner]` is a correction, not a tool result
+  and not an approval, to be acknowledged in one sentence. The message never reaches the approval broker.
+- `agent_tell` is among the tools a subagent lacks (the depth rule) and it finds only the children of the calling session.
+
 ## 7. Tests (no root; loopback only)
 
 - Profiles: parsing; an invalid name or a missing description is skipped; a built-in
