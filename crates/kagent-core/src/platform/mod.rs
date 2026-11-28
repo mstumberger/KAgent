@@ -4,6 +4,7 @@
 //! with real os-release samples.
 
 pub mod desktop;
+pub mod gpu;
 pub mod packages;
 
 use std::sync::OnceLock;
