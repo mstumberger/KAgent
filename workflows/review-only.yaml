@@ -1,0 +1,9 @@
+name: review-only
+description: A reviewer reads the working tree against the last commit and reports what it finds. Nothing is changed.
+steps:
+  - id: review
+    role: reviewer
+    worker: {kind: subagent, profile: reviewer}
+  - id: wrap
+    role: orchestrator
+    do: summary
