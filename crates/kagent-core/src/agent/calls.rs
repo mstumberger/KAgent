@@ -12,7 +12,7 @@ use super::Agent;
 use crate::permission::{AllowRule, ApprovalDecision, ApprovalKind, ApprovalRequest, Decision, Origin};
 use crate::protocol::{AgentEvent, Message, ToolCall, ToolCallStatus};
 use crate::scheduler::parallel_groups;
-use crate::tool::{CallAssessment, PrivilegeMethod, ToolContext};
+use crate::tool::{CallAssessment, PrivilegeMethod, ResultKind, ToolContext};
 use crate::util::{budget_output, normalize_input, truncate_str, validate_schema};
 
 impl Agent {
@@ -207,8 +207,16 @@ impl Agent {
             _ = cancel.cancelled() => { ctx.cancel.cancel(); None }
         };
         let (status, content) = match outcome {
-            Some(Ok(out)) if !out.is_error => (ToolCallStatus::Ok, out.content),
-            Some(Ok(out)) => (ToolCallStatus::Error, out.content),
+            Some(Ok(out)) => (
+                match out.kind {
+                    ResultKind::NotDone => ToolCallStatus::NotDone,
+                    ResultKind::Shown => ToolCallStatus::Shown,
+                    ResultKind::Partial => ToolCallStatus::Partial,
+                    _ if out.is_error => ToolCallStatus::Error,
+                    _ => ToolCallStatus::Ok,
+                },
+                out.content,
+            ),
             Some(Err(e)) => (ToolCallStatus::Error, format!("error: {e:#}")),
             None if cancel.is_cancelled() => (ToolCallStatus::Cancelled, "cancelled by user".into()),
             None => (ToolCallStatus::Error, format!("timed out after {timeout_ms} ms")),
@@ -220,7 +228,7 @@ impl Agent {
             Some(redact) => redact(&content),
             None => content,
         };
-        let (is_error, duration_ms) = (status != ToolCallStatus::Ok, started.elapsed().as_millis() as u64);
+        let (is_error, duration_ms) = (status.is_failure(), started.elapsed().as_millis() as u64);
         let done = self.finish(session_id, turn_id, &call, status, content.clone(), started, assessment.summary, origin);
         // Hooks (hooks.md section 1): `PostToolUse` after the tool returned.
         self.post_tool_hook(session_id, &call, &content, is_error, duration_ms).await;
@@ -357,7 +365,7 @@ impl Agent {
             output: truncate_str(&content, 8_000).to_string(),
             duration_ms: started.elapsed().as_millis() as u64,
         });
-        let is_error = status != ToolCallStatus::Ok;
+        let is_error = status.is_failure();
         (Message::tool_result(call, content, is_error), status)
     }
 

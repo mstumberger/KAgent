@@ -64,13 +64,14 @@ pub fn owner_turn(session: &str) {
 
 /// Why `send` is refused, or `None` when the owner answered after the text was typed.
 /// `text` is empty for "press Enter to send what is typed".
-fn send_refusal(session: &str, app: &str, text: &str) -> Option<String> {
+fn send_refusal(session: &str, app: &str, text: &str) -> Option<ToolOutput> {
+    const NEXT: &str = "type it first (send=false), read it back to the owner and wait for their yes";
     with(|s| {
         let turns = s.turns.get(session).copied().unwrap_or(0);
         match s.typed.get(session) {
-            None => Some("not sent: no message was typed in this session. Type it first (send=false), read it back to the owner and wait for their yes.".into()),
-            Some(t) if !text.is_empty() && (t.text != text || t.app != app) => Some("not sent: this is not the text that was typed and read back. Type it first (send=false), read it back to the owner and wait for their yes.".into()),
-            Some(t) if turns <= t.turns => Some("not sent: the owner has not answered since the text was typed. Read the typed text back, wait for their yes, then call send again.".into()),
+            None => Some(ToolOutput::not_done("nothing was sent: no message was typed in this session", NEXT)),
+            Some(t) if !text.is_empty() && (t.text != text || t.app != app) => Some(ToolOutput::not_done("nothing was sent: this is not the text that was typed and read back", NEXT)),
+            Some(t) if turns <= t.turns => Some(ToolOutput::not_done("nothing was sent: the owner has not answered since the text was typed", "read the typed text back, wait for their yes, then call send again")),
             Some(_) => None,
         }
     })
@@ -150,8 +151,8 @@ impl Tool for MessageTool {
             Err(e) => return Ok(ToolOutput::error(e)),
         };
         if send {
-            if let Some(why) = send_refusal(&ctx.session_id, app, text) {
-                return Ok(ToolOutput::error(why));
+            if let Some(refused) = send_refusal(&ctx.session_id, app, text) {
+                return Ok(refused);
             }
         }
         let mut r = exec(&ctx, &argv[0]).run().await?;
@@ -206,22 +207,23 @@ mod tests {
     fn send_needs_the_owners_turn_after_the_typing() {
         let (s, other) = ("msg-test-a", "msg-test-b");
         owner_turn(s);
-        assert!(send_refusal(s, "Signal", "").unwrap().contains("no message was typed"), "nothing typed yet");
+        let refused = send_refusal(s, "Signal", "").unwrap();
+        assert_eq!((refused.kind, refused.content.as_str()), (crate::tool::ResultKind::NotDone, "not done: nothing was sent: no message was typed in this session. Next: type it first (send=false), read it back to the owner and wait for their yes."));
         remember_typed(s, "Signal", "I am late");
-        assert!(send_refusal(s, "Signal", "").unwrap().contains("has not answered"), "typed, no turn in between: refused");
-        assert!(send_refusal(s, "Signal", "I am late").unwrap().contains("has not answered"), "also with the text");
+        assert!(send_refusal(s, "Signal", "").unwrap().content.contains("has not answered"), "typed, no turn in between: refused");
+        assert!(send_refusal(s, "Signal", "I am late").unwrap().content.contains("has not answered"), "also with the text");
         owner_turn(other);
-        assert!(send_refusal(s, "Signal", "").unwrap().contains("has not answered"), "another session's turn does not count");
-        assert!(send_refusal(other, "Signal", "").unwrap().contains("no message was typed"), "nor does another session's typing");
+        assert!(send_refusal(s, "Signal", "").unwrap().content.contains("has not answered"), "another session's turn does not count");
+        assert!(send_refusal(other, "Signal", "").unwrap().content.contains("no message was typed"), "nor does another session's typing");
         owner_turn(s);
-        assert_eq!(send_refusal(s, "Signal", ""), None, "the owner answered: Enter may be pressed");
-        assert_eq!(send_refusal(s, "Signal", "I am late"), None, "the same text may be sent");
-        assert!(send_refusal(s, "Signal", "I am early").unwrap().contains("not the text that was typed"), "changed text is refused");
-        assert!(send_refusal(s, "Slack", "I am late").unwrap().contains("not the text"), "so is another app");
+        assert!(send_refusal(s, "Signal", "").is_none(), "the owner answered: Enter may be pressed");
+        assert!(send_refusal(s, "Signal", "I am late").is_none(), "the same text may be sent");
+        assert!(send_refusal(s, "Signal", "I am early").unwrap().content.contains("not the text that was typed"), "changed text is refused");
+        assert!(send_refusal(s, "Slack", "I am late").unwrap().content.contains("not the text"), "so is another app");
         forget_typed(s);
-        assert!(send_refusal(s, "Signal", "").unwrap().contains("no message was typed"), "a send clears the state");
+        assert!(send_refusal(s, "Signal", "").unwrap().content.contains("no message was typed"), "a send clears the state");
         // Typing again replaces it, with a new count.
         remember_typed(s, "Signal", "again");
-        assert!(send_refusal(s, "Signal", "").unwrap().contains("has not answered"));
+        assert!(send_refusal(s, "Signal", "").unwrap().content.contains("has not answered"));
     }
 }

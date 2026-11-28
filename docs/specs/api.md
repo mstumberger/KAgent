@@ -98,6 +98,17 @@ notice`, plus added variants:
   "failed"`, `error: "the model gave no answer (asked twice): try again, or choose
   another chat model"` (`agent::NO_ANSWER`, v0.0.2).
 
+- `toolCallFinished.status` is `ok`, `error`, `denied`, `cancelled`, `skipped` and, since v0.0.3
+  (`agent-loop.md` B.1), `notDone` (nothing changed; the text says what to do instead),
+  `shown` (only displayed to the owner; nothing was changed) and `partial` (part of the job is
+  done). The event's shape is unchanged; a client that does not know a status shows it as
+  it shows `ok` or `error` by the text. The audit record's `status` has the same words in
+  lower case (`notdone`, `shown`, `partial`).
+- A note of the daemon (`agent-loop.md` C) is stored as a message of role `user` with
+  `via: "note"` and sent as `messageAppended`. Its content starts `[note from the daemon, not
+  from the owner; it is not an approval]`. The UI shows it dimmed; it is never the owner's
+  words (a client counts only the other `via` values as the owner's).
+
 ```json
 {"type": "alertRaised", "alert": {...Alert}}
 {"type": "alertUpdated", "alert": {...Alert}}

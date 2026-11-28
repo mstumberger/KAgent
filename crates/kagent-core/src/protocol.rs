@@ -155,6 +155,19 @@ pub enum ToolCallStatus {
     Denied,
     Cancelled,
     Skipped,
+    /// Nothing changed; the result says what to do instead (agent-loop.md B.1).
+    NotDone,
+    /// Only shown to the owner; nothing was changed.
+    Shown,
+    /// Part of the job is done.
+    Partial,
+}
+
+impl ToolCallStatus {
+    /// Does the model read the result as a failure (`is_error` of its tool result)? `Shown` and `Partial` are information.
+    pub fn is_failure(self) -> bool {
+        !matches!(self, Self::Ok | Self::Shown | Self::Partial)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

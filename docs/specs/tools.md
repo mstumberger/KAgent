@@ -18,6 +18,16 @@ source of truth for names, input schemas, per-call assessment and output format.
 - **Errors the model can fix** (bad input, missing unit) -> `ToolOutput::error("...")`
   with a hint. **Infrastructure errors** (spawn failed) -> `Err(anyhow)`; the agent
   formats `error: ...`.
+- **Result kinds** (v0.0.3, `agent-loop.md` B): besides `ok` and `error` a tool answers with
+  `ToolOutput::not_done(what, next)` (`not done: <what>. Next: <next>.`, nothing changed,
+  status `notDone`), `ToolOutput::shown(what)` (`shown to the owner: <what>. Nothing was
+  changed.`, status `shown`: a page, a window or a notification only displayed) and
+  `ToolOutput::partial(done, missing, next)` (`partly done: <done>. Missing: <missing>.
+  Next: <next>.`, status `partial`). Rules for every tool: an error never reads as an
+  empty result ("no matches" only when the command succeeded), a result never says
+  "done" before the effect exists (queued, asked, shown: say so), a refusal says what to
+  do instead, and a list or text that is cut says how much was cut and how to get the
+  rest (`util::more_note`, `util::cut_with_note`).
 - **Missing program** (e.g. `nvidia-smi` absent): return `ok` with `unavailable:
   <program> not installed` for that section, never fail the whole tool.
 - **Per-call assessment** (`assess`): fields `read_only, needs_approval, always_ask,

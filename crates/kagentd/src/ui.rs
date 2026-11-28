@@ -219,6 +219,13 @@ fn show_command(view: &str, session: &str, section: &str) -> Result<(Value, Stri
     Ok((args, format!("show {view}{session}{note}")))
 }
 
+/// What `ui show` answers: the page that was opened ("show settings" -> "the settings page was opened in the UI").
+fn shown_page(what: &str) -> String {
+    let page = what.strip_prefix("show ").unwrap_or(what);
+    let (page, note) = page.split_once(" (").map_or((page, String::new()), |(p, n)| (p, format!(" ({n}")));
+    format!("the {page} page was opened in the UI{note}")
+}
+
 pub struct UiTool {
     contract: ToolContract,
     hub: Arc<UiHub>,
@@ -274,12 +281,16 @@ impl Tool for UiTool {
                     v.get("url").and_then(Value::as_str).unwrap_or("?"),
                     v.get("viewport").and_then(Value::as_str).unwrap_or("?"),
                     v.get("titlebar").and_then(Value::as_str).unwrap_or(""),
-                    kagent_core::util::truncate_str(v.get("text").and_then(Value::as_str).unwrap_or(""), 6_000)
+                    kagent_core::util::cut_with_note(v.get("text").and_then(Value::as_str).unwrap_or(""), 6_000, "the page has more text; use ui state or ask the owner")
                 )),
                 None => ToolOutput::error("no open UI answered (closed, or the page crashed: check ui logs)"),
             },
             "show" => match show_command(&arg("view"), &arg("session"), &arg("section")) {
-                Ok((args, what)) => sent(self.hub.command("show", args), what),
+                // Only a page was opened for the owner: it must not read as "the setting changed" (agent-loop.md B.2).
+                Ok((args, what)) => match sent(self.hub.command("show", args), what.clone()) {
+                    out if out.is_error => out,
+                    _ => ToolOutput::shown(&shown_page(&what)),
+                },
                 Err(e) => ToolOutput::error(e),
             },
             "voice_start" | "voice_stop" | "reload" => sent(self.hub.command(action, json!({})), action.to_string()),
@@ -395,5 +406,20 @@ mod tests {
         }
         assert!(t.call(json!({"action": "show", "view": "nope"}), ctx.clone()).await.unwrap().is_error);
         assert!(t.call(json!({"action": "show"}), ctx).await.unwrap().is_error);
+    }
+
+    /// 2026-11-27: "show settings sent to the open UI" was read as "the setting changed".
+    #[tokio::test]
+    async fn show_says_the_page_was_shown_and_nothing_changed() {
+        let (tx, _rx) = broadcast::channel(8);
+        let tool = UiTool::new(UiHub::new(tx));
+        let out = tool.call(json!({"action": "show", "view": "settings", "section": "memory"}), ToolContext::standalone(Duration::from_secs(2), 8_000)).await.unwrap();
+        assert_eq!(out.content, "shown to the owner: the settings page was opened in the UI. Nothing was changed.");
+        assert_eq!((out.is_error, out.kind), (false, kagent_core::tool::ResultKind::Shown));
+        let note = tool.call(json!({"action": "show", "view": "settings", "section": "nope"}), ToolContext::standalone(Duration::from_secs(2), 8_000)).await.unwrap();
+        assert!(note.content.starts_with("shown to the owner: the settings page was opened in the UI (unknown section nope, dropped;") && note.content.ends_with("Nothing was changed."), "{}", note.content);
+        // The other commands are sent, not shown, and say so.
+        let theme = tool.call(json!({"action": "theme", "value": "dark"}), ToolContext::standalone(Duration::from_secs(2), 8_000)).await.unwrap();
+        assert_eq!(theme.content, "theme dark sent to the open UI");
     }
 }
