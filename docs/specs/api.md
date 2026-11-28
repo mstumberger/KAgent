@@ -53,7 +53,9 @@ type AuditRecord = /* config.md section 6 */;
 | POST `/api/sessions` | `{title?, model?, reasoningLevel?}` (the last two from S41, section 8) | `SessionMeta` (201) |
 | GET `/api/sessions/:id` | | `{meta: SessionMeta, messages: Message[]}` |
 | DELETE `/api/sessions/:id` | | 204 (cancels if running) |
-| POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice"}` | `{status: "started", turnId}` or `{status: "queued"}`; 409 for the session of a subagent (read-only) |
+| POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice", images?: [imageId]}` | `{status: "started", turnId}` or `{status: "queued"}`; 409 for the session of a subagent (read-only); `text` may be empty when `images` is not (S46); 400 over 4 images, 404 for an image the session does not have; 409 `refused` (with a notice) when nobody can read the images (`vision.md` section 2) |
+| POST `/api/sessions/:id/images` | multipart, the file in the field `file` | `ImageRef` `{id, mime: "image/png"\|"image/jpeg", width, height, bytes}` (S46, `vision.md` section 1): re-encoded, longest side 1568, EXIF dropped; 413 over 8 MB, 415 for a type that is not PNG, JPEG or WebP, 400 for a file that does not decode, 404 unknown session |
+| GET `/api/sessions/:id/images/:imageId` | | the stored image (`Cache-Control: private`, bearer token); 404 |
 | POST `/api/sessions/:id/cancel` | | `{cancelled: boolean}` |
 | POST `/api/stop-all` | | `{cancelledTurns: number, killedProcesses: number}` |
 | POST `/api/approvals/:requestId` | `{decision: "allowOnce"\|"allowSession"\|"allowAlways"\|"deny", reason?}` | 204, or 404 if already resolved |
@@ -179,7 +181,7 @@ for a plan, `preview` holds the plan text.
 | compaction | POST `/api/sessions/:id/compact` | | `{summary: string, keptMessages: number}`; 400 under 4 stored messages or with nothing before the last user message, 404 unknown session, 502 `summary_failed` |
 | todo, plan | PUT `/api/sessions/:id/todo` | `{items: TodoItem[]}` | `{items: TodoItem[]}`; 400 `invalid_input` without `items` or for a list `todo_write` refuses, 404 unknown session |
 | | POST `/api/sessions/:id/plan` | `{active: boolean}` | `{planning: boolean}`; 400 without a boolean `active`, 404 unknown session |
-| | POST `/api/sessions/:id/messages` | `{text, via?, plan?: boolean}` (S24) | as section 3; `plan: true` or a text starting with `/plan ` starts the turn in plan mode |
+| | POST `/api/sessions/:id/messages` | `{text, via?, plan?: boolean, images?: [imageId]}` (S24, S46) | as section 3; `plan: true` or a text starting with `/plan ` starts the turn in plan mode |
 | browser | GET `/api/browser/status` | | `{backend, own: {running, port, tabs}, attach: {profile, browser, port, debugging: "on"\|"off"\|"unknown", connected, tabs, detail}}` |
 | | POST `/api/browser/attach/connect` | | 200 with the status after one connect attempt (waits up to 20 s for Allow), also when it failed: `attach.detail` says why (`attach.port` is a number or null) |
 | | POST `/api/browser/attach/disconnect` | | 204 |

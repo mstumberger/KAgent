@@ -903,6 +903,80 @@ Tests: `specs/work-windows.md` (its own list).
 Produces: `GET /api/sessions/:id/background`, the event `backgroundTask`, `WorkPanel.tsx`, `SidePane.tsx`.
 Check: the standard checks with `web/`; the headless pass at 1200x820 and in the widget; the live check by the owner.
 
+### Session 2026-11-28 (S46: images in chat and "look at my screen", v0.0.2 item 7)
+
+Built: `specs/vision.md` sections 1 to 4, in six commits on `v0.0.2` (the store and routes, the
+readers and adapters, the composer, Telegram photos, the voice path, the docs). 843 workspace
+tests (812 before; 843 also with `KAGENT_IT=1`), `tsc` clean, `npm run lint` with only its four
+old warnings, `scripts/test-vision-web.py` 109/109 (dark and light at 1200x820 and 340x460),
+work 201, sidebar 162, picker 103 and calendar 60 unchanged. `scripts/test-live.py` has the
+new scenario `look` (5 checks) and was NOT run: the owner's daemon holds port 7878. Decisions
+the spec did not settle:
+- **Dependencies.** The workspace had no image crate (`Cargo.lock` was checked: none, and no
+  crate that decodes and encodes PNG, JPEG or WebP). `image` 0.25 with `default-features =
+  false` and the features `png`, `jpeg`, `webp` (decode; the output is PNG or JPEG), in
+  `kagent-core` (the store) and as a dev dependency of `kagentd` (test pictures). axum got the
+  feature `multipart` (the upload route). About 210 lines of `Cargo.lock`.
+- **`ImageRef` has two more fields**, `description` and `readBy` (both left out when empty), and
+  a `data: Option<Pixels>` that is `#[serde(skip)]`: set only on the copy that goes into one
+  model request, never stored, never sent to the window. Each stored image has an `<id>.json`
+  beside its pixels, so an id sent by the window resolves to its `ImageRef` (width, height, type).
+- **Re-encoding.** The EXIF orientation is applied, then the metadata is gone (the encoders
+  write none). A picture with at most 8192 distinct colours stays PNG, else JPEG 85 (a text
+  screenshot with anti-aliasing has thousands of colours, so the spec's "few colours" needed a
+  number); alpha is flattened onto white for JPEG; a decoded picture over 64 megapixels is
+  refused (400). WebP is accepted and re-encoded. The route's body limit is 9 MB (the router's
+  2 MB stays for the others), the 8 MB check is in the store.
+- **Who reads.** `Agent::set_vision_source` (the daemon: `image_readers.rs`) answers, for the
+  model that answers the turn, `brain_reads` (`usable(brain).supportsImage`) and `describer`
+  (`usable(visionModel)`; it must have the chat role, and `supportsImage` is not required of it).
+  The refusal is `agent::vision::Refused`: the notice (session scoped) and 409 `refused`; it is
+  checked in `Agent::start`, before the turn takes the session, also for queued input. The Brain
+  is the conversation's choice, else the default; a chosen model that cannot be used is read as
+  the default's plan only if the source says so (it says "reads nothing").
+- **Descriptions.** Made before the message is stored (also for steering input, when the loop
+  drains it), stored in the message line; a failing vision model fails the turn ("the vision
+  model X could not read the image"). An image of a message beyond the last 6 of a request, when
+  the Brain reads images and the message has no description, is described on demand and kept in
+  memory (`Agent.described`), not written to the file; with no vision model its line says "not
+  shown to this model". "The last 6 messages" counts the messages of the request, tool results
+  included. Compaction describes the images of what it summarizes the same way, in the summarizer's
+  input only. `context::message_chars` counts an image as one token per 750 pixels (at most 1600).
+- **Adapters.** Pixels go as `image_url` data URLs (chat), `input_image` (responses), base64
+  `image` blocks before the text (anthropic) and `images` (ollama); no empty text part next to an
+  image; an image without pixels is not sent. Request bodies are pinned with `json!` equality.
+- **Composer.** The upload starts when the file is added (a thumbnail shows at once; Send waits
+  for the uploads); a message that the daemon refuses comes back with its text and images, and
+  the refusal is not toasted twice (the daemon's notice is the toast). The line "Images are sent to
+  <provider>." names the Brain's provider when it reads images, else the vision model's, and not
+  at all for a loopback host; it is told once per session at the first send (the window keeps the
+  list in memory: a reload may tell it again). The classes are `pics-*`: `attach-*` is the
+  sidebar's. `MessageImages` sets the width as `min(320, width)` (a percentage `max-width` made
+  the button as wide as the bubble).
+- **Telegram.** `Message.photo` and `caption` are typed; the biggest size at most 20 MB (the
+  limit Telegram gives a bot) is downloaded like a voice note's file; `BotAgent::send_images`;
+  other attachments still get "I cannot read attachments here yet. Photos and voice notes work."
+- **Live.** `brain::select_tools` is the pure part of `tools`; the live `screen` spec replaces the
+  registry's. The frame goes to the session through `screen::live::register(call id, tool_tx)`
+  (only `live/tool_call.rs` registers, so the Brain's own `screen` call keeps the vision path);
+  the call still runs through `execute_call` (permission, audit, events). The question is asked
+  whatever the permission mode (`confirm::step_once`), a card that the engine also raises is
+  answered by that yes, and a look is not a repeat. Refusals come before the question: a locked
+  screen (logind `LockedHint` of the session) and any waiting approval card (all of them, not only
+  this session's). The screenshot file of a live look is deleted. Tests never capture: `screen`
+  reads `KAGENT_FAKE_SCREENSHOT` (a PNG) and `KAGENT_FAKE_LOCKED` (locked while that file exists).
+- **Found on the way.** `SessionStore::append` did not flush: tokio writes a file in the
+  background, so a read right after could see an empty file (a flaky test of the new store).
+- **The window is not rebuilt for the owner.** The web suites read `KAGENT_DIST` (a build elsewhere);
+  the checks ran on `/tmp/kagent-s46-dist`, and `web/dist`, which the owner's daemon serves, and
+  `target/release` were left alone. Section G has the commands.
+- Not verified: the live path end to end (`test-live.py`, port 7878 busy); that Gemini Live
+  accepts a `video` frame on this model (the spec says "video frame"; the older field is
+  `mediaChunks`); logind's `LockedHint` on this KDE; a real photo from Telegram; the owner's checks
+  of the spec (an error screenshot in chat, "look at my screen" by voice).
+- Left as it was: the `RETRIES` sentence of the live instruction still says "screen with window",
+  and the live `screen` has no `window` (word for word in a test; the owner may reword both).
+
 ### Session 2026-11-28 (S43: work windows and notices as toasts, v0.0.2 item 6)
 
 Built: `specs/notices.md` and `specs/work-windows.md`, in five commits (notices in the daemon,
@@ -3060,6 +3134,7 @@ Phase 5 (planned 2026-11-27, not started; the order is the dependency order)
 v0.0.2
 - [x] S44 settings by voice and the voice rules (`specs/voice-control.md`; section E, 2026-11-27 night)
 - [x] S45 Google Calendar and the morning report (`specs/calendar.md`; items 1 to 8 automatic against a fake Google, item 9 is the owner's with a real account; section E, 2026-11-27 night)
+- [x] S46 images in chat and "look at my screen" (`specs/vision.md`; the automatic items pass, `test-live.py` has the checks and was not run, the owner's checks are left; section E, 2026-11-28)
 
 Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
@@ -3091,6 +3166,7 @@ Phase 6 (planned 2026-11-27; S40 and S41 done)
 | S35 | Claude Code installed and logged in as in a terminal (`claude --version` answers). Once: Settings -> Coding agents -> Test (it starts one short job and uses a little of the subscription). tmux is not needed |
 | S36 | install Codex (`codex` on PATH; KAgent never installs it) and log in; Settings -> Coding agents -> Test |
 | S37 | Konsole, for "Open in a terminal" |
+| S46 | after the release rebuild and restart, and `npm run build` in `web/`: paste a screenshot of an error into a chat and ask what it says (with a Brain that has "Reads images", or a vision model set in Settings -> Models); by voice in `live` or `auto`: "look at my screen, what is this dialog?" and say yes to the question; then `python3 scripts/test-live.py` once with the daemon stopped (it needs port 7878) |
 | S45 | console.cloud.google.com: a project; enable "Google Calendar API"; OAuth consent screen (External, your address as a test user, then "Publish app", else Google expires the token after 7 days); Credentials, OAuth client ID, Desktop app; paste the client id and secret into Settings -> Calendar, Save client, Connect |
 | S45 | for places and leave-by (optional): enable "Places API (New)" and "Routes API", create an API key restricted to those two, paste it into Settings -> Calendar (Places and travel), Test; billing must be on for the project (this use stays inside the free monthly allowance). Then restart the daemon (release rebuild) for the new tools and routes |
 | S41 | after the release rebuild: in one conversation pick another model (Ctrl+M) and ask something; the answer comes from that model while the other conversations, a task and a Telegram chat keep the default (`specs/scenarios.md` S41 item 8) |

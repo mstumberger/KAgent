@@ -94,3 +94,11 @@ web/src/components/CommandInput.tsx, web/src/components/Attachments.tsx, Message
   provider line once.
 - With the owner: paste a screenshot of an error and ask what it says; by voice, "look
   at my screen, what is this dialog?".
+
+## 6. As built (2026-11-28)
+
+The decisions are in `IMPLEMENTATION.md` section E, session 2026-11-28 (S46). What differs from the
+text above: `ImageRef` also has `description` and `readBy`; the file folder holds an `<id>.json` for
+each image; the re-encode keeps PNG up to 8192 distinct colours; the live `screen` has its own spec
+(`target` only); a look is refused while any approval card waits, and while the screen is locked.
+

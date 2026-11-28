@@ -250,3 +250,23 @@ seconds into the owner's only terminal (a running Claude Code session). `full` l
   runs again), `kagent-core` `todo/tests.rs` (`voice_gate`: `terminal send` asks in
   `full`, `terminal list` does not).
 
+
+### Amendment 2026-11-28: `screen` in live voice (S46, `vision.md` section 3)
+
+- `screen` is declared to the live model in `live` and `auto` whatever `voice.toolGroups`
+  holds (like `settings`), with its own spec: `{target?: window|monitor|desktop}` and the
+  words "puts it in your view". `routed` is unchanged: the Brain calls `screen`.
+- A live call captures, sends one `realtimeInput` video frame (JPEG, longest side 1024) to
+  the live session, and answers `{"status": "ok", "output": "the screenshot is in your view
+  now"}`. The frame goes before the answer, on the same channel.
+- Asked out loud once per voice session, whatever the permission mode (`confirm::step_once`):
+  "I want to look at your active window. Say yes to go ahead, or no." (`monitor` and
+  `desktop` say so). The yes covers every later `screen` call of that session; a no covers
+  nothing; a new session asks again. A look is not a repeat (`Repeats` does not count it).
+- Refused before it is asked: a locked screen (`the screen is locked`) and an approval card
+  waiting on the screen (KAgent never captures its own cards).
+- The `live` and `auto` instruction gets: "To see the screen call `screen`; never describe the
+  screen without having looked in this turn."
+- Tests: `confirm.rs` (asked once per session), `screen/live/tests.rs` (declared whatever the
+  groups hold; one JPEG frame of 1024 and the answer; locked sends nothing; a call nobody
+  registered keeps the vision path), `instruction.rs`; `scripts/test-live.py` scenario `look`.

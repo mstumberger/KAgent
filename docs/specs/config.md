@@ -10,7 +10,7 @@
 | settings | `<config>/settings.json` (0600) | |
 | providers | `<config>/providers.json` (0600) | |
 | skills (user) | `<config>/skills/<name>/SKILL.md` | bundled: `<repo or /usr/share/kagent>/skills/` |
-| sessions | `<data>/sessions/<id>.jsonl` + `<id>.meta.json` | |
+| sessions | `<data>/sessions/<id>.jsonl` + `<id>.meta.json`; images in `<id>.images/` (S46) | |
 | audit | `<data>/audit.jsonl` | |
 | changes | `<data>/changes/<id>.json` | |
 | alerts | `<data>/alerts.json` (array, updated in place) | |
@@ -175,7 +175,15 @@ once at load (models.md section 3, item 4) and is saved as 2.
 `<id>.meta.json`: `{id, title, createdAt, updatedAt, messageCount}` (SessionMeta in
 `session.rs`). `<id>.jsonl`: one `Message` per line (protocol.rs, camelCase,
 `role: user|assistant|tool`, `toolCalls[]`, `toolCallId`, `toolName`, `isError`,
-`via`, `providerState`). Title = first user line, 60 chars.
+`via`, `providerState`, and since S46 `images`). Title = first user line, 60 chars.
+
+`images` (S46, `vision.md`): the images of a user message, at most 4, left out when empty:
+`{id, mime: "image/png"|"image/jpeg", width, height, bytes, description?, readBy?}`. The
+pixels are files, `<data>/sessions/<sessionId>.images/<id>.png|jpg`, each with an
+`<id>.json` that holds its `ImageRef`; the folder is deleted with the session. `description`
+and `readBy` (the vision model's id) are set once when the Brain cannot read images itself
+and the vision model described it (`vision.md` section 2); the file is never rewritten for
+them, they are in the message line.
 
 ## 6. Audit log (`audit.jsonl`, S6)
 

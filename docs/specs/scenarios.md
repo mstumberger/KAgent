@@ -676,3 +676,41 @@ Spec: `calendar.md` section 9. Items 1 to 8 are `[auto]` (the fake Google, no ne
    voice through the interview with a place; move it; delete it with "confirm"; "Send now";
    the report spoken the next morning (and on Telegram at its time).
 
+## S46 Images in chat and "look at my screen"
+Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback, headless Chrome); the last is the owner's.
+1. **[auto]** The store: an image round-trips through the session file and a restart (the line has
+   the id, never the pixels); a screenshot stays PNG and a photograph becomes JPEG 85; the longest
+   side is cut to 1568 (a live frame to 1024); EXIF and text chunks do not survive; GIF and PDF are
+   refused as a type, a byte over 8 MB as too large, a cut file as unreadable; five images in a
+   message, another session's image and an id that is a path are refused; the folder goes with the
+   session.
+2. **[auto]** The routes (`api/images/tests.rs`, over loopback): an upload answers the `ImageRef`; 415,
+   413 (the body limit of the route), 400 without the field `file`, 404 for an unknown session; a
+   message names its images by id, at most four.
+3. **[auto]** The readers (`kagent-core/tests/vision.rs`): a Brain with `supportsImage` gets the stored
+   file as pixels and no vision call is made; one without gets the description of the vision model
+   once (`[image 1, read by <model>: ...]`), stored in the message, and the next turn asks nothing; with
+   no vision model the turn is refused before it starts (the notice of the spec, nothing stored, no
+   model asked); a failing vision model fails the turn with what to do; only the last 6 messages
+   carry pixels, older ones go as a line; compaction summarizes descriptions, never pixels.
+4. **[auto]** The adapters pin the request body of one image in each of the four formats; an image
+   with no pixels is not sent, and no empty text part stands beside an image.
+5. **[auto]** Telegram: a photo with a caption is an image of the message with the caption as its text, the
+   biggest size that a bot can download, also as steering while a turn runs; a document still gets the
+   old answer.
+6. **[auto]** Live voice (`screen/live/tests.rs`, `confirm.rs`, `instruction.rs`): `screen` is declared in
+   `live` and `auto` whatever `voice.toolGroups` holds, with `target` only, and not in `routed`; a live
+   call sends one JPEG frame of at most 1024 px and answers ok, and the screenshot file is deleted; a
+   locked screen sends nothing; the first look is asked with the sentence of the spec and the yes covers
+   the later ones in that session, a no covers nothing; the instruction line is in `live` and `auto`.
+7. **[auto]** `scripts/test-vision-web.py`: paste, drop, the attach button, remove, the fifth image and a GIF
+   refused, Send with the ids, an images-only message, the thumbnail (56 px), the image of a message (at
+   most 320 px), the full view (Escape and the backdrop close it), the line "Images are sent to <provider>."
+   once per session and not for a local provider, a refused message comes back; dark and light at 1200x820
+   and 340x460; screenshots in `/tmp/kagent-s46-shots/`.
+8. **[auto, written, not run with the owner's daemon up]** `scripts/test-live.py` scenario `look`: the first
+   `screen` call is asked and sends no frame; after a spoken yes one JPEG video frame precedes the answer
+   `{"status": "ok", "output": "the screenshot is in your view now"}`; the next look is not asked; a locked
+   screen answers "the screen is locked" with no frame.
+9. The owner: paste a screenshot of an error into a chat and ask what it says; by voice, "look at my
+   screen, what is this dialog?"; say yes once and look again without being asked.
