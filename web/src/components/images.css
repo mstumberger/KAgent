@@ -1,0 +1,132 @@
+/* Images in the composer and in a message (Attachments.tsx, MessageImages.tsx). */
+.pics {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pics-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pics-item {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--rim);
+  background: var(--glass-2);
+}
+.pics-item img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.pics-item.busy img {
+  opacity: 0.45;
+}
+.pics-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--rim-strong);
+  background: var(--glass);
+  color: var(--ink);
+}
+.pics-line {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.composer-tools .pics-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--rim);
+  color: var(--dim);
+}
+.composer-tools .pics-btn:hover:not(:disabled) {
+  color: var(--ink);
+}
+.chat-main.dropping {
+  outline: 2px dashed var(--ice);
+  outline-offset: -6px;
+}
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.msg-images:last-child {
+  margin-bottom: 0;
+}
+.msg-image {
+  width: fit-content;
+  padding: 0;
+  border: 1px solid var(--rim);
+  border-radius: var(--radius-m);
+  background: transparent;
+  overflow: hidden;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+.msg-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  height: auto;
+  object-fit: contain;
+}
+.msg-image-wait {
+  display: block;
+  width: 120px;
+  background: var(--glass-2);
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.78);
+  cursor: zoom-out;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-m);
+}
+.lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--rim-strong);
+  color: var(--ink);
+}

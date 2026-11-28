@@ -215,14 +215,14 @@ export async function setPlan(id: string, active: boolean) {
 }
 
 /** Send a line of the composer. `/new` and `/compact` are commands of the UI (commands.ts): neither sends a message; `/plan` alone arms the Plan toggle (Chat). `/plan <request>` (plan-todo.md section 2) and a line sent with `plan` start the turn in plan mode: the prefix is not part of the message. */
-export async function sendMessage(text: string, plan = false) {
+export async function sendMessage(text: string, plan = false, images: string[] = []) {
   const line = text.trim();
   const builtin = builtinOf(line)?.name;
   if (builtin === "new") return newSession();
   if (builtin === "compact") return compactSession();
   if (builtin === "plan") return;
   const id = store.activeSession;
-  if (!id || !line) return;
+  if (!id || (!line && images.length === 0)) return;
   // The session of a subagent is read-only (agents.md section 6); the daemon refuses too.
   if (store.metas[id]?.origin === "subagent") {
     notify("The session of a subagent is read-only: its answer arrives in the session that started it.", "info");
@@ -231,7 +231,9 @@ export async function sendMessage(text: string, plan = false) {
   const folder = projectArg(line);
   if (folder !== null) return attachByCommand(id, folder);
   const prefixed = /^\/plan\s/.test(line);
-  const body = prefixed ? { text: line.replace(/^\/plan\s+/, ""), plan: true } : plan ? { text, plan: true } : { text };
+  const body: Record<string, unknown> = prefixed ? { text: line.replace(/^\/plan\s+/, ""), plan: true } : plan ? { text, plan: true } : { text };
+  // Images go as the ids the uploads answered (vision.md section 1); a message may be images alone.
+  if (images.length > 0) body.images = images;
   await api.post(`/api/sessions/${id}/messages`, body);
 }
 

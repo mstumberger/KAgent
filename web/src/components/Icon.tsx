@@ -44,6 +44,7 @@ const P: Record<string, string> = {
   terminal: "M4 5h16v14H4z M7 10l3 2-3 2 M12 15h5",
   list: "M9 6h12 M9 12h12 M9 18h12 M4 6h.01 M4 12h.01 M4 18h.01",
   arrowDown: "M12 5v14 M6 13l6 6 6-6",
+  paperclip: "M21 12.5 12.6 20.9a5 5 0 0 1-7.1-7.1l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4L15.4 8",
   moon: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z",
 };
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Message } from "../api";
 import Markdown from "./Markdown";
 import { AgentNote } from "./AgentsCard";
+import MessageImages from "./MessageImages";
 
 export function ToolCard({ m }: { m: Message }) {
   const [open, setOpen] = useState(false);
@@ -21,7 +22,7 @@ export function ToolCard({ m }: { m: Message }) {
   );
 }
 
-export function Bubble({ m, streaming, thinking }: { m: Message; streaming?: string; thinking?: string }) {
+export function Bubble({ m, streaming, thinking, sessionId }: { m: Message; streaming?: string; thinking?: string; sessionId?: string | null }) {
   if (m.role === "tool") return <ToolCard m={m} />;
   const isUser = m.role === "user";
   const via = (m as { via?: string }).via;
@@ -32,6 +33,7 @@ export function Bubble({ m, streaming, thinking }: { m: Message; streaming?: str
   const text = (streaming !== undefined ? streaming : m.content) || "";
   // A step that only calls tools has no words: its results show as tool chips.
   if (!isUser && !text && !thinking && m.toolCalls && m.toolCalls.length > 0) return null;
+  const images = isUser ? (m.images ?? []) : [];
   return (
     <div className={`bubble ${isUser ? "user" : "assistant"}`}>
       {via === "voice" && <span className="via">voice</span>}
@@ -42,7 +44,8 @@ export function Bubble({ m, streaming, thinking }: { m: Message; streaming?: str
           <pre>{thinking}</pre>
         </details>
       )}
-      <div className="content">{isUser ? text : text ? <Markdown text={text} /> : <span className="typing" aria-label="working" />}</div>
+      {images.length > 0 && <MessageImages sessionId={sessionId ?? null} images={images} />}
+      {(text || images.length === 0) && <div className="content">{isUser ? text : text ? <Markdown text={text} /> : <span className="typing" aria-label="working" />}</div>}
     </div>
   );
 }

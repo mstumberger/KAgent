@@ -1,6 +1,7 @@
 // The composer's input with the slash picker (skills.md section 6): while the text is one
 // word that starts with `/`, the matching skills and built-in commands open above it.
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { imageFiles } from "../images";
 import type { SkillView } from "../skillsApi";
 import { matchSlash, slashItems, slashWord, type SlashItem } from "../commands";
 import "./command.css";
@@ -14,9 +15,11 @@ interface Props {
   placeholder?: string;
   /** The slash picker stays shut while another menu (the model menu) is open. */
   suspend?: boolean;
+  /** Images pasted into the input (Ctrl+V of a picture): the composer attaches them (vision.md section 1). */
+  onImages?: (files: File[]) => void;
 }
 
-export default function CommandInput({ value, skills, onChange, onPick, placeholder, suspend }: Props) {
+export default function CommandInput({ value, skills, onChange, onPick, placeholder, suspend, onImages }: Props) {
   const listId = useId();
   // The highlighted item of the word it was moved in: a new word starts at the top.
   const [cursor, setCursor] = useState<{ word: string; index: number }>({ word: "", index: 0 });
@@ -30,6 +33,14 @@ export default function CommandInput({ value, skills, onChange, onPick, placehol
 
   const pick = (item: SlashItem | undefined) => {
     if (item && !item.comesWith) onPick(`/${item.name} `);
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const files = imageFiles(e.clipboardData?.items);
+    if (files.length === 0 || !onImages) return;
+    // A picture is not text: the input keeps what it had.
+    e.preventDefault();
+    onImages(files);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -54,6 +65,7 @@ export default function CommandInput({ value, skills, onChange, onPick, placehol
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
         aria-label="Message"
         role="combobox"
         aria-autocomplete="list"
