@@ -1,12 +1,13 @@
 // The events of the daemon, applied to the store, and the start of the window. Split from
 // getStore().ts, which holds the state and its actions.
-import { api, initialSection, initialSession, initialView, type StateView } from "./api";
+import { api, type StateView } from "./api";
+import { quiet } from "./router/quiet";
 import { events, type AgentEvent } from "./events";
 import { notify, pushNotice } from "./components/toasts";
 import { refreshWatch } from "./screenWatch";
 import { readUsage } from "./usageLine";
 import { onBackgroundTask } from "./components/work/state";
-import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState, showView } from "./store";
+import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState } from "./store";
 
 const set = patch;
 
@@ -126,7 +127,6 @@ export function handleEvent(ev: AgentEvent) {
 }
 
 export function init() {
-  if (initialView) showView(initialView, initialSection);
   events.on(handleEvent);
   events.start(api.wsUrl);
   void refreshState();
@@ -134,13 +134,12 @@ export function init() {
   void refreshSkills();
   void refreshModels(true);
   void readUsage();
+  // The place the address named is open already (router/router.ts); this opens the latest conversation when it named none.
   void refreshSessions().then(() => {
-    if (initialSession) {
-      void openSession(initialSession);
-    } else if (!getStore().activeSession && getStore().sessions.length > 0) {
+    if (!getStore().activeSession && getStore().sessions.length > 0) {
       // Continue the most recent conversation (voice too) instead of starting a new one.
       const latest = [...getStore().sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
-      void openSession(latest.id);
+      quiet(() => void openSession(latest.id));
     }
   });
 }

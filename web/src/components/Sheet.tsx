@@ -5,8 +5,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Icon from "./Icon";
 import "./popup.css";
 import "./sheet.css";
+import { useOverlay } from "../router/overlays";
 
 export default function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useOverlay(true, onClose);
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;

@@ -103,6 +103,19 @@ async fn bearer_auth(state: axum::extract::State<Arc<AppState>>, req: Request, n
     }
 }
 
+/// `{"error": {"code": "not_found"}}` for a path under `/api/` that no route has.
+async fn api_not_found(req: Request) -> HttpError {
+    not_found(format!("no such route: {} {}", req.method(), req.uri().path()))
+}
+
+/// The page: every path that is not a file of `dist` answers with its `index.html`, so `/settings/models` and
+/// `/tickets/KA-1` open the window at that place (shell.md section 7).
+fn with_web<S: Clone + Send + Sync + 'static>(app: Router<S>, dist: &std::path::Path) -> Router<S> {
+    let index = dist.join("index.html");
+    let serve_dir = tower_http::services::ServeDir::new(dist).fallback(tower_http::services::ServeFile::new(index));
+    app.fallback_service(serve_dir).layer(middleware::from_fn(page_cache))
+}
+
 pub fn router(state: Arc<AppState>) -> Router {
     let api_routes = Router::new()
         .route("/state", get(api::get_state))
@@ -231,6 +244,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/hooks/{id}", put(crate::hooks::http::update).delete(crate::hooks::http::delete))
         .route("/hooks/{id}/test", post(crate::hooks::http::test))
         .route("/widgets/{session}/{id}", get(crate::widgets::get_widget))
+        // A path under /api that matches no route is a 404 of the API, never the page (shell.md section 7).
+        .fallback(api_not_found)
         .layer(middleware::from_fn_with_state(state.clone(), bearer_auth));
 
     // The one calendar route without the bearer token: Google sends the owner's browser here
@@ -245,14 +260,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     // reads the token from the URL fragment). Added before the layers below so the Host
     // check covers static files too (DNS rebinding).
     let dist = crate::paths::Paths::resolve().web_dist();
-    let app = if dist.is_dir() {
-        let index = dist.join("index.html");
-        let serve_dir = tower_http::services::ServeDir::new(&dist)
-            .not_found_service(tower_http::services::ServeFile::new(index));
-        app.fallback_service(serve_dir).layer(middleware::from_fn(page_cache))
-    } else {
-        app
-    };
+    let app = if dist.is_dir() { with_web(app, &dist) } else { app };
     app.layer(middleware::from_fn(host_check))
         .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         .with_state(state)
@@ -307,6 +315,43 @@ mod cache_tests {
         assert_eq!(page_cache_control("/assets/index-D9ITp-Ul.js"), Some("public, max-age=31536000, immutable"));
         for api in ["/api/state", "/ws", "/live"] {
             assert_eq!(page_cache_control(api), None, "{api}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod web_tests {
+    use super::*;
+
+    /// A listener with a stand-in API of the same shape as `router` (a nested router with the fallback) and the page.
+    async fn serve(dist: &std::path::Path) -> String {
+        let api = Router::new().route("/state", get(|| async { "state" })).fallback(api_not_found);
+        let app = with_web(Router::new().nest("/api", api), dist);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        url
+    }
+
+    #[tokio::test]
+    async fn an_address_of_the_window_gets_the_page_and_an_unknown_api_route_a_404_json() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("index.html"), "<!doctype html><title>KAgent</title>").unwrap();
+        let url = serve(dir.path()).await;
+        for path in ["/", "/settings/models", "/tickets/KA-1", "/chat/0a1b2c", "/runs/run_1/T2"] {
+            let res = reqwest::get(format!("{url}{path}")).await.unwrap();
+            assert_eq!(res.status(), 200, "{path}");
+            assert_eq!(res.headers()["cache-control"], "no-cache", "{path}");
+            assert!(res.text().await.unwrap().contains("<title>KAgent</title>"), "{path}");
+        }
+        let ok = reqwest::get(format!("{url}/api/state")).await.unwrap();
+        assert_eq!(ok.text().await.unwrap(), "state");
+        for path in ["/api/nothing", "/api/sessions/s1/nothing"] {
+            let res = reqwest::get(format!("{url}{path}")).await.unwrap();
+            assert_eq!(res.status(), 404, "{path}");
+            assert_eq!(res.headers()["content-type"], "application/json", "{path}");
+            let body: serde_json::Value = res.json().await.unwrap();
+            assert_eq!(body["error"]["code"], "not_found", "{path}");
         }
     }
 }

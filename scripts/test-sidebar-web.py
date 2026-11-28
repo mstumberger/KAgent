@@ -30,7 +30,7 @@ CFG = dict(sessions=SESSIONS, dirs=[KA, OT, EX], alerts=3, running=["s2"],
            projects=[{"path": KA, "name": "KAgent", "agentsMd": True}, {"path": OT, "name": "other", "agentsMd": False}])
 
 MODE = lambda: json.loads(daemon("GET", "/api/state")[1])["settings"]["permissionMode"]
-THINGS = "(() => [...document.querySelector('header').children].map(c => c.id === 'sidebar-toggle' ? 'toggle' : c.classList.contains('logo') ? 'logo:' + c.textContent.trim() : c.classList.contains('spacer') ? 'spacer' : c.classList.contains('notice') ? 'notice' : c.classList.contains('voice-chip') ? 'voice' : c.classList.contains('win-controls') ? 'window' : c.textContent.trim()))()"
+THINGS = "(() => [...document.querySelector('header').children].map(c => c.id === 'sidebar-toggle' ? 'toggle' : c.classList.contains('logo') ? 'logo:' + c.textContent.trim() : c.classList.contains('nav-buttons') ? 'nav' : c.classList.contains('spacer') ? 'spacer' : c.classList.contains('notice') ? 'notice' : c.classList.contains('voice-chip') ? 'voice' : c.classList.contains('win-controls') ? 'window' : c.textContent.trim()))()"
 DESCRIBE = "(() => { const a = document.activeElement; return a.id === 'sidebar-toggle' ? 'toggle' : a.closest('.voice-chip') ? 'voice:' + a.textContent.trim() : a.closest('.win-controls') ? 'window:' + a.getAttribute('aria-label') : a.classList.contains('sb-new') ? 'new' : a.textContent.trim() || a.getAttribute('aria-label'); })()"
 
 VIEWS = ["Voice", "Tasks", "Tickets", "Runs", "Alerts", "Changes", "Security", "System", "Settings"]
@@ -321,7 +321,7 @@ async def main():
             await page.until("!!document.querySelector('.voice-chip')", "the voice chip")
             await page.shot(f"titlebar-{theme}")
             results[f"{t}: the title bar is 36 px high and drags the window"] = await page.js("Math.round(document.querySelector('header').getBoundingClientRect().height) === 36 && document.querySelector('header').classList.contains('app-titlebar')")
-            results[f"{t}: the header holds exactly the toggle, KAgent, Stop all and the voice chip (the window controls follow the sidebar in the DOM)"] = await page.js(THINGS) == ["toggle", "logo:KAgent", "spacer", "Stop all", "voice"]
+            results[f"{t}: the header holds exactly the toggle, Back and Forward, KAgent, Stop all and the voice chip (the window controls follow the sidebar in the DOM)"] = await page.js(THINGS) == ["toggle", "nav", "logo:KAgent", "spacer", "Stop all", "voice"]
             results[f"{t}: the header has no select, no nav, no theme button and no permission picker"] = await page.js("(() => { const h = document.querySelector('header'); return !h.querySelector('select, nav, .perm, [aria-label*=theme i], [aria-label*=permission i]'); })()")
             results[f"{t}: every control of the header has a name"] = await page.js("[...document.querySelectorAll('header button, .win-controls button')].every(b => b.textContent.trim() || b.getAttribute('aria-label'))")
             await page.js("document.querySelector('#sidebar-toggle').focus()")
@@ -331,7 +331,7 @@ async def main():
                 seen.append(await page.js(DESCRIBE))
                 if seen[-1] == "new":
                     break
-            results[f"{t}: the keyboard order is the toggle, Stop all, the voice chip, then the sidebar"] = seen == ["toggle", "Stop all", "voice:connecting", "voice:mute", "voice:end", "new"]
+            results[f"{t}: the keyboard order is the toggle, Back (enabled: the mic opened the voice view), Stop all, the voice chip, then the sidebar"] = seen == ["toggle", "Back", "Stop all", "voice:connecting", "voice:mute", "voice:end", "new"]
             # v0.0.3 A6: the window controls come last in the tab order, and are drawn at the right end of the title bar
             results[f"{t}: the window controls follow the sidebar and the view in the DOM (last in the tab order)"] = await page.js("(() => { const w = document.querySelector('.win-controls'), f = document.querySelector('aside.sidebar'), m = document.querySelector('main'); return !document.querySelector('header .win-controls') && !!(f.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(m.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING); })()")
             await page.js("document.querySelector('.win-btn').focus()")

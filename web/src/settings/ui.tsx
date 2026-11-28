@@ -19,7 +19,7 @@ export function SectionPage({ title, description, actions, children }: { title: 
           </div>
         </div>
       </header>
-      <div className="ui-section-scroll">
+      <div className="ui-section-scroll" data-scroll-root="page">
         <div className="ui-section">{children}</div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import Icon from "../Icon";
 import "../popup.css";
 import "./attach.css";
 import { closeDrawer, refreshProjects, setProject } from "./store";
+import { useOverlay } from "../../router/overlays";
 
 interface Props {
   session: SessionRow;
@@ -20,6 +21,7 @@ const WIDTH = 300;
 
 export default function AttachMenu({ session, anchor, onClose }: Props) {
   const s = useStore();
+  useOverlay(true, () => onClose(true));
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
   const id = useId();

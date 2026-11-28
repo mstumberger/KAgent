@@ -12,6 +12,7 @@ import { PermissionRow } from "./PermissionPicker";
 import ThemeSwitch from "./ThemeSwitch";
 import "./sidebar.css";
 import "./sidebar-foot.css";
+import { useOverlay } from "../router/overlays";
 
 /** The views under the list, with their icons (`chat` is the list itself). */
 const ICONS: Record<Exclude<View, "chat">, string> = { voice: "mic", tasks: "sliders", tickets: "list", runs: "bot", alerts: "bell", changes: "box", security: "shield", system: "monitor", settings: "gear" };
@@ -100,6 +101,7 @@ export function SidebarBody({ rail = false, onView = showFromSidebar, foot = fal
 
 function Drawer() {
   const box = useRef<HTMLElement>(null);
+  useOverlay(true, closeDrawer);
   useEffect(() => {
     // The focus moves into the drawer, and comes back to the toggle when it closes.
     box.current?.querySelector<HTMLElement>("button, input")?.focus();

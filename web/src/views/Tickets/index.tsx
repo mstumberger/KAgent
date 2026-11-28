@@ -2,7 +2,7 @@
 // It is read again whenever the daemon says a ticket changed (`ticketChanged`).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import { useStore } from "../../store";
+import { setPlace, useStore } from "../../store";
 import { errorMessage, ticketsApi, type Change, type Listing, type Ticket, type TState } from "./api";
 import Board from "./Board";
 import Detail from "./Detail";
@@ -29,7 +29,9 @@ export default function Tickets() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<Mode>(readMode);
   const [filters, setFilters] = useState<Filters>({ project: "", label: "", text: "" });
-  const [selected, setSelected] = useState<string | null>(null);
+  // The open ticket is the address (`/tickets/<KEY>`, shell.md section 2).
+  const selected = s.placeId;
+  const setSelected = (key: string | null) => setPlace(key);
   const [adding, setAdding] = useState(false);
   const [announce, setAnnounce] = useState("");
   const newInput = useRef<HTMLInputElement>(null);

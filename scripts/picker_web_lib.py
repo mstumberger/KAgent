@@ -852,7 +852,7 @@ class Env:
             await self.page.send(f"{domain}.enable")
         return self
 
-    async def open(self, theme, query="", ready=None, init="", hash="", **cfg):
+    async def open(self, theme, query="", ready=None, init="", hash="", path="", **cfg):
         """Load the window in `theme` (kagent.theme) with the mock reset to `cfg`; `init` runs before the page's own scripts.
         The stored state of the window (localStorage) is cleared on each call except the theme; `/ws` is the fake of FAKE_WS."""
         reset(**cfg)
@@ -864,7 +864,7 @@ class Env:
         source = (f"try {{ if (sessionStorage.getItem('open') !== '{self._n}') {{ sessionStorage.setItem('open', '{self._n}'); localStorage.clear(); localStorage.setItem('kagent.theme','{theme}'); }} }} catch (e) {{}} "
                   f"{FAKE_WS} {init}")
         self._init = (await page.send("Page.addScriptToEvaluateOnNewDocument", source=source))["identifier"]
-        await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{query}#token=abc123{hash}")
+        await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{path}{query}#token=abc123{hash}")
         ready = ready or (".widget-status" if "overlay" in query or "compact" in query else "#sidebar-toggle")
         await page.until(f"!!document.querySelector('{ready}') && !document.body.innerText.includes('No token')", f"the page ({theme}, {query})")
         await asyncio.sleep(0.5)

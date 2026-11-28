@@ -1,5 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { api, captureToken } from "./api";
+import { api, captureToken, initialSection, initialSession, initialView } from "./api";
+import { startRouter } from "./router/router";
+import NavButtons from "./router/NavButtons";
 import { openSession, refreshSessions, setView, useStore } from "./store";
 import Sidebar from "./components/Sidebar";
 import { useNarrow } from "./components/sidebar/useNarrow";
@@ -99,6 +101,8 @@ export default function App() {
     const t = captureToken();
     setToken(t);
     if (t) {
+      // The address is the place the window opens at (shell.md section 2); before anything is read from the daemon.
+      startRouter({ view: initialView, section: initialSection, session: initialSession });
       init();
       installDiagnostics();
       voice.onSession((id) => void refreshSessions().then(() => openSession(id)));
@@ -150,6 +154,7 @@ export default function App() {
         >
           <Icon name="sidebar" size={15} />
         </button>
+        <NavButtons />
         <span className="logo">KAgent</span>
         <span className="spacer" />
         {(s.state?.running?.length ?? 0) > 0 && (
