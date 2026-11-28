@@ -188,7 +188,19 @@ pub enum AgentEvent {
     #[serde(rename_all = "camelCase")]
     LiveStatus { session_id: String, status: String, detail: String },
     #[serde(rename_all = "camelCase")]
-    Notice { level: String, text: String },
+    Notice {
+        level: String,
+        text: String,
+        /// What makes two notices the same one (notices.md section 1): `provider:<id>:<class>`, `hook:<name>`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
+        /// The session whose turn the notice belongs to.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+        /// `error`, `recovery` or `info`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+    },
     /// A command for the open web UI (from the `ui` tool or the tray).
     UiCommand { command: String, args: serde_json::Value },
     /// The skills library was rescanned: a skill added, removed or edited, or
@@ -215,4 +227,34 @@ pub enum AgentEvent {
     /// `done`, `failed`, `cancelled`.
     #[serde(rename_all = "camelCase")]
     SubagentUpdated { session_id: String, child: crate::agent::children::ChildView, status: crate::agent::children::ChildStatus },
+}
+
+impl AgentEvent {
+    /// A notice with no key: it is never merged with another (notices.md section 1). `kind`
+    /// follows the level: `error` and `warn` are `error`, `info` is `info`.
+    pub fn notice(level: &str, text: impl Into<String>) -> Self {
+        let kind = if level == "info" { "info" } else { "error" };
+        AgentEvent::Notice { level: level.into(), text: text.into(), key: None, session_id: None, kind: Some(kind.into()) }
+    }
+
+    /// The same notice, merged by `key` while its toast is open.
+    pub fn keyed_notice(level: &str, text: impl Into<String>, key: impl Into<String>) -> Self {
+        match Self::notice(level, text) {
+            AgentEvent::Notice { level, text, session_id, kind, .. } => AgentEvent::Notice { level, text, key: Some(key.into()), session_id, kind },
+            other => other,
+        }
+    }
+
+    /// The notice belongs to a turn of this session.
+    pub fn in_session(mut self, id: &str) -> Self {
+        if let AgentEvent::Notice { session_id, .. } = &mut self {
+            *session_id = Some(id.to_string());
+        }
+        self
+    }
+
+    /// The thing that went wrong works again: it closes the open error toast of the same `key`.
+    pub fn recovery(text: impl Into<String>, key: impl Into<String>) -> Self {
+        AgentEvent::Notice { level: "info".into(), text: text.into(), key: Some(key.into()), session_id: None, kind: Some("recovery".into()) }
+    }
 }

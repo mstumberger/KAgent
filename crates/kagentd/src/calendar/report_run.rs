@@ -153,7 +153,7 @@ impl Calendar {
         if self.state() != ConnState::Connected {
             let first = !std::mem::replace(&mut self.saved.lock().unwrap().told_skip, true);
             if first {
-                let _ = self.events.send(kagent_core::protocol::AgentEvent::Notice { level: "warn".into(), text: "No morning report: Google Calendar is not connected (Settings -> Calendar).".into() });
+                let _ = self.events.send(kagent_core::protocol::AgentEvent::keyed_notice("warn", "No morning report: Google Calendar is not connected (Settings -> Calendar).", "calendar:report"));
             }
             return;
         }
@@ -165,7 +165,7 @@ impl Calendar {
             }
             Err(e) => {
                 tracing::warn!("calendar: the morning report could not be made: {e}");
-                let _ = self.events.send(kagent_core::protocol::AgentEvent::Notice { level: "warn".into(), text: format!("The morning report could not be made: {e}") });
+                let _ = self.events.send(kagent_core::protocol::AgentEvent::keyed_notice("warn", format!("The morning report could not be made: {e}"), "calendar:report"));
             }
         }
     }

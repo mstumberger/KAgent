@@ -85,7 +85,7 @@ async fn notice(r: &mut Rig, what: &str) -> String {
     loop {
         let left = end.saturating_duration_since(Instant::now());
         let ev = tokio::time::timeout(left, r.events.recv()).await.unwrap_or_else(|_| panic!("no notice for {what}")).expect("event channel open");
-        if let AgentEvent::Notice { level, text } = ev {
+        if let AgentEvent::Notice { level, text, .. } = ev {
             assert_eq!(level, "warn", "{what}");
             return text;
         }

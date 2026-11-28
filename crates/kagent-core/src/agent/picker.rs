@@ -45,7 +45,7 @@ impl Agent {
         }
         let source = self.children.usable_models();
         let notice = |text: String| {
-            let _ = self.events.send(AgentEvent::Notice { level: "warn".into(), text });
+            let _ = self.events.send(AgentEvent::notice("warn", text).in_session(session_id));
         };
         let default = config.model_ref.clone();
         let mut answering = None;
