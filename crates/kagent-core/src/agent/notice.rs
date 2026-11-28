@@ -29,7 +29,10 @@ impl ErrorClass {
             Self::Key
         } else if has(&["503", "overloaded", "high demand", "unavailable", "busy"]) {
             Self::Busy
-        } else if has(&["connection refused", "connection reset", "unreachable", "timed out", "dns error", "error sending request", "connect error"]) {
+        } else if has(&[
+            "connection refused", "connection reset", "unreachable", "timed out", "timeout", "dns error", "error sending request", "connect error", "error trying to connect",
+            "failed to lookup", "name or service not known", "no route to host", "502", "504", "bad gateway", "gateway time-out", "gateway timeout",
+        ]) {
             Self::Down
         } else {
             Self::Other
@@ -96,6 +99,10 @@ mod tests {
             ("503 Service Unavailable", ErrorClass::Busy),
             ("The model is overloaded", ErrorClass::Busy),
             ("error sending request: Connection refused", ErrorClass::Down),
+            ("error sending request: dns error: failed to lookup address information", ErrorClass::Down),
+            ("operation timed out", ErrorClass::Down),
+            ("HTTP 502 Bad Gateway", ErrorClass::Down),
+            ("504 Gateway Timeout", ErrorClass::Down),
             ("something odd", ErrorClass::Other),
         ] {
             assert_eq!(ErrorClass::of(error), class, "{error}");

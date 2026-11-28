@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use crate::agent::notice::{provider_key, provider_of, ErrorClass};
 use crate::agent::state::SessionState;
 use crate::agent::{Agent, AgentConfig};
-use crate::compact::{before_last_user, is_capacity_error, should_compact, stored_index, summarize, summary_message, CompactError, CompactView, CompactionConfig, History, Plan, Step, Trigger, MIN_MANUAL_MESSAGES};
+use crate::compact::{before_last_user, is_capacity_error, is_unreachable_error, should_compact, stored_index, summarize, summary_message, CompactError, CompactView, CompactionConfig, History, Plan, Step, Trigger, MIN_MANUAL_MESSAGES};
 use crate::context::{self, sanitize_history, HistorySummary};
 use crate::protocol::{AgentEvent, Message};
 
@@ -116,7 +116,16 @@ impl Agent {
     /// once; only then switch to `fallbackModel`. With compaction switched off, or
     /// nothing to summarize, or a summary that fails: the fallback at once.
     pub(crate) async fn on_capacity_error(&self, session_id: &str, state: &SessionState, config: &mut AgentConfig, error: &anyhow::Error, recompacted: bool, fell_back: bool, cancel: &CancellationToken) -> Step {
-        if !is_capacity_error(&format!("{error:#}")) {
+        let text = format!("{error:#}");
+        // A provider that cannot be reached at all: compacting would not help, the fallback is the way out.
+        if is_unreachable_error(&text) && !is_capacity_error(&text) {
+            if !fell_back && !config.fallback_model_ref.is_empty() && config.fallback_model_ref != config.model_ref {
+                self.switch_to_fallback(session_id, config, error);
+                return Step::Fallback;
+            }
+            return Step::Fail;
+        }
+        if !is_capacity_error(&text) {
             return Step::Fail;
         }
         if !recompacted && self.compaction_config().enabled {

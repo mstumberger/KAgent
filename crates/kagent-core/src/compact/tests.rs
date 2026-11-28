@@ -220,4 +220,10 @@ fn the_view_the_api_answers_and_the_capacity_errors() {
     for e in ["context_length_exceeded", "400 Bad Request", "connection refused"] {
         assert!(!is_capacity_error(e), "{e}");
     }
+    for e in ["connection refused", "error sending request: dns error", "request timed out", "502 Bad Gateway", "504 Gateway Timeout"] {
+        assert!(is_unreachable_error(e), "{e}");
+    }
+    for e in ["400 Bad Request", "429 quota", "error decoding response body: timed out"] {
+        assert!(!is_unreachable_error(e), "{e}");
+    }
 }
