@@ -117,6 +117,11 @@ export default function Markdown({ text }: { text: string }) {
       i++;
       continue;
     }
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      blocks.push(<hr key={key()} />);
+      i++;
+      continue;
+    }
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
     if (h) {
       const level = Math.min(h[1].length + 2, 6);
