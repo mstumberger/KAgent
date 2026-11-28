@@ -18,7 +18,7 @@ use crate::server::{bad_request, not_found, ApiResult, HttpError};
 use crate::AppState;
 
 mod images;
-mod providers;
+pub(crate) mod providers;
 pub use images::{get_image, post_image, UPLOAD_BODY_BYTES};
 pub use providers::{
     add_provider, delete_provider, fetch_models, list_models, list_providers, provider_order, provider_templates, test_provider, update_provider,
