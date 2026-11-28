@@ -304,6 +304,9 @@ pub enum AgentEvent {
     /// `running` at the start, `killed` on a stop, then the final `done`, `failed` or `killed`.
     #[serde(rename_all = "camelCase")]
     BackgroundTask { task_id: String, session_id: String, status: String },
+    /// A ticket was created, changed or deleted (tickets.md section 4); `project` is the folder, `None` for the Inbox.
+    #[serde(rename_all = "camelCase")]
+    TicketChanged { key: String, project: Option<String>, removed: bool },
 }
 
 impl AgentEvent {

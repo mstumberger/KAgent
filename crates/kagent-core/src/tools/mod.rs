@@ -65,7 +65,7 @@ pub fn group_of(name: &str) -> &'static str {
         "todo_write" | "todo_read" | "plan_enter" | "plan_exit" => "agent",
         "agent_run" | "agent_wait" | "agent_stop" | "agent_list" | "task_output" | "task_stop" => "agent",
         // Settings by chat or voice (tools.md section 19a, voice-control.md).
-        "settings" | "local_models" | "usage" => "agent",
+        "settings" | "local_models" | "usage" | "tickets" => "agent",
         // Memory and earlier conversations (tools.md section 18).
         "memory_save" | "memory_search" | "memory_get" | "memory_forget" | "session_search" => "memory",
         // The web tools (tools.md section 20), registered by the daemon like the memory tools.
@@ -154,7 +154,7 @@ mod group_tests {
     /// the loop over `builtin_registry` above does not see them.
     #[test]
     fn the_agent_tools_belong_to_the_agent_group() {
-        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "task_output", "task_stop", "settings", "local_models", "usage"] {
+        for name in ["todo_write", "todo_read", "plan_enter", "plan_exit", "agent_run", "agent_wait", "agent_stop", "agent_list", "task_output", "task_stop", "settings", "local_models", "usage", "tickets"] {
             assert_eq!(super::group_of(name), "agent", "{name} is a tool of the agent group");
         }
         assert!(crate::context::GROUP_PRIORITY.contains(&"agent"), "and the group is among those kept when the window is small");

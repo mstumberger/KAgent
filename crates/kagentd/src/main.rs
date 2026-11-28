@@ -7,6 +7,8 @@ mod bots;
 mod calendar;
 mod local_models;
 mod usage;
+mod gitref;
+mod tickets;
 mod background_api;
 mod compact_api;
 mod rounded;
@@ -94,6 +96,8 @@ pub struct AppState {
     pub local_models: Arc<local_models::LocalModels>,
     /// The counters and limits of the providers (usage.md): behind `/api/usage` and the `usage` tool.
     pub usage: Arc<usage::UsageHub>,
+    /// The tickets of the projects (tickets.md): behind `/api/tickets` and the `tickets` tool.
+    pub tickets: Arc<tickets::Tickets>,
     /// The screen watch (screen-watch.md): the one watch, its tool and its routes.
     pub screen_watch: Arc<screen_watch::ScreenWatch>,
     pub skills: Arc<skills::SkillHub>,
@@ -255,6 +259,9 @@ async fn run() -> anyhow::Result<()> {
     // Usage and limits (usage.md): the tool finds the hub once it exists.
     let usage_cell: usage::tool::UsageCell = Default::default();
     registry.register(Arc::new(usage::tool::UsageTool::new(usage_cell.clone())));
+    // Tickets (tickets.md): the tool finds the store once it exists.
+    let tickets_cell: tickets::tool::TicketsCell = Default::default();
+    registry.register(Arc::new(tickets::tool::TicketsTool::new(tickets_cell.clone())));
     // The screen watch (screen-watch.md): the tool finds the watch once it exists.
     let screen_watch_cell: screen_watch::tool::WatchCell = Default::default();
     registry.register(Arc::new(screen_watch::tool::ScreenWatchTool::new(screen_watch_cell.clone())));
@@ -300,6 +307,8 @@ async fn run() -> anyhow::Result<()> {
     // Usage and limits (usage.md): the providers client reports every answer to the hub.
     let usage = usage::UsageHub::open(&paths.data, providers.clone(), settings_arc.clone(), events.clone());
     let _ = usage_cell.set(usage.clone());
+    let tickets = tickets::Tickets::new(paths.data.join("tickets"), events.clone());
+    let _ = tickets_cell.set(tickets.clone());
     // Hooks (hooks.md): the owner's own commands at the points of the agent's life. The agent
     // cannot write them (hooks.md section 5); a change applies from the next event.
     let hooks = Arc::new(hooks::HookHub::new(settings_arc.clone(), paths.settings(), audit.clone(), events.clone()));
@@ -351,6 +360,7 @@ async fn run() -> anyhow::Result<()> {
     });
     agent.set_tool_groups(Some(settings_arc.read().unwrap().tool_groups.clone()));
     todo_access.attach(&agent);
+    tickets.attach(&agent);
     plan_access.attach(&agent);
     // Subagents (agents.md): the profiles, the model windows, the background tasks and the limit.
     let subagents = subagents::Subagents::start(
@@ -432,6 +442,7 @@ async fn run() -> anyhow::Result<()> {
         calendar,
         local_models,
         usage,
+        tickets,
         screen_watch,
         skills: skills.clone(),
         memory,
