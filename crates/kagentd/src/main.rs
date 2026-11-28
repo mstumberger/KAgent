@@ -390,6 +390,8 @@ async fn run() -> anyhow::Result<()> {
         })
     };
     let runs = runs::Runs::start(agent.clone(), workflow_access, subagents.profiles.clone(), paths.data.join("runs"), paths.config.join("workflows"), settings_arc.read().unwrap().workflows_config().max_runs, project_check);
+    // A run's tasks are tickets (workflows.md section 7).
+    runs::tickets::TicketSync::new(tickets.clone(), runs.engine.clone()).spawn(events.subscribe());
     // Compaction (compaction.md section 1) reads its settings before every model request.
     let (settings_for_compaction, providers_for_compaction) = (settings_arc.clone(), providers.clone());
     agent.set_compaction_source(Arc::new(move || {

@@ -132,3 +132,116 @@ fn an_answer_goes_through_the_redactor_and_the_workflows_list_has_no_secret_fiel
     assert_eq!(http::redact_text(None, &json!({"a": 1})), "{\"a\":1}");
     let _: Value = serde_json::from_str(&text).unwrap();
 }
+
+// ---------------------------------------------------------------- the tickets of a run (workflows.md section 7)
+
+use kagent_core::workflow::model::{Run, Task, TaskState};
+
+use crate::tickets::{State, Tickets};
+
+fn sample(project: &str, state: RunState, tasks: Vec<Task>) -> Run {
+    let def = kagent_core::workflow::shipped::all(&known).into_iter().find(|d| d.name == "plan-implement-review").unwrap();
+    let now = chrono::Utc::now();
+    Run {
+        id: "run_abcd1234".into(),
+        workflow: def.name.clone(),
+        definition: def,
+        project: project.into(),
+        goal: "make the overlay keep focus".into(),
+        title: "make the overlay keep focus".into(),
+        state,
+        reason: String::new(),
+        origin_session: None,
+        run_session: "s".into(),
+        ticket: None,
+        plan_summary: String::new(),
+        tasks,
+        questions: vec![],
+        messages: vec![],
+        planner_session: None,
+        feedback: None,
+        rejections: 0,
+        report: String::new(),
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+fn task(id: &str, deps: &[&str], state: TaskState) -> Task {
+    let mut t = Task::new(id, &format!("Title {id}"));
+    t.state = state;
+    t.depends_on = deps.iter().map(|d| d.to_string()).collect();
+    t.done_when = vec![format!("{id} works")];
+    t.ticket = Some("CYB-9868".into());
+    t
+}
+
+#[tokio::test]
+async fn the_run_is_a_ticket_and_each_task_a_child_that_follows_the_task() {
+    let (engine, dir) = engine().await;
+    let project = dir.path().join("proj");
+    std::fs::create_dir_all(&project).unwrap();
+    let project = std::fs::canonicalize(&project).unwrap().to_string_lossy().to_string();
+    let (tx, _rx) = tokio::sync::broadcast::channel(64);
+    let tickets = Tickets::new(dir.path().join("tickets"), tx);
+    let sync = super::tickets::TicketSync::new(tickets.clone(), engine);
+
+    // While the plan waits there is the run's ticket and no task.
+    let mut run = sample(&project, RunState::AwaitingApproval, vec![task("T1", &[], TaskState::Waiting), task("T2", &["T1"], TaskState::Waiting)]);
+    let (run_key, keys) = sync.sync(&run);
+    let run_key = run_key.unwrap();
+    assert!(keys.is_empty());
+    let t = tickets.get(&run_key).unwrap();
+    assert_eq!((t.state, t.title.as_str(), t.labels.clone(), t.history[0].by), (State::InReview, "make the overlay keep focus", vec!["run".to_string()], crate::tickets::By::Agent));
+
+    // Approved: the tasks become its children, with their done-when and the planner's tracker key.
+    run.ticket = Some(run_key.clone());
+    run.state = RunState::Working;
+    let (_, keys) = sync.sync(&run);
+    assert_eq!(keys.len(), 2);
+    let t1 = tickets.get(&keys["T1"]).unwrap();
+    assert_eq!((t1.parent.as_deref(), t1.state, t1.title.as_str(), t1.done_when.clone()), (Some(run_key.as_str()), State::Todo, "T1 Title T1", vec!["T1 works".to_string()]));
+    assert!(t1.description.contains("Tracker: CYB-9868"));
+    run.tasks[0].ka_ticket = Some(keys["T1"].clone());
+    run.tasks[1].ka_ticket = Some(keys["T2"].clone());
+    assert!(sync.sync(&run).1.is_empty(), "no second ticket for a task");
+
+    // The state of the ticket follows the task's.
+    for (state, want) in [(TaskState::Implementing, State::InProgress), (TaskState::InReview, State::InReview), (TaskState::Changes, State::InProgress), (TaskState::NeedsOwner, State::InReview), (TaskState::Done, State::Done)] {
+        run.tasks[0].state = state;
+        sync.sync(&run);
+        assert_eq!(tickets.get(&keys["T1"]).unwrap().state, want, "{state:?}");
+    }
+    // A ticket the owner moved by hand is not moved back while the task does not change.
+    tickets.update(&keys["T1"], crate::tickets::Update { state: Some(State::Dropped), ..Default::default() }, crate::tickets::By::Owner).unwrap();
+    sync.sync(&run);
+    assert_eq!(tickets.get(&keys["T1"]).unwrap().state, State::Dropped);
+
+    // Stopping the run: what was not done says so, in state, label and note; what was done stays done.
+    run.state = RunState::Stopped;
+    run.reason = "stopped by the owner".into();
+    run.tasks[0].state = TaskState::Done;
+    run.tasks[1].state = TaskState::Stopped;
+    sync.sync(&run);
+    let t2 = tickets.get(&keys["T2"]).unwrap();
+    assert_eq!(t2.state, State::Backlog);
+    assert!(t2.labels.contains(&"stopped".to_string()) && t2.notes.last().unwrap().text == "the run was stopped before this task was done", "{t2:?}");
+    let rt = tickets.get(&run_key).unwrap();
+    assert_eq!(rt.state, State::Backlog);
+    assert!(rt.notes.last().unwrap().text.contains("stopped: stopped by the owner") && rt.labels.contains(&"stopped".to_string()), "{rt:?}");
+    // A failed task: backlog and why.
+    run.tasks[1].state = TaskState::Failed;
+    run.tasks[1].error = "the worker fell over".into();
+    sync.sync(&run);
+    assert!(tickets.get(&keys["T2"]).unwrap().notes.last().unwrap().text.contains("failed: the worker fell over"));
+}
+
+#[test]
+fn the_state_maps_are_as_the_spec_says() {
+    use super::tickets::{run_state, task_state};
+    let want = [(TaskState::Waiting, State::Todo), (TaskState::Blocked, State::Todo), (TaskState::Implementing, State::InProgress), (TaskState::Changes, State::InProgress), (TaskState::InReview, State::InReview), (TaskState::NeedsOwner, State::InReview), (TaskState::Done, State::Done), (TaskState::Dropped, State::Dropped), (TaskState::Failed, State::Backlog), (TaskState::Stopped, State::Backlog)];
+    for (t, s) in want {
+        assert_eq!(task_state(t), s, "{t:?}");
+    }
+    assert_eq!((run_state(RunState::Working), run_state(RunState::Done), run_state(RunState::Failed), run_state(RunState::AwaitingApproval)), (State::InProgress, State::Done, State::Backlog, State::InReview));
+}
