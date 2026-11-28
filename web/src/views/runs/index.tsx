@@ -44,10 +44,6 @@ export default function Runs() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const selectedRef = useRef<string | null>(selected);
-  const rowsRef = useRef<RunRow[]>([]);
-  useEffect(() => {
-    rowsRef.current = rows;
-  }, [rows]);
 
   const readRun = useCallback((id: string) => {
     runsApi.get(id).then(
@@ -69,32 +65,41 @@ export default function Runs() {
     );
   }, []);
 
-  // A different run is open (a click, a Back, an address): its tabs start again and it is read.
-  useEffect(() => {
-    selectedRef.current = selected;
+  // A different run is open (a click, a Back, an address): its tabs start again and it is read. The reset is made while rendering (the
+  // state a page derives from its address), the read in the effect.
+  const [seen, setSeen] = useState<string | null>(null);
+  if (seen !== selected) {
+    setSeen(selected);
     setRun((r) => (r?.id === selected ? r : null));
     setTabs(BASE);
     setError("");
-    if (!selected) return;
-    setCreating(false);
-    setActive(rowsRef.current.find((x) => x.id === selected)?.state === "awaiting_approval" ? "plan" : "overview");
-    readRun(selected);
+    if (selected) {
+      setCreating(false);
+      setActive(rows.find((x) => x.id === selected)?.state === "awaiting_approval" ? "plan" : "overview");
+    }
+  }
+  useEffect(() => {
+    selectedRef.current = selected;
+    if (selected) readRun(selected);
   }, [selected, readRun]);
   // A task named by the address (or picked in the tree) shows its worker, or the plan when it has none: once per address, so a worker
   // tab the owner closed stays closed while the run is read again.
-  const shown = useRef("");
-  useEffect(() => {
-    if (!task) shown.current = "";
-    if (!run || run.id !== selected || !task || shown.current === `${selected}/${task}`) return;
+  const [shown, setShown] = useState("");
+  const taskKey = run && run.id === selected && task ? `${selected}/${task}` : "";
+  if (!task && shown) setShown("");
+  if (taskKey && shown !== taskKey && run) {
     const t = run.tasks.find((x) => x.id === task);
-    if (!t) return;
-    shown.current = `${selected}/${task}`;
-    const w = workerOfTask(t);
-    if (!w) return setActive("plan");
-    const key = `worker:${w}`;
-    setTabs((ts) => (ts.some((x) => x.key === key || (x.kind === "worker" && t.workers.some((z) => z.session === x.session))) ? ts : [...ts, { key, label: `Worker ${task}`, kind: "worker" as const, session: w }]));
-    setActive((a) => (a.startsWith("worker:") && t.workers.some((z) => a === `worker:${z.session}`) ? a : key));
-  }, [run, selected, task]);
+    if (t) {
+      setShown(taskKey);
+      const w = workerOfTask(t);
+      if (!w) setActive("plan");
+      else {
+        const key = `worker:${w}`;
+        setTabs((ts) => (ts.some((x) => x.key === key || (x.kind === "worker" && t.workers.some((z) => z.session === x.session))) ? ts : [...ts, { key, label: `Worker ${task}`, kind: "worker" as const, session: w }]));
+        setActive((a) => (a.startsWith("worker:") && t.workers.some((z) => a === `worker:${z.session}`) ? a : key));
+      }
+    }
+  }
 
   // Read the list (and the open run) again, a moment after the last event of a burst.
   useEffect(() => {
@@ -133,8 +138,7 @@ export default function Runs() {
   const pickTask = (id: string) => {
     if (id !== task) return setPlace(selected, id);
     // The task is the open one already: a click shows its worker again (the tab may have been closed).
-    shown.current = "";
-    setRun((r) => (r ? { ...r } : r));
+    setShown("");
   };
 
   // What an action of the owner answered is shown at once; the event that follows reads it again.

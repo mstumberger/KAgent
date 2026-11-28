@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Page, PageHeader } from "../components/page/Page";
 
 interface Snapshot {
   hostname: string;
@@ -38,7 +39,7 @@ function Doctor() {
   const color = !r ? "" : r.score >= 85 ? "ok-text" : r.score >= 60 ? "warn-text" : "bad-text";
   return (
     <section className="card doctor">
-      <div className="page-head">
+      <div className="doctor-head">
         <h3>Health</h3>
         {r && <span className={`score ${color}`}>{r.score}/100</span>}
         <button disabled={busy} onClick={() => void run()}>
@@ -63,12 +64,12 @@ export default function System() {
     return () => clearInterval(t);
   }, []);
 
-  if (!snap) return <div className="page">loading...</div>;
+  if (!snap) return <Page>loading...</Page>;
 
   return (
-    <div className="page">
+    <Page>
+      <PageHeader title="System" />
       <Doctor />
-      <h2>System</h2>
       <div className="cards-grid">
         <div className="card">
           <h3>Machine</h3>
@@ -111,6 +112,6 @@ export default function System() {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

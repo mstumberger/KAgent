@@ -81,7 +81,7 @@ MEASURE = r"""(() => {
   if (view && host && !document.querySelector('.widget')) {
     const hr = host.getBoundingClientRect();
     let left = Infinity, right = -Infinity;
-    const leafs = [...view.querySelectorAll('*')].filter((el) => shown(el) && (el.children.length === 0 || ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) && !el.closest('svg') && !el.closest('.sr-only'));
+    const leafs = [...view.querySelectorAll('*')].filter((el) => shown(el) && (el.children.length === 0 || [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) && !el.closest('svg') && !el.closest('.sr-only'));
     for (const el of leafs) { const r = el.getBoundingClientRect(); if (r.right <= hr.right + 2 && r.left >= hr.left - 2) { left = Math.min(left, r.left); right = Math.max(right, r.right); } }
     if (right > left) {
       const head = view.querySelector('.ui-section-text'), first = view.querySelector('.ui-section > *');
@@ -89,7 +89,7 @@ MEASURE = r"""(() => {
       const used = right - left, room = hr.width, gapL = left - hr.left, gapR = hr.right - right;
       if (used > 1602) add('main-width', view, `content ${Math.round(used)} px wide, over the 1600 px cap`);
       else if (room >= 1100 && used < Math.min(room, 960) * 0.6) add('main-width', view, `content ${Math.round(used)} of ${Math.round(room)} px`);
-      else if (room >= 1100 && used < room * 0.9 && Math.abs(gapL - gapR) > 40 && !document.querySelector('main.with-pane')) add('main-width', view, `content not centered: gaps ${Math.round(gapL)} left, ${Math.round(gapR)} right of ${Math.round(used)} px`);
+      else if (room >= 1100 && used < room * 0.9 && Math.abs(gapL - gapR) > 40 && view.querySelector('.page, .ui-section-page') && !document.querySelector('main.with-pane')) add('main-width', view, `content not centered: gaps ${Math.round(gapL)} left, ${Math.round(gapR)} right of ${Math.round(used)} px`);
     }
   }
   return out;
@@ -122,6 +122,8 @@ async def open_page(env, theme, hash, query="", **cfg):
 async def run_matrix(env, out_dir, themes=("dark", "light"), pages=None, sizes=SIZES, shots=True):
     """Every page at every size in each theme: {(theme, page, "WxH"): [findings]}. The widget is measured once per theme at 340x460, with its sessions sheet."""
     result = {}
+    if shots:
+        os.makedirs(out_dir, exist_ok=True)
     for theme in themes:
         for pid, hash in (pages or PAGES):
             await open_page(env, theme, hash)

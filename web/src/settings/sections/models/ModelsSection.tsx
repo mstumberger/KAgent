@@ -65,6 +65,7 @@ export default function ModelsSection({ title, description }: SectionProps) {
     <SectionPage
       title={title}
       description={description}
+      wide
       actions={
         <>
           <button disabled={working} onClick={reload}>

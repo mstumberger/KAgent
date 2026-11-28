@@ -2,6 +2,7 @@
 // through a MikroTik router.
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Page, PageHeader } from "../components/page/Page";
 
 interface SentinelState {
   honeytokens: { path: string; kind: string }[];
@@ -84,8 +85,8 @@ export default function Security() {
   };
 
   return (
-    <div className="page">
-      <h2>Security</h2>
+    <Page>
+      <PageHeader title="Security" />
       {msg && <pre className="banner">{msg}</pre>}
       <section className="card">
         <h3>Tripwires on this PC</h3>
@@ -172,6 +173,6 @@ export default function Security() {
           </table>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

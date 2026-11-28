@@ -105,6 +105,7 @@ export default function Skills({ title, description }: SectionProps) {
     <SectionPage
       title={title}
       description={description}
+      wide
       actions={
         <>
           <button disabled={creating} onClick={() => void withAgent()}>

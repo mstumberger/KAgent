@@ -114,13 +114,13 @@ export default function ModelMenu({ sessionId, onOpenChange }: { sessionId: stri
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popId = useId();
-  useOverlay(open, () => setOpen(false));
   const setOpen = (next: boolean, refocus = false) => {
     setOpenState(next);
     onOpenChange?.(next);
     if (next) void refreshModels();
     if (refocus) trigger.current?.focus();
   };
+  useOverlay(open, () => setOpen(false));
   const enabled = !!sessionId;
 
   // Ctrl+M toggles the menu (picker.md section 5.4).
