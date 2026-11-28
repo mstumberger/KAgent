@@ -53,6 +53,7 @@ and section G for owner actions).
 | `docs/specs/local-models.md` | recommended local models and their download (S47) |
 | `docs/specs/screen-watch.md` | screen watch (S48) |
 | `docs/milestones/v0.0.2.md` | the current milestone: scope, order, open items |
+| `docs/TODO.md` | everything planned beyond the current milestone, one list |
 | `GLOSSARY.md` | the project's words (Owner, Brain, Watcher, Screen watch...) |
 | `docs/PLAN.md` | product background; read only when a stage says so |
 | `plasmoid/org.kde.kagent.voice/` | KDE Plasma 6 widget (QML): voice waveform from `/api/voice/levels`, alert badge |
