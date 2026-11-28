@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::protocol::{Message, Via};
 use crate::session::{SessionMeta, SessionOrigin};
 
+pub mod live;
 mod registry;
 mod run;
 
@@ -87,9 +88,23 @@ pub struct ChildView {
     pub started_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<DateTime<Utc>>,
+    /// The latest tool call of the child (steering.md section 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_action: Option<live::LastAction>,
+    /// The files its tool calls named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<live::TouchedFile>,
+    /// The owner's messages to it, with receipts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steering: Vec<live::Steering>,
 }
 
 impl ChildView {
+    /// A child that has done nothing yet.
+    pub fn new(id: String, title: String, profile: String, status: ChildStatus) -> Self {
+        Self { id, title, profile, status, started_at: None, ended_at: None, last_action: None, files: Vec::new(), steering: Vec::new() }
+    }
+
     /// Seconds since the child's turn started (0 before and after).
     pub fn running_for(&self) -> u64 {
         match (&self.started_at, &self.ended_at) {

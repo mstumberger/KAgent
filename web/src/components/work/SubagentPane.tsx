@@ -8,6 +8,7 @@ import { agentCards, elapsedOf } from "../agents";
 import Icon from "../Icon";
 import { Bubble } from "../transcript";
 import { readSession, type SideTab } from "./state";
+import WorkerInfo from "./WorkerInfo";
 import { useFollow } from "./useFollow";
 
 const NO_MESSAGES: Message[] = [];
@@ -54,6 +55,7 @@ export default function SubagentPane({ tab }: { tab: SideTab }) {
           )}
         </div>
       )}
+      <WorkerInfo owner={tab.owner} childId={tab.sessionId} child={card} />
       <div className="pane-scroll messages" ref={ref} onScroll={onScroll} data-following={following}>
         {messages.length === 0 && <div className="work-empty">No messages yet</div>}
         {messages.map((m, i) => (

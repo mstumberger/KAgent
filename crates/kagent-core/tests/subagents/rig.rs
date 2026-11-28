@@ -172,6 +172,11 @@ pub struct Rig {
 /// the `shell` tool over a background registry of its own, in `mode`. The system prompt is
 /// `BASE PROMPT.`.
 pub async fn rig(scripts: &[(&str, Vec<Step>)], mode: PermissionMode) -> Rig {
+    rig_with(scripts, mode, Vec::new()).await
+}
+
+/// `rig` with more tools in the registry (the file tools of the steering tests, as probes).
+pub async fn rig_with(scripts: &[(&str, Vec<Step>)], mode: PermissionMode, extra: Vec<Arc<dyn kagent_core::tool::Tool>>) -> Rig {
     let dir = tempfile::tempdir().unwrap();
     let store = SessionStore::new(dir.path().join("sessions")).unwrap();
     let session = store.create("t").await.unwrap().id;
@@ -183,6 +188,9 @@ pub async fn rig(scripts: &[(&str, Vec<Step>)], mode: PermissionMode) -> Rig {
     tools.register(Arc::new(ProbeTool::ro("probe_b", &spans)));
     tools.register(Arc::new(ProbeTool::mut_("probe_c", &spans)));
     access.register(&mut tools);
+    for tool in extra {
+        tools.register(tool);
+    }
     let background = Background::new(dir.path().join("task-out"));
     tools.register(Arc::new(TaskOutput::new(background.clone())));
     tools.register(Arc::new(TaskStop::new(background.clone())));
@@ -265,9 +273,11 @@ pub async fn kids(r: &Rig, n: usize) -> Vec<kagent_core::agent::children::ChildV
     children(r)
 }
 
-/// The states the UI was told about for one child, in order.
+/// The states the UI was told about for one child, in order. `subagentUpdated` also carries the progress of a
+/// running worker (steering.md section 2): an event that repeats the state is not a new state.
 pub fn statuses(r: &Rig, id: &str) -> Vec<ChildStatus> {
-    r.log
+    let mut out: Vec<ChildStatus> = r
+        .log
         .lock()
         .unwrap()
         .iter()
@@ -275,7 +285,19 @@ pub fn statuses(r: &Rig, id: &str) -> Vec<ChildStatus> {
             AgentEvent::SubagentUpdated { child, status, .. } if child.id == id => Some(*status),
             _ => None,
         })
-        .collect()
+        .collect();
+    out.dedup();
+    out
+}
+
+impl Rig {
+    /// The `ChildView` of every `subagentUpdated` about one child, in order.
+    pub fn events_of_child(&self, id: &str) -> Vec<kagent_core::agent::children::ChildView> {
+        self.log.lock().unwrap().iter().filter_map(|ev| match ev {
+            AgentEvent::SubagentUpdated { child, .. } if child.id == id => Some(child.clone()),
+            _ => None,
+        }).collect()
+    }
 }
 
 /// How many turns of `session` ended.

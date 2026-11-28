@@ -10,6 +10,7 @@
 mod common;
 mod rig;
 mod rules;
+mod steer;
 mod tools;
 
 use std::sync::Arc;
