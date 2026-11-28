@@ -778,3 +778,22 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
    screenshots in `/tmp/kagent-s47-shots/`.
 6. The owner: open Settings -> Local models; with a card that has room, press Download on Gemma 3 4B and watch the bar; when it
    is done press "Use for vision"; ask for a look at a screenshot in a chat.
+
+## S-loop The agent loop (agent-loop.md)
+1. **[auto]** Rules table (`prompt/rules.rs`): every sentence of the chat prompt and the three voice instructions with "never",
+   "always", "must not" or "do not ... without" has a row; a row whose key is in no sentence fails; the two word-for-word
+   sentences are unchanged; the counts of enforced, guidance and new checks.
+2. **[auto]** Noise fragment (`live/noise.rs`, `live/confirm.rs`): "Sie sollen das Fruehstueck selbst bezahlen.", "Oh, que. Oh,
+   que. Oh, que.", "Ya es tarde." and a Devanagari fragment are not sl/en; normal Slovenian and English sentences are not; a
+   changing call after only such a fragment gets `needs_confirmation`, a yes runs it, a read-only call runs.
+3. **[auto]** `message` (`tools/message.rs`): send at once after typing is `not_done`; typed, an owner turn, send runs; changed
+   text is refused; sessions do not share.
+4. **[auto]** Result kinds (`tool.rs`, `agent/calls.rs`): the fixed wording of `not_done`, `shown`, `partial`; the statuses
+   `notDone`, `shown`, `partial` on `ToolCallFinished`; `ui show` says the page was shown and nothing was changed; each fixed
+   tool of the review has a test on its result text.
+5. **[auto]** Notes (`agent/notes.rs`, `tests/notes_loop.rs`): the five kinds appear once at the right request as one stored
+   message with `via: "note"`; at most 3 a request; cooldowns; "yes" in a note answers no card; compaction drops notes; a
+   secret setting shows no value.
+6. **[auto]** `scripts/test-live.py`: a noise fragment then a tool call is asked out loud and no card appears.
+7. **[auto]** Web: the tool card labels `not done`, `shown`, `partial`; a note message is dimmed.
+8. The owner: ask the voice "close all windows" with the television on in German; the agent asks first.
