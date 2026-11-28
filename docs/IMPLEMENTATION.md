@@ -3179,6 +3179,27 @@ with `KAGENT_IT=1`), `tsc` clean, `npm run lint` with its four old warnings, `sc
 - Not verified: a real daemon with a real folder and `AGENTS.md` through the model (scenario
   item 10, the owner's); the title bar in the real frameless window (only `?app` in Chrome).
 
+### Session 2026-11-28 (v0.0.2 item 10: a repository for a visitor)
+
+- `LICENSE` is GPL-3.0 (copied from `/usr/share/common-licenses/GPL-3`); the workspace `license`,
+  `app/src-tauri/Cargo.toml` and `web/package.json` say `GPL-3.0-or-later`. The four crates set no
+  licence of their own, so each gained `license.workspace = true`. No licence headers in sources.
+- The README is written for a first-time visitor and says only what the code on this branch does;
+  it names no other product as a source of ideas. It states that there are no packages yet and
+  lists what was tested only against fakes (Google Calendar, the local-model download, Telegram,
+  the Tauri shell, voice and subagent checks with cloud models).
+- Screenshots: `scripts/take-screenshots.py` on `picker_web_lib.py`, the dark theme, invented data
+  (Alex, workstation, website, api-server). Sizes: 1200x820, `widget.png` 340x460, `toasts.png` the
+  top right corner (520x260), `settings-calendar.png` 1200x1100 so the page is not cut in the middle
+  of a card; the settings pages are shot with the sidebar folded. Each file is under 300 KB, so the
+  optimising step (Pillow's quantizer above 300 KB) did not run. The voice and widget images hold an
+  animation and the toasts a clock, so a rerun changes those bytes. `picker_web_lib.py` gained
+  `baseUrls` in `reset(...)` for the base URL of a provider.
+- `CONTRIBUTING.md`, `SECURITY.md` (GitHub private vulnerability reporting, no e-mail address), the
+  two issue templates and the PR template (Summary, Evidence, Merge Danger). No CI workflow and no
+  badge: the owner has not decided on one.
+- `AGENTS.md`: only the opening paragraph changed (stages through S48, what is next).
+
 ## F. Progress
 
 - [x] S0 compile drafts
