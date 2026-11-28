@@ -39,6 +39,9 @@ pub struct Page {
     pub text: String,
     /// The text of each link and its address, in order, at most `MAX_LINKS`.
     pub links: Vec<(String, String)>,
+    /// Set by the fetcher, not by `to_text`: the page is a challenge or an empty shell that needs
+    /// JavaScript, and the reader should read it (web.md section 2).
+    pub needs_reader: bool,
 }
 
 /// The page as text. `base` is the address the HTML came from: links are resolved against it.

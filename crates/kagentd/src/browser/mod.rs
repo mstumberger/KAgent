@@ -48,6 +48,11 @@ pub struct Browser {
     attach: Arc<BrowserSession>,
 }
 
+/// The first Chromium-family browser of the list on `PATH`: what the reader runs (web.md section 8).
+pub fn find_chromium() -> Option<String> {
+    BINARIES.iter().find_map(|b| kagent_core::tools::xdg::which(b)).map(|p| p.display().to_string())
+}
+
 pub(super) fn s<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or("")
 }

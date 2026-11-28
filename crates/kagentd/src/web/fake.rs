@@ -15,6 +15,7 @@ use futures::stream;
 use serde_json::Value;
 
 use super::guard::{check_host, check_shape, host_of, Egress, Refusal};
+use super::page_reader::{PageReader, ReaderError, Rendered};
 use super::settings::KeyStore;
 
 /// A name that resolves to the fake: the test of pinned addresses.
@@ -200,5 +201,33 @@ impl KeyStore for MemoryKeys {
     async fn clear(&self) -> anyhow::Result<()> {
         *self.0.lock().unwrap() = None;
         Ok(())
+    }
+}
+
+/// A reader that answers what a test says, and keeps the addresses it was asked for.
+pub struct FakePageReader {
+    pub asked: Mutex<Vec<String>>,
+    answer: Mutex<Result<Rendered, ReaderError>>,
+}
+
+impl FakePageReader {
+    pub fn html(html: &str) -> Arc<Self> {
+        Self::answering(Ok(Rendered { url: String::new(), html: html.to_string() }))
+    }
+
+    pub fn failing(error: ReaderError) -> Arc<Self> {
+        Self::answering(Err(error))
+    }
+
+    fn answering(answer: Result<Rendered, ReaderError>) -> Arc<Self> {
+        Arc::new(Self { asked: Mutex::new(Vec::new()), answer: Mutex::new(answer) })
+    }
+}
+
+#[async_trait]
+impl PageReader for FakePageReader {
+    async fn render(&self, url: &str) -> Result<Rendered, ReaderError> {
+        self.asked.lock().unwrap().push(url.to_string());
+        self.answer.lock().unwrap().clone().map(|r| Rendered { url: if r.url.is_empty() { url.to_string() } else { r.url }, html: r.html })
     }
 }

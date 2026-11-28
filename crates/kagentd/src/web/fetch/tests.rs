@@ -60,7 +60,7 @@ async fn a_public_page_comes_back_as_text_and_a_file_that_is_not_text_as_an_erro
     let tool = web(&fake).await.fetch_tool();
     let base = fake.url("");
     assert_eq!(tool.contract().name, "web_fetch");
-    assert_eq!((tool.contract().read_only, tool.contract().side_effect, tool.contract().default_timeout_ms, tool.contract().max_output_bytes), (true, SideEffect::Network, 20_000, 24_000));
+    assert_eq!((tool.contract().read_only, tool.contract().side_effect, tool.contract().default_timeout_ms, tool.contract().max_output_bytes), (true, SideEffect::Network, 45_000, 24_000));
     assert_eq!(tool.assess(&json!({"url": "https://example.org/x"})).summary, "web_fetch https://example.org/x");
 
     let out = call(&tool, json!({"url": fake.url("/page")})).await;
@@ -240,3 +240,5 @@ async fn a_page_is_fetched_once_and_served_from_the_cache() {
     call(&tool, json!({"url": fake.url("/missing")})).await;
     assert_eq!(fake.seen("/missing").len(), 2);
 }
+
+mod reader_tests;

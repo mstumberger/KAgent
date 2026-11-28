@@ -321,6 +321,7 @@ impl Settings {
         self.section::<CompactionSection>("compaction")?.validate()?;
         self.section::<crate::memory::MemorySection>("memory")?.validate()?;
         self.section::<crate::web::settings::SearchSection>("search")?.validate()?;
+        self.section::<crate::web::reader::config::WebSection>("web")?.validate()?;
         self.section::<crate::bots::settings::TelegramSection>("telegram")?.validate()?;
         self.section::<crate::calendar::settings::CalendarSection>("calendar")?.validate()?;
         self.section::<crate::screen_watch::ScreenWatchSection>("screenWatch")?.validate()?;
