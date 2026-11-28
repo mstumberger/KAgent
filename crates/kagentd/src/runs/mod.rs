@@ -3,6 +3,7 @@
 
 pub mod http;
 pub mod settings;
+pub mod tickets;
 
 #[cfg(test)]
 mod tests;
