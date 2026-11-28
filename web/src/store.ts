@@ -2,7 +2,7 @@
 // wholesale by the reducer; views subscribe via useStore().
 
 import { useSyncExternalStore } from "react";
-import { api, postPlan, putProject, putTodo, requestCompaction, type ProjectView, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
+import { api, postPlan, putImagesNotice, putProject, putTodo, requestCompaction, type ProjectView, type SessionMeta, type Message, type ApprovalRequest, type StateView, type TodoItem } from "./api";
 import { skillsApi, type SkillView } from "./skillsApi";
 import { builtinOf, projectArg } from "./commands";
 import { readPrefs, type SidebarView } from "./components/sidebar/prefs";
@@ -169,6 +169,15 @@ export async function refreshModels(force = false) {
 /** A session's meta as the daemon has it: the open one and its row (`sessionMetaChanged`, the answer of the model route). */
 export function applyMeta(id: string, meta: SessionMeta) {
   patch({ metas: id in store.metas ? { ...store.metas, [id]: { ...store.metas[id], ...meta } } : store.metas, sessions: store.sessions.map((row) => (row.id === id ? { ...row, ...meta } : row)) });
+}
+
+/** The composer showed "Images are sent to <provider>." in this conversation: the daemon keeps it in the meta, so a reload does not show it again. Quiet when it fails (the line then shows once more). */
+export async function rememberImagesNotice(id: string) {
+  try {
+    applyMeta(id, await putImagesNotice(id));
+  } catch {
+    // The line is shown again after a reload; nothing to tell the owner.
+  }
 }
 
 /** Choose a conversation's model and effort: the answer replaces its meta and is the last choice; a refusal is a notice, and thrown. */

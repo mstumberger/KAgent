@@ -90,7 +90,7 @@ def reset(**kw):
 
 def meta(sid, extra=None):
     m = {"id": sid, "title": "Chat " + sid, "createdAt": "2026-11-27T08:00:00Z", "updatedAt": "2026-11-27T08:00:00Z", "messageCount": 0, "origin": "chat",
-         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False}
+         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False, "imagesNoticeShown": False}
     m.update(extra or {})
     return m
 
@@ -384,7 +384,7 @@ class Mock(BaseHTTPRequestHandler):
             m["updatedAt"] = m["createdAt"] = CFG.get("now", m["createdAt"])
             SESSIONS[m["id"]] = m
             return self.send(201, m)
-        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model|/project|/pin)?", path)
+        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model|/project|/pin|/images-notice)?", path)
         if mm and mm.group(1) in SESSIONS:
             m = SESSIONS[mm.group(1)]
             if method == "DELETE" and not mm.group(2):
@@ -399,6 +399,10 @@ class Mock(BaseHTTPRequestHandler):
                     if refusal:
                         return self.send(400, {"error": {"code": "invalid_input", "message": refusal}})
                 m["project"] = value or None
+                return self.send(200, m)
+            if mm.group(2) == "/images-notice" and method == "PUT":
+                CALLS.append(f"PUT {path}")
+                m["imagesNoticeShown"] = True
                 return self.send(200, m)
             if mm.group(2) == "/pin" and method == "PUT":
                 CALLS.append(f"PUT {path} {json.dumps(body)}")

@@ -78,6 +78,11 @@ impl Agent {
         .await
     }
 
+    /// The composer told the owner where images go: remembered in the meta, so a reload does not show the line again.
+    pub async fn set_images_notice_shown(&self, id: &str) -> anyhow::Result<SessionMeta> {
+        self.change_meta(id, |meta| Ok(!std::mem::replace(&mut meta.images_notice_shown, true))).await
+    }
+
     /// The folder of session `id`, if it has one.
     pub async fn project(&self, id: &str) -> anyhow::Result<Option<String>> {
         Ok(self.state(id).await?.meta.lock().await.project.clone())

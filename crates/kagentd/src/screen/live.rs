@@ -47,7 +47,7 @@ pub fn question(target: &str) -> String {
 }
 
 /// Why a look is refused, or `None`. KAgent never captures its own approval cards (a card
-/// that waits for an answer is on the screen) and never a locked screen.
+/// of the same session that waits for an answer is on the screen) and never a locked screen.
 pub fn refusal(locked: bool, open_cards: usize) -> Option<String> {
     if locked {
         return Some(LOCKED.into());
@@ -55,10 +55,15 @@ pub fn refusal(locked: bool, open_cards: usize) -> Option<String> {
     (open_cards > 0).then(|| "not captured: an approval card is open on the screen, and KAgent never captures its own approval cards. Answer the card (yes or no) first, then ask again.".into())
 }
 
+/// How many of the waiting cards (the session id of each) belong to `session`: another conversation's card does not stop a look.
+pub fn open_cards<'a>(waiting: impl IntoIterator<Item = &'a str>, session: &str) -> usize {
+    waiting.into_iter().filter(|s| *s == session).count()
+}
+
 /// The session is locked: logind's `LockedHint` of this session (KDE and GNOME both set it).
 pub async fn is_locked() -> bool {
     // The tests say it themselves (the screen is locked while that file exists): they never look at the owner's session.
-    if let Ok(file) = std::env::var("KAGENT_FAKE_LOCKED") {
+    if let Some(file) = crate::seams::seam("KAGENT_FAKE_LOCKED") {
         return std::path::Path::new(&file).exists();
     }
     let session = std::env::var("XDG_SESSION_ID").unwrap_or_else(|_| "self".into());

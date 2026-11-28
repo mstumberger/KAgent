@@ -41,7 +41,7 @@ pub fn hex_id(decimal: &str) -> Option<String> {
 
 /// The active window (X11: `xdotool`), or why there is none.
 pub async fn active_window() -> Result<WindowInfo, String> {
-    if let Ok(fake) = std::env::var("KAGENT_FAKE_WINDOW") {
+    if let Some(fake) = crate::seams::seam("KAGENT_FAKE_WINDOW") {
         let (id, title) = fake.split_once(' ').unwrap_or((fake.as_str(), ""));
         return Ok(WindowInfo { id: id.into(), title: title.into(), own: false });
     }
@@ -60,7 +60,7 @@ pub async fn active_window() -> Result<WindowInfo, String> {
 /// The title of the active window, found now and in a blocking way (a call assessment is not async): the
 /// summary of a `start` names it. `None` when it cannot be found.
 pub fn active_title_blocking() -> Option<String> {
-    if let Ok(fake) = std::env::var("KAGENT_FAKE_WINDOW") {
+    if let Some(fake) = crate::seams::seam("KAGENT_FAKE_WINDOW") {
         return Some(fake.split_once(' ').map(|(_, t)| t).unwrap_or("").to_string());
     }
     kagent_core::tools::xdg::which("xdotool")?;
@@ -70,7 +70,7 @@ pub fn active_title_blocking() -> Option<String> {
 
 /// The PNG of the target.
 pub async fn grab(target: Target, window_id: Option<&str>) -> Result<Vec<u8>, CaptureError> {
-    if let Ok(fake) = std::env::var("KAGENT_FAKE_SCREENSHOT") {
+    if let Some(fake) = crate::seams::seam("KAGENT_FAKE_SCREENSHOT") {
         return std::fs::read(&fake).map_err(|e| CaptureError::Other(format!("the fake screenshot {fake}: {e}")));
     }
     match (target, window_id) {

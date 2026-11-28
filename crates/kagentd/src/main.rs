@@ -32,6 +32,7 @@ mod model_api;
 mod plan_api;
 mod project_api;
 mod prompt;
+mod seams;
 mod secrets;
 mod sections;
 mod sentinel;

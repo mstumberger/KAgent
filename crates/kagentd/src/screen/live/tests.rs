@@ -52,6 +52,12 @@ fn what_is_asked_and_what_is_refused() {
     let card = refusal(false, 1).unwrap();
     assert!(card.contains("approval card") && card.contains("never captures its own") && card.contains("Answer the card"), "{card}");
     assert_eq!(refusal(false, 0), None);
+    // v0.0.3 A4: only the cards of the same session count.
+    let waiting = ["s1", "s2", "s2"];
+    assert_eq!(open_cards(waiting, "s1"), 1);
+    assert_eq!(open_cards(waiting, "s2"), 2);
+    assert_eq!(open_cards(waiting, "s3"), 0);
+    assert_eq!(refusal(false, open_cards(waiting, "s3")), None, "another session's card does not refuse the look");
 }
 
 #[test]

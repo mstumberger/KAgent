@@ -74,7 +74,7 @@ impl Screen {
         }
         std::fs::create_dir_all(&self.shots)?;
         let path = self.shots.join(format!("screen-{}.png", chrono::Local::now().format("%Y%m%d-%H%M%S-%3f")));
-        if let Ok(fake) = std::env::var("KAGENT_FAKE_SCREENSHOT") {
+        if let Some(fake) = crate::seams::seam("KAGENT_FAKE_SCREENSHOT") {
             std::fs::copy(fake, &path)?;
             return Ok(Ok(path));
         }

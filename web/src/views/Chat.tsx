@@ -12,7 +12,7 @@ import Attachments from "../components/Attachments";
 import { useComposerImages } from "../components/useComposerImages";
 import { tellProviderLine, imageFiles, ACCEPT } from "../images";
 import { notify } from "../components/toasts";
-import { cancelSession, getStore, openSession, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
+import { cancelSession, getStore, openSession, rememberImagesNotice, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
 import Icon from "../components/Icon";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
@@ -175,7 +175,10 @@ export default function Chat() {
             }
             const sentText = text;
             const sentImages = pics.items;
-            if (pics.providerLine && s.activeSession) tellProviderLine(s.activeSession);
+            if (pics.providerLine && s.activeSession) {
+              tellProviderLine(s.activeSession);
+              void rememberImagesNotice(s.activeSession);
+            }
             // A message that was not accepted comes back to the composer with its images.
             sendMessage(sentText, armed, sentImages.map((a) => a.ref?.id ?? "")).catch((err) => {
               setText(sentText);

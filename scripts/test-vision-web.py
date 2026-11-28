@@ -134,6 +134,13 @@ async def composer_checks(env, results, theme, label):
     # --- the provider line is once per session
     await paste(page, "again.png", BLUE)
     results[f"{t}: a second image in the same session has no provider line"] = await page.js(THUMBS) == 1 and await page.js(LINE) == ""
+    results[f"{t}: the send told the daemon the line was shown (PUT .../images-notice, once)"] = calls().count("PUT /api/sessions/s1/images-notice") == 1
+    # a reload: the meta says the line was shown, so it is not shown again
+    await env.open(theme, **{**CFG, "sessions": {"s1": {"title": "Disk error", "updatedAt": "2026-11-27T09:00:00Z", "imagesNoticeShown": True}, "s2": CFG["sessions"]["s2"]}})
+    await paste(page, "shot.png", RED)
+    results[f"{t}: after a reload the line is not shown again (imagesNoticeShown in the meta)"] = await page.js(THUMBS) == 1 and await page.js(LINE) == ""
+    await env.open(theme, **CFG)
+    await paste(page, "shot.png", RED)
     # --- images only: an empty text is a message
     await page.click(".composer .primary")
     await asyncio.sleep(0.4)

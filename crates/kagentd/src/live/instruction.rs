@@ -52,7 +52,7 @@ const CONFIRM: &str = concat!(
 const LOOK: &str = "To see the screen call `screen`; never describe the screen without having looked in this turn.";
 
 const RETRIES: &str = concat!(
-    "Retries: when something did not work, check first (screen with window, focus_context) and ",
+    "Retries: when something did not work, check first (look again with screen, focus_context) and ",
     "fix the cause; do not repeat the same action blindly, and never type the same text twice."
 );
 
@@ -160,7 +160,7 @@ mod tests {
         assert!(!routed.contains("Recent conversation"), "the history frames carry the conversation");
         assert!(live.starts_with("PROMPT\n\n- The owner calls the chat model 'the Brain'") && live.contains("VOICE MODE: you are speaking out loud."), "{live}");
         assert!(live.contains("VOICE MODE: you are speaking out loud.") && !live.contains("Recent conversation") && !live.contains("`think`,"), "live is today's text without the Recent conversation block:\n{live}");
-        assert!(live.contains("Retries: when something did not work, check first (screen with window, focus_context) and fix the cause; do not repeat the same action blindly, and never type the same text twice."));
+        assert!(live.contains("Retries: when something did not work, check first (look again with screen, focus_context) and fix the cause; do not repeat the same action blindly, and never type the same text twice."));
         assert!(auto.starts_with(&live) && auto.contains("one function, `think`"), "auto is live plus the think rule");
         // voice.md section 12: the model that acts itself knows what `needs_confirmation` is.
         for text in [&live, &auto] {
