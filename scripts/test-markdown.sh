@@ -35,6 +35,7 @@ check("a pipe inside code is not a table", full.includes("let x = 1; | not a tab
 const cut = render("| Budget | GP");
 check("a row cut mid-stream is a table row", cut.includes("<td>Budget</td><td>GP</td>"));
 check("a directive cut mid-stream is text", render("::widget{").includes("::widget{"));
+check("three dashes are a rule, not text", render("a\n\n---\n\nb") === '<div class="md"><p>a</p><hr/><p>b</p></div>');
 check("a table without a separator has no header", !render("| a | b |\n| c | d |").includes("<th>"));
 console.log(failed ? `MARKDOWN FAILED: ${failed}` : "MARKDOWN OK");
 process.exit(failed ? 1 : 0);
