@@ -12,8 +12,13 @@ use std::path::Path;
 /// is (pure, tested). The scope's description is fixed: by default systemd takes the
 /// command line, which holds the API token in the URL.
 pub fn in_own_scope(argv: Vec<String>, under_systemd: bool, systemd_run: Option<&Path>) -> Vec<String> {
+    in_scope_named(argv, under_systemd, systemd_run, "KAgent window")
+}
+
+/// The same, with the description of the scope: the reader's browser is not a window.
+pub fn in_scope_named(argv: Vec<String>, under_systemd: bool, systemd_run: Option<&Path>, description: &str) -> Vec<String> {
     let Some(run) = systemd_run.filter(|_| under_systemd) else { return argv };
-    let mut out = vec![run.display().to_string(), "--user".into(), "--scope".into(), "--collect".into(), "--quiet".into(), "--description=KAgent window".into(), "--".into()];
+    let mut out = vec![run.display().to_string(), "--user".into(), "--scope".into(), "--collect".into(), "--quiet".into(), format!("--description={description}"), "--".into()];
     out.extend(argv);
     out
 }

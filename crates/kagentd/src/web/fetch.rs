@@ -11,6 +11,8 @@ use reqwest::Url;
 use serde_json::{json, Value};
 
 use super::html::{self, Page};
+use super::page_reader::ReaderError;
+use super::reader::challenge::is_challenge;
 use super::{clamp, human_len, Answer, Fail, Request, Transport, Web, MAX_BODY, TIMEOUT};
 
 /// At most this many redirects, each one checked again (web.md section 1).
@@ -37,11 +39,12 @@ impl WebFetch {
             "Read a public web page as text, without a browser window: its title, main text and links. Use it for articles, documentation and release pages. Not for a file that is not text (PDF, images), a page behind a login (use browser) or an address on this machine (refused).",
             json!({"type":"object","properties":{
                 "url":{"type":"string","description":"the http or https address of a public page"},
-                "max_chars":{"type":"integer","description":"how much text to return, 1000 to 20000 (default 6000)"}
+                "max_chars":{"type":"integer","description":"how much text to return, 1000 to 20000 (default 6000)"},
+                "render":{"type":"boolean","description":"read the page with a headless browser that runs its JavaScript (slower); the tool does this by itself for a page that needs it"}
             },"required":["url"]}),
         );
         contract.side_effect = SideEffect::Network;
-        Self { contract: contract.timeout(20_000, 60_000), web }
+        Self { contract: contract.timeout(45_000, 90_000), web }
     }
 }
 
@@ -64,20 +67,75 @@ impl Tool for WebFetch {
         if let Some(kept) = self.web.cache.get(&cache_key(url, max_chars), Instant::now()) {
             return Ok(ToolOutput::ok(kept));
         }
-        Ok(match fetch(&self.web.transport, url).await {
-            Ok((final_url, page)) => {
-                let output = render(&final_url, &page, max_chars);
-                let now = Instant::now();
-                self.web.cache.put(cache_key(&final_url, max_chars), output.clone(), now);
-                if final_url != url {
-                    // Asked for by the first address: the next call need not follow the redirects.
-                    self.web.cache.put(cache_key(url, max_chars), output.clone(), now);
+        let render = input.get("render").and_then(Value::as_bool).unwrap_or(false);
+        Ok(match self.get(url, render).await {
+            Ok((final_url, page, note)) => {
+                let output = format!("{}{note}", render_page(&final_url, &page, max_chars));
+                if note.is_empty() {
+                    let now = Instant::now();
+                    self.web.cache.put(cache_key(&final_url, max_chars), output.clone(), now);
+                    if final_url != url {
+                        // Asked for by the first address: the next call need not follow the redirects.
+                        self.web.cache.put(cache_key(url, max_chars), output.clone(), now);
+                    }
                 }
                 ToolOutput::ok(output)
             }
-            Err(fail) => ToolOutput::error(fail.to_string()),
+            Err(Stopped::Challenge) => ToolOutput::not_done(
+                "this site asks for a human check",
+                "tell the owner: a notice offers to open the page in a window where he can pass the check once; do not read this site again until he has",
+            ),
+            Err(Stopped::Fail(fail, note)) => ToolOutput::error(format!("{fail}{note}")),
         })
     }
+}
+
+/// Why `get` gave no page.
+enum Stopped {
+    /// The reader met a human check that did not clear.
+    Challenge,
+    /// The plain or the reader's failure, with the note about the reader when it could not run.
+    Fail(String, String),
+}
+
+impl WebFetch {
+    /// The page: plain HTTP, or the reader when asked, when the host is on the owner's list, or
+    /// when the plain answer is a challenge, an empty shell or a refusal that a browser may pass
+    /// (web.md section 2). The note says once why the reader did not run, when it was needed.
+    async fn get(&self, url: &str, render: bool) -> Result<(String, Fetched, String), Stopped> {
+        let host = Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
+        let mut note = String::new();
+        if render || self.web.web_config().is_reader_site(&host) {
+            match self.web.read_rendered(url).await {
+                Ok((final_url, page)) => return Ok((final_url, page, note)),
+                Err(ReaderError::Challenge(_)) => return Err(Stopped::Challenge),
+                Err(e @ (ReaderError::Refused { .. } | ReaderError::Status(_) | ReaderError::TooLarge | ReaderError::Timeout)) => return Err(Stopped::Fail(e.to_string(), note)),
+                Err(e) => note = reader_note(&e, "the plain page is given"),
+            }
+        }
+        let plain = fetch(&self.web.transport, url).await;
+        let wanted = match &plain {
+            Ok((_, Fetched::Html(page))) => page.needs_reader,
+            Err(Fail::Status(403 | 429 | 503)) => true,
+            _ => false,
+        };
+        if wanted && note.is_empty() && !render {
+            match self.web.read_rendered(url).await {
+                Ok((final_url, page)) => return Ok((final_url, page, note)),
+                Err(ReaderError::Challenge(_)) => return Err(Stopped::Challenge),
+                Err(e) => note = reader_note(&e, "this is the plain answer"),
+            }
+        }
+        match plain {
+            Ok((final_url, page)) => Ok((final_url, page, note)),
+            Err(fail) => Err(Stopped::Fail(fail.to_string(), note)),
+        }
+    }
+}
+
+/// What the owner and the model are told when the reader was wanted and could not run.
+fn reader_note(error: &ReaderError, then: &str) -> String {
+    format!("\n[the reader could not run: {error}; {then}]\n")
 }
 
 /// The address on one line: what a user pasted may hold line breaks.
@@ -150,7 +208,9 @@ async fn read(url: &str, answer: Answer) -> Result<Fetched, Fail> {
     let text = html::decode(&body, Some(content_type.as_str()));
     if document || (media.is_empty() && looks_like_html(&text)) {
         let base = Url::parse(url).map_err(|_| Fail::Network("the address of the page could not be read".into()))?;
-        return Ok(Fetched::Html(html::to_text(&text, &base)));
+        let mut page = html::to_text(&text, &base);
+        page.needs_reader = is_challenge(&page.title, &page.text, &text) || (page.text.chars().count() < 200 && page.links.len() < 3 && text.to_ascii_lowercase().contains("<script"));
+        return Ok(Fetched::Html(page));
     }
     Ok(Fetched::Text(text))
 }
@@ -165,7 +225,7 @@ fn looks_like_html(text: &str) -> bool {
 }
 
 /// The page for the model: title, the text and the links, labelled untrusted (tools.md section 20).
-fn render(url: &str, page: &Fetched, max_chars: usize) -> String {
+fn render_page(url: &str, page: &Fetched, max_chars: usize) -> String {
     let mut out = format!("{UNTRUSTED}\nURL: {url}\n");
     let (text, links) = match page {
         Fetched::Html(page) => {

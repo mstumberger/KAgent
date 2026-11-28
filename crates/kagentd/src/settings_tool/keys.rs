@@ -35,6 +35,8 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "search.searxUrl",
     // web.md section 3.1: the chain decides where queries go and whether a browser reads pages.
     "search.engines",
+    // web.md section 8: the reader's switch and its sites decide where pages are read from.
+    "web",
     "tasks.onApproval",
     "startup.autostart",
     "watchers.enabled",
@@ -85,6 +87,7 @@ pub fn full_view(s: &Settings) -> Value {
         ("compaction", section::<crate::sections::CompactionSection>(s, "compaction")),
         ("memory", section::<crate::memory::MemorySection>(s, "memory")),
         ("search", section::<crate::web::settings::SearchSection>(s, "search")),
+        ("web", section::<crate::web::reader::config::WebSection>(s, "web")),
         ("telegram", section::<crate::bots::settings::TelegramSection>(s, "telegram")),
         ("calendar", section::<crate::calendar::settings::CalendarSection>(s, "calendar")),
         ("screenWatch", section::<crate::screen_watch::ScreenWatchSection>(s, "screenWatch")),

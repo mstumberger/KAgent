@@ -4,13 +4,14 @@
 
 #[cfg(test)]
 pub(crate) mod fake;
-mod fetch;
+pub(crate) mod fetch;
 mod guard;
 mod html;
 pub(crate) mod http;
 pub(crate) mod search;
 mod chain;
 mod page_reader;
+pub(crate) mod reader;
 pub(crate) mod settings;
 
 use std::path::Path;
@@ -280,6 +281,8 @@ pub struct Web {
     pub(crate) chain: chain::Chain,
     /// The reader, when there is one (web.md section 8).
     reader: Option<Arc<dyn page_reader::PageReader>>,
+    /// The reader itself, for the routes of Settings -> Web (web.md section 9).
+    pub(crate) reader_admin: Option<Arc<reader::Reader>>,
 }
 
 impl Web {
@@ -299,7 +302,15 @@ impl Web {
             cache: Cache::default(),
             chain: chain::Chain::default(),
             reader: None,
+            reader_admin: None,
         }
+    }
+
+    /// The real reader: the tools fall back to it and the routes manage it.
+    pub fn with_reader(mut self, reader: Arc<reader::Reader>) -> Self {
+        self.reader = Some(reader.clone());
+        self.reader_admin = Some(reader);
+        self
     }
 
     /// The reader the tools fall back to (web.md section 8).
@@ -312,9 +323,34 @@ impl Web {
         self.reader.clone()
     }
 
+    /// settings.web, as the tools and the routes read it.
+    pub fn web_config(&self) -> reader::config::WebSection {
+        self.settings.get().and_then(|cell| cell.read().ok()).map(|s| s.web_config()).unwrap_or_default()
+    }
+
     /// Whether the reader may be used (Settings -> Web).
     pub(crate) fn reader_enabled(&self) -> bool {
-        true
+        self.web_config().reader
+    }
+
+    /// A page rendered by the reader, as the text the tool gives. The reader is off, or
+    /// there is none: an error that says so.
+    pub(crate) async fn read_rendered(&self, url: &str) -> Result<(String, fetch::Fetched), page_reader::ReaderError> {
+        use page_reader::ReaderError;
+        if !self.reader_enabled() {
+            return Err(ReaderError::Off);
+        }
+        let reader = self.page_reader().ok_or(ReaderError::NoBrowser)?;
+        let page = reader.render(url).await?;
+        let base = Url::parse(&page.url).map_err(|_| ReaderError::Failed("the address of the page could not be read".into()))?;
+        Ok((page.url.clone(), fetch::Fetched::Html(html::to_text(&page.html, &base))))
+    }
+
+    /// Close the reader's browser: the daemon is stopping.
+    pub async fn shutdown(&self) {
+        if let Some(reader) = &self.reader_admin {
+            reader.shutdown().await;
+        }
     }
 
     pub fn fetch_tool(self: &Arc<Self>) -> Arc<dyn Tool> {

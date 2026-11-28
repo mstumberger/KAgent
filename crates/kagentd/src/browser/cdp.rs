@@ -87,6 +87,29 @@ impl Session {
         Ok(Self { ws, next: 1, info: TabInfo { id: tab.id.clone(), title: tab.title.clone(), url: tab.url.clone() } })
     }
 
+    /// Send a command without waiting for its answer; the id to look for in `recv`.
+    pub async fn send(&mut self, method: &str, params: Value) -> anyhow::Result<u64> {
+        let id = self.next;
+        self.next += 1;
+        self.ws.send(WsMsg::Text(json!({"id": id, "method": method, "params": params}).to_string().into())).await?;
+        Ok(id)
+    }
+
+    /// The next message of the tab's socket (an answer or an event), or `None` when
+    /// `until` came first. A closed socket is an error. For a caller that has to answer
+    /// events while it waits (the reader, web.md section 8).
+    pub async fn recv(&mut self, until: tokio::time::Instant) -> Option<anyhow::Result<Value>> {
+        loop {
+            let msg = tokio::time::timeout_at(until, self.ws.next()).await.ok()?;
+            return Some(match msg {
+                None => Err(anyhow!("connection closed")),
+                Some(Err(e)) => Err(e.into()),
+                Some(Ok(WsMsg::Text(t))) => serde_json::from_str(&t).map_err(Into::into),
+                Some(Ok(_)) => continue,
+            });
+        }
+    }
+
     pub async fn call(&mut self, method: &str, params: Value) -> anyhow::Result<Value> {
         let id = self.next;
         self.next += 1;

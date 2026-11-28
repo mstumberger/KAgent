@@ -8,7 +8,7 @@
 //! KDE: KWin scripts; other X11 desktops: wmctrl/xdotool.
 
 mod layout;
-mod scope;
+pub(crate) mod scope;
 
 pub use layout::*;
 

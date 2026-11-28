@@ -2,25 +2,14 @@
 
 use std::time::Duration;
 
-use async_trait::async_trait;
 use futures::future::join_all;
 use kagent_core::tool::ToolContext;
 use serde_json::json;
 
 use super::*;
 use crate::web::chain::Clock;
-use crate::web::page_reader::{PageReader, ReaderError, Rendered};
-
-/// A reader that answers what a test says, and counts its calls.
-struct FakeReader(std::sync::Mutex<Vec<String>>, Result<String, ReaderError>);
-
-#[async_trait]
-impl PageReader for FakeReader {
-    async fn render(&self, url: &str) -> Result<Rendered, ReaderError> {
-        self.0.lock().unwrap().push(url.to_string());
-        self.1.clone().map(|html| Rendered { url: url.into(), html })
-    }
-}
+use crate::web::fake::FakePageReader;
+use crate::web::page_reader::ReaderError;
 
 const DUCK_THEN_BRAVE: &str = "/challenge";
 
@@ -124,15 +113,15 @@ async fn an_old_single_engine_setting_falls_back_to_duckduckgo() {
 #[tokio::test]
 async fn the_reader_is_the_last_fallback_and_a_challenge_there_fails_the_chain() {
     let fake = fake().await;
-    let reader = Arc::new(FakeReader(Default::default(), Ok(RESULTS.into())));
+    let reader = FakePageReader::html(RESULTS);
     let (web, _) = build_clocked(&fake, chain_of(&["duckduckgo", "reader"]), None, (DUCK_THEN_BRAVE, "/brave"));
     let web = Arc::new(web.with_page_reader(reader.clone()));
     let out = call(&web, json!({"query": "linux kernel"})).await;
     assert!(out.content.contains("Results of the reader (DuckDuckGo) for \"linux kernel\":") && out.content.contains("[1] The Linux Kernel Archives"), "{}", out.content);
-    assert_eq!(reader.0.lock().unwrap().len(), 1);
-    assert!(reader.0.lock().unwrap()[0].ends_with("/html/?q=linux+kernel"), "{:?}", reader.0.lock().unwrap());
+    assert_eq!(reader.asked.lock().unwrap().len(), 1);
+    assert!(reader.asked.lock().unwrap()[0].ends_with("/html/?q=linux+kernel"), "{:?}", reader.asked.lock().unwrap());
 
-    let blocked = Arc::new(FakeReader(Default::default(), Err(ReaderError::Challenge("https://x.example/".into()))));
+    let blocked = FakePageReader::failing(ReaderError::Challenge("https://x.example/".into()));
     let (web, _) = build_clocked(&fake, chain_of(&["duckduckgo", "reader"]), None, (DUCK_THEN_BRAVE, "/brave"));
     let web = Arc::new(web.with_page_reader(blocked));
     let out = call(&web, json!({"query": "linux kernel"})).await;
