@@ -155,3 +155,8 @@ first three are done first.
   a recorded long session in headless Chrome against fixed budgets (time per streamed
   piece, memory, frames dropped), so a regression fails a test. Every text renderer is
   tested on every prefix of its input.
+- [ ] Reliable web search and a reader browser: searches are cached, paced and fall
+  through a chain of engines instead of failing on DuckDuckGo's human check; a
+  headless browser of KAgent's own (its own profile, read-only) reads pages that
+  need JavaScript or a session, and when a site asks for a human check the owner
+  passes it once in a visible window. Browser attach stays for acting and testing.
