@@ -2,10 +2,9 @@
 
 KAgent is a local Linux agent (Rust daemon + React UI) that diagnoses and safely
 changes this machine, controls the desktop by voice or text, and watches for problems
-and intruders. Stages S0-S16 of docs/IMPLEMENTATION.md are implemented. Phase 4
-(S17-S33: skills, memory, voice brain, agent extensions) is planned and not started:
-begin with "Implement stage S17 of docs/IMPLEMENTATION.md" (see section E for decisions
-and section G for owner actions).
+and intruders. Stages S0-S34 and S40-S48 of docs/IMPLEMENTATION.md are implemented on
+the `v0.0.2` branch (section F lists them). Coding agents (S35-S39) moved to v0.0.3; what
+is planned next is in `docs/TODO.md` and the current milestone is `docs/milestones/v0.0.2.md`.
 
 ## Start here
 
