@@ -5,6 +5,7 @@ mod api;
 mod cli;
 mod bots;
 mod calendar;
+mod background_api;
 mod compact_api;
 mod rounded;
 mod tasks;
@@ -336,6 +337,7 @@ async fn run() -> anyhow::Result<()> {
         providers.clone(),
         paths.data.join("task-out"),
         settings_arc.read().unwrap().subagents_config().max_concurrent,
+        events.clone(),
     )
     .await;
     // Compaction (compaction.md section 1) reads its settings before every model request.

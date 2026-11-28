@@ -240,3 +240,80 @@ async fn the_shell_tool_starts_a_task_and_the_task_tools_read_and_stop_it() {
     assert!(shell.assess(&json!({"command": "ls", "background": true})).read_only);
     assert!(!shell.assess(&json!({"command": "rm x", "background": true})).read_only);
 }
+
+const SLEEP_LIST_A: &str = "sleep 45";
+const SLEEP_LIST_B: &str = "sleep 44";
+const SLEEP_SINK: &str = "sleep 43";
+
+#[tokio::test]
+async fn list_gives_running_first_then_ended_newest_first_for_one_session() {
+    let dir = tempfile::tempdir().unwrap();
+    let bg = Background::new(dir.path());
+    let first = bg.start("s", "true", None).await.unwrap();
+    ended(&bg, &first.id).await;
+    let second = bg.start("s", "echo hi", None).await.unwrap();
+    ended(&bg, &second.id).await;
+    // The supervisor queues an ended task a moment after its status is final.
+    until(5, "both are recorded as ended", || bg.list("s").len() == 2 && bg.0.ended.lock().unwrap().len() == 2).await;
+    let a = bg.start("s", SLEEP_LIST_A, None).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let b = bg.start("s", SLEEP_LIST_B, None).await.unwrap();
+    let other = bg.start("other", "true", None).await.unwrap();
+    ended(&bg, &other.id).await;
+
+    let list = bg.list("s");
+    let ids: Vec<&str> = list.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, [a.id.as_str(), b.id.as_str(), second.id.as_str(), first.id.as_str()], "running in the order they started, then the one that ended last");
+    assert_eq!(list.iter().map(|t| t.command.as_str()).collect::<Vec<_>>(), [SLEEP_LIST_A, SLEEP_LIST_B, "echo hi", "true"]);
+    assert!(list.iter().all(|t| t.session_id == "s"), "only the tasks of that session");
+    assert!(list[0].started_at < list[1].started_at);
+    assert_eq!((list[2].status, list[2].exit_code), (TaskStatus::Done, Some(0)));
+    let json = serde_json::to_value(&list[0]).unwrap();
+    assert_eq!((json["status"].as_str(), json["sessionId"].as_str(), json["command"].as_str()), (Some("running"), Some("s"), Some(SLEEP_LIST_A)));
+    assert!(json["startedAt"].as_str().is_some_and(|t| t.ends_with('Z')) && json["exitCode"].is_null(), "{json}");
+    assert_eq!(bg.list("other").len(), 1);
+    assert!(bg.list("nobody").is_empty());
+    assert_eq!(bg.view(&a.id).unwrap().command, SLEEP_LIST_A);
+    assert!(bg.view("bg_00000000").is_none());
+    bg.stop_all();
+
+    // At most 50 are listed.
+    for _ in 0..55 {
+        let t = bg.start("many", "true", None).await.unwrap();
+        ended(&bg, &t.id).await;
+    }
+    assert_eq!(bg.list("many").len(), views::LIST_MAX);
+    until(4, "the sleepers are gone", || running_count(SLEEP_LIST_A) + running_count(SLEEP_LIST_B) == 0).await;
+}
+
+#[tokio::test]
+async fn the_sink_hears_running_at_the_start_killed_on_a_stop_and_the_end_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let bg = Background::new(dir.path());
+    let heard: Arc<Mutex<Vec<(String, String, TaskStatus)>>> = Default::default();
+    let sink = heard.clone();
+    bg.set_event_sink(Arc::new(move |id, session, status| sink.lock().unwrap().push((id.to_string(), session.to_string(), status))));
+    let told: Arc<Mutex<Vec<TaskStatus>>> = Default::default();
+    let (heard_by_notice, told_by_notice) = (heard.clone(), told.clone());
+    // The notification of the session comes after the event of the end.
+    bg.configure(dir.path(), Arc::new(move |_, _| told_by_notice.lock().unwrap().push(heard_by_notice.lock().unwrap().last().unwrap().2)));
+
+    let done = bg.start("s1", "echo hi", None).await.unwrap();
+    until(10, "the end is heard", || heard.lock().unwrap().len() == 2).await;
+    assert_eq!(heard.lock().unwrap().clone(), [(done.id.clone(), "s1".to_string(), TaskStatus::Running), (done.id.clone(), "s1".to_string(), TaskStatus::Done)]);
+    until(5, "the notification came", || !told.lock().unwrap().is_empty()).await;
+    assert_eq!(told.lock().unwrap().clone(), [TaskStatus::Done], "the event went out before the task's notification");
+
+    let failed = bg.start("s2", "exit 3", None).await.unwrap();
+    until(10, "the failure is heard", || heard.lock().unwrap().iter().any(|(id, _, s)| *id == failed.id && *s == TaskStatus::Failed)).await;
+
+    let killed = bg.start("s3", SLEEP_SINK, None).await.unwrap();
+    until(5, "the command runs", || running_count(SLEEP_SINK) == 1).await;
+    assert!(bg.stop(&killed.id));
+    until(4, "the killed command is gone", || running_count(SLEEP_SINK) == 0).await;
+    ended(&bg, &killed.id).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let of_killed: Vec<TaskStatus> = heard.lock().unwrap().iter().filter(|(id, session, _)| *id == killed.id && session == "s3").map(|(_, _, s)| *s).collect();
+    assert_eq!(of_killed, [TaskStatus::Running, TaskStatus::Killed], "a stop says killed once; the end of the group says nothing more");
+    assert_eq!(told.lock().unwrap().len(), 2, "and a killed task still tells no session");
+}

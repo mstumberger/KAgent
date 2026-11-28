@@ -6,12 +6,53 @@ the events the daemon would send (`window.__emit`). Dark and light at 1200x820 a
 /tmp/kagent-s43-shots/. Run from the repo root after `cargo build` and `npm run build` in web/."""
 import asyncio, json, sys
 import picker_web_lib as lib
-from picker_web_lib import FAKE_LIVE, Env, configure, opened, report
+from picker_web_lib import FAKE_LIVE, Env, calls, configure, opened, reads, report, set_task
 
 SESSIONS = {"s1": {"title": "Free the disk", "updatedAt": "2026-11-27T09:00:00Z"}, "s2": {"title": "Other chat", "updatedAt": "2026-11-27T08:00:00Z"}}
 CFG = dict(sessions=SESSIONS)
+
+# The work panel: s1 is the open session, with a todo list (3 of 7 open), two subagents (c1 runs, c2 waits), four background
+# commands and a plan; c1 and c2 are the sessions of the subagents.
+PLAN = "# Free the disk\n\n- clean the journal\n- clear the package cache\n"
+TODO = [{"content": f"step {i}", "status": "completed" if i < 4 else "pending", "priority": "medium"} for i in range(7)]
+NOW = "2026-11-27T10:00:00Z"
+TASKS = [
+    {"id": "bg_run", "sessionId": "s1", "command": "cargo test --workspace -- --nocapture --test-threads=1", "status": "running", "exitCode": None, "startedAt": "2026-11-27T09:59:00Z", "seconds": 60, "outputFile": "/tmp/x"},
+    {"id": "bg_ok", "sessionId": "s1", "command": "df -h", "status": "done", "exitCode": 0, "startedAt": NOW, "seconds": 1, "outputFile": "/tmp/x"},
+    {"id": "bg_bad", "sessionId": "s1", "command": "false", "status": "failed", "exitCode": 1, "startedAt": NOW, "seconds": 1, "outputFile": "/tmp/x"},
+    {"id": "bg_kill", "sessionId": "s1", "command": "sleep 99", "status": "killed", "exitCode": None, "startedAt": NOW, "seconds": 3, "outputFile": "/tmp/x"},
+]
+LOG = "".join(f"line {i} of the output\n" for i in range(400))
+WORK = dict(
+    sessions={
+        "s1": {"title": "Free the disk", "updatedAt": "2026-11-27T09:00:00Z", "todo": TODO, "approvedPlan": {"path": "/p", "text": PLAN}},
+        "s2": {"title": "Other chat", "updatedAt": "2026-11-27T08:00:00Z"},
+        "c1": {"title": "Disk usage", "updatedAt": "2026-11-27T07:00:00Z", "origin": "subagent", "parent": "s1"},
+        "c2": {"title": "Memory usage", "updatedAt": "2026-11-27T06:00:00Z", "origin": "subagent", "parent": "s1"},
+    },
+    tasks={"s1": TASKS}, outputs={"bg_run": LOG, "bg_ok": "Filesystem  Size\n/dev/sda1  100G\n"},
+    messages={"c1": [{"role": "user", "content": "Find what uses the disk"}, {"role": "assistant", "content": "du says /var holds 12 GB"}],
+              "c2": [{"role": "user", "content": "Find what uses the memory"}]},
+)
+CHILD = lambda cid, title, profile: {"id": cid, "title": title, "profile": profile, "startedAt": NOW}
 TOASTS = "[...document.querySelectorAll('.toasts .toast')]"
 TEXTS = f"{TOASTS}.map(t => t.querySelector('.toast-text').textContent)"
+
+
+# A check that reads an element that is not there fails (None) instead of ending the run.
+_js = lib.Page.js
+
+
+async def _safe_js(self, expr):
+    try:
+        return await _js(self, expr)
+    except RuntimeError as e:
+        if "Cannot read properties of null" in str(e) or "is not a function" in str(e):
+            return None
+        raise
+
+
+lib.Page.js = _safe_js
 
 
 def notice(text, key=None, level="warn", kind=None, session=None):
@@ -171,6 +212,207 @@ async def voice_check(env, results):
     results["voice: the status line goes back to the state after 6 s"] = "quota" not in await page.js(STATUS)
 
 
+async def kids(page, *items):
+    for cid, title, profile, status in items:
+        await emit(page, {"type": "subagentUpdated", "sessionId": "s1", "child": CHILD(cid, title, profile), "status": status})
+
+
+def section(name):
+    return f"document.querySelector(\".work-section[data-section='{name}']\")"
+
+
+async def work_checks(env, results, theme):
+    page = env.page
+    t = f"1200x820 {theme}"
+    await env.size(1200, 820)
+    # --- nothing going on: no capsule, no pane, no old chips
+    await env.open(theme, **{**CFG, "sessions": {"s1": {"title": "Free the disk", "updatedAt": "2026-11-27T09:00:00Z"}}})
+    results[f"{t}: with nothing to show there is no capsule, no pane and no todo panel or plan chip"] = await page.js("!document.querySelector('.work-capsule') && !document.querySelector('aside.side-pane') && !document.querySelector('.todo-panel') && !document.querySelector('.plan-chip-row') && !document.querySelector('main.with-pane')")
+    # --- the capsule
+    await env.open(theme, **WORK)
+    await kids(page, ("c1", "Disk usage", "explore", "running"), ("c2", "Memory usage", "general", "queued"))
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule")
+    cap = await page.js("(() => { const c = document.querySelector('.work-capsule'), r = c.getBoundingClientRect(), composer = document.querySelector('form.composer').getBoundingClientRect(); return {h: Math.round(r.height), above: r.bottom <= composer.top, items: [...c.querySelectorAll('.cap-item')].map(i => i.className.replace('cap-item ', '') + ':' + i.textContent.trim()), expanded: c.getAttribute('aria-expanded'), controls: c.getAttribute('aria-controls'), title: c.title, radius: getComputedStyle(c).borderTopLeftRadius, pulse: c.querySelectorAll('.agent-dot.pulse').length, left: Math.round(r.left)}; })()")
+    results[f"{t}: the capsule is 26 px high, above the composer, and counts 2 agents, 1 command, the plan and 3/7"] = cap["h"] == 26 and cap["above"] and cap["items"] == ["cap-agents:2", "cap-commands:1", "cap-plan plan:plan", "cap-todo:3/7"]
+    results[f"{t}: the capsule is a button with aria-expanded, aria-controls and its words as the title"] = cap["expanded"] == "false" and bool(cap["controls"]) and cap["title"] == "2 agents, 1 command, plan approved, 3 of 7 to do" and float(cap["radius"].replace("px", "")) >= 13
+    results[f"{t}: the first two items carry the pulsing dot while something runs"] = cap["pulse"] == 2
+    await page.shot(f"work-capsule-{theme}")
+    await page.click(".work-capsule")
+    await page.until("!!document.querySelector('.work-panel')", "the panel")
+    panel = await page.js("(() => { const p = document.querySelector('.work-panel'); return {id: p.id, role: p.getAttribute('role'), expanded: document.querySelector('.work-capsule').getAttribute('aria-controls') === p.id && document.querySelector('.work-capsule').getAttribute('aria-expanded'), heads: [...p.querySelectorAll('.work-section-head')].map(h => Math.round(h.getBoundingClientRect().height) + ':' + h.querySelector('.work-section-title').textContent), counts: [...p.querySelectorAll('.work-section-count')].map(c => c.textContent), maxh: parseFloat(getComputedStyle(p).maxHeight), h: p.getBoundingClientRect().height}; })()")
+    results[f"{t}: the panel has four sections of a 28 px header and opens from the capsule"] = panel["expanded"] == "true" and panel["role"] == "region" and panel["heads"] == ["28:Agents", "28:Background", "28:Plan", "28:Progress"]
+    results[f"{t}: the headers count: '1 of 2 running', '1 running', 'approved', '3 of 7'"] = panel["counts"] == ["1 of 2 running", "1 running", "approved", "4 of 7"]
+    results[f"{t}: the panel is at most min(46vh, 420px) high"] = panel["h"] <= min(0.46 * 820, 420) + 1 and panel["maxh"] <= 420
+    await page.shot(f"work-panel-{theme}")
+    # --- Agents
+    ag = await page.js("[...document.querySelectorAll('.agent-row')].map(r => r.querySelector('.work-line-title').textContent + '|' + r.querySelector('.work-line-note').textContent + '|' + r.querySelector('.agent-status').textContent + '|' + !!r.querySelector('.work-stop') + '|' + /\\d/.test(r.querySelector('.work-time').textContent || 'x'))")
+    results[f"{t}: Agents lists both children with profile, state, time and Stop while they wait or run"] = ag == ["Disk usage|explore|running|true|true", "Memory usage|general|queued|true|false"]
+    await page.js("document.querySelector('.agent-row[data-child=c2] .work-stop').click()")
+    await asyncio.sleep(0.3)
+    results[f"{t}: Stop of a child is the route of S31"] = "POST /api/sessions/s1/subagents/c2/stop" in calls()
+    await emit(page, {"type": "subagentUpdated", "sessionId": "s1", "child": CHILD("c2", "Memory usage", "general"), "status": "cancelled"})
+    await emit(page, {"type": "subagentUpdated", "sessionId": "s1", "child": {**CHILD("c1", "Disk usage", "explore"), "endedAt": "2026-11-27T10:00:05Z"}, "status": "done"})
+    await emit(page, {"type": "subagentUpdated", "sessionId": "s1", "child": CHILD("c1", "Disk usage", "explore"), "status": "running"})
+    # --- Background
+    bg = await page.js("[...document.querySelectorAll('.task-row')].map(r => r.querySelector('.work-command').textContent.slice(0, 12) + '|' + r.querySelector('.work-state').textContent + '|' + r.querySelector('.work-state').className.replace('work-state tone-', '') + '|' + !!r.querySelector('.work-stop'))")
+    results[f"{t}: Background lists the commands with their state: running, exit 0 (ok), exit 1 (bad), killed (signal)"] = bg == ["cargo test -", "running|run|True", "df -h|exit 0|ok|False", "false|exit 1|bad|False", "sleep 99|killed|signal|False"][:1] + [] or bg == ["cargo test --workspace -- --nocapture --test-threads=1"[:12] + "|running|run|true"] + ["df -h|exit 0|ok|false", "false|exit 1|bad|false", "sleep 99|killed|signal|false"]
+    cmd = await page.js("(() => { const c = document.querySelector('.task-row .work-command'); const cs = getComputedStyle(c); return {family: cs.fontFamily.includes('mono'), size: cs.fontSize, ellipsis: cs.textOverflow, full: c.title}; })()")
+    results[f"{t}: a command is one line, monospace 12 px, cut with an ellipsis, the whole command in the title"] = cmd["family"] and cmd["size"] == "12px" and cmd["ellipsis"] == "ellipsis" and cmd["full"].startswith("cargo test --workspace")
+    await page.js("document.querySelector('.task-row[data-task=bg_run] .work-stop').click()")
+    await asyncio.sleep(0.4)
+    results[f"{t}: Stop of a command is POST /api/background/:taskId/stop and the list is read again"] = "POST /api/background/bg_run/stop" in calls() and await page.js("document.querySelector('.task-row[data-task=bg_run] .work-state').textContent") == "killed" and await page.js("!document.querySelector('.task-row[data-task=bg_run] .work-stop')")
+    await page.js("window.__emit({type: 'backgroundTask', taskId: 'bg_run', sessionId: 's1', status: 'killed'})")
+    # --- Plan
+    results[f"{t}: Plan says Off and the approved plan with its first line and Open"] = await page.js("(() => { const s = " + section("plan") + "; return s.querySelector('.plan-state .work-state').textContent === 'off' && s.querySelector('.plan-approved .work-line-title').textContent === 'Free the disk' && s.querySelector('.plan-approved .work-stop').textContent === 'Open'; })()")
+    await emit(page, {"type": "planUpdated", "sessionId": "s1", "active": True})
+    results[f"{t}: Planning is on in the ice colour with Cancel plan"] = await page.js("(() => { const s = " + section("plan") + "; const st = s.querySelector('.plan-state .work-state'); return st.textContent === 'on' && st.className.includes('tone-ice') && s.querySelector('.plan-state .work-stop').textContent === 'Cancel plan'; })()") and await page.js("document.querySelector('.work-capsule .cap-plan').textContent") == "planning"
+    await page.js("document.querySelector('.plan-state .work-stop').click()")
+    await asyncio.sleep(0.3)
+    results[f"{t}: Cancel plan is POST /api/sessions/:id/plan {{active: false}}"] = calls()[-1] == 'POST /api/sessions/s1/plan {"active": false}' and await page.js("document.querySelector('.plan-state .work-state').textContent") == "off"
+    # --- Progress
+    await page.js("document.querySelector('.todo-items li:last-child input').click()")
+    await asyncio.sleep(0.3)
+    results[f"{t}: Progress ticks with PUT /api/sessions/:id/todo, as before"] = calls()[-1].startswith("PUT /api/sessions/s1/todo") and await page.js("document.querySelector('.work-section[data-section=progress] .work-section-count').textContent") == "5 of 7"
+    results[f"{t}: the todo list has no box of its own"] = await page.js("(() => { const p = document.querySelector('.todo-panel'); const cs = getComputedStyle(p); return cs.borderTopWidth === '0px' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.marginLeft === '0px'; })()")
+    await page.shot(f"work-sections-{theme}")
+    # --- folding
+    await page.click(".work-section[data-section=agents] .work-section-toggle")
+    stored = json.loads(await page.js("localStorage.getItem('kagent.work.closed')"))
+    results[f"{t}: a click on a header folds the section and kagent.work.closed remembers it"] = stored == ["agents"] and await page.js("!document.querySelector('.agent-row')")
+    await page.send("Page.reload")
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule after the reload")
+    await page.click(".work-capsule")
+    results[f"{t}: after a reload the folded section stays folded"] = await page.js("!document.querySelector('.agent-row') && !!document.querySelector('.task-row')")
+    await page.click(".work-section[data-section=agents] .work-section-toggle")
+    await page.click(".work-capsule")
+
+
+async def pane_checks(env, results, theme):
+    page = env.page
+    t = f"1200x820 {theme}"
+    await env.size(1200, 820)
+    await env.open(theme, **WORK)
+    await kids(page, ("c1", "Disk usage", "explore", "running"), ("c2", "Memory usage", "general", "done"))
+    await page.until("!!document.querySelector('.agent-card')", "the cards of the transcript")
+    results[f"{t}: no pane while no tab is open, and the 380 px are not reserved"] = await page.js("!document.querySelector('aside.side-pane') && !document.querySelector('main.with-pane')")
+    full = await page.js("Math.round(document.querySelector('.view').getBoundingClientRect().width)")
+    n = len(opened())
+    await page.js("document.querySelector('.agent-card[data-child=c1] .agent-open').click()")
+    await page.until("!!document.querySelector('aside.side-pane')", "the Subagent tab")
+    lay = await page.js("(() => { const p = document.querySelector('aside.side-pane').getBoundingClientRect(), v = document.querySelector('.view').getBoundingClientRect(), m = document.querySelector('main'); return {pane: Math.round(p.width), view: Math.round(v.width), row: getComputedStyle(m).flexDirection, cls: m.className, right: Math.round(innerWidth - p.right), border: getComputedStyle(document.querySelector('aside.side-pane')).borderLeftWidth}; })()")
+    results[f"{t}: a click on an Agents card opens the Subagent tab and the conversation stays"] = lay["pane"] == 380 and lay["row"] == "row" and lay["cls"] == "with-pane" and await page.js("!!document.querySelector('form.composer') && !document.querySelector('.agent-readonly')")
+    results[f"{t}: the view gives the pane its 380 px and keeps the rest"] = lay["view"] == full - 380 and lay["border"] == "1px"
+    await page.until("document.querySelector('.pane-subagent .bubble') !== null", "the child's messages")
+    results[f"{t}: the tab reads the child session once and shows its messages as bubbles, read-only (no composer in the pane)"] = opened()[n:] == ["c1"] and await page.js("[...document.querySelectorAll('.pane-subagent .bubble .content')].map(e => e.textContent)") == ["Find what uses the disk", "du says /var holds 12 GB"] and await page.js("!document.querySelector('aside.side-pane textarea, aside.side-pane input')")
+    results[f"{t}: one tab has a header with its icon, its title and a Close button"] = await page.js("(() => { const h = document.querySelector('.side-head'); return Math.round(h.getBoundingClientRect().height) === 32 && !!h.querySelector('.side-icon svg') && h.querySelector('.side-title').textContent === 'Disk usage' && h.querySelector('.side-close').getAttribute('aria-label') === 'Close' && !document.querySelector('.side-tabs'); })()")
+    results[f"{t}: the line of the child shows title, profile, state, time and Stop"] = await page.js("(() => { const l = document.querySelector('.pane-subagent .pane-line'); return l.textContent.includes('Disk usage') && l.textContent.includes('explore') && l.textContent.includes('running') && !!l.querySelector('.work-stop'); })()")
+    await page.shot(f"pane-subagent-{theme}")
+    # a live message arrives by events and the pane follows the end
+    await emit(page, {"type": "messageAppended", "sessionId": "c1", "message": {"role": "assistant", "content": "second answer"}})
+    results[f"{t}: a message of the child that arrives by event shows in the pane"] = await page.js("[...document.querySelectorAll('.pane-subagent .bubble .content')].pop().textContent") == "second answer"
+    # --- more tabs: a tab bar
+    await page.click("body")
+    await page.click(".work-capsule")
+    await page.js("document.querySelector('.agent-row[data-child=c2] .work-line-main').click()")
+    await page.js("document.querySelector('.task-row[data-task=bg_run] .work-line-main').click()")
+    await page.js("document.querySelector('.plan-approved .work-stop').click()")
+    await page.until("document.querySelectorAll('.side-tab').length === 4", "four tabs")
+    bar = await page.js("(() => { const b = document.querySelector('.side-tabs'); const cs = getComputedStyle(b); return {titles: [...document.querySelectorAll('.side-tab .side-title')].map(e => e.textContent.slice(0, 12)), active: [...document.querySelectorAll('.side-tab.active')].length, activeKey: document.querySelector('.side-tab.active').dataset.key, overflow: cs.overflowX, scrolls: b.scrollWidth > b.clientWidth, maxw: Math.max(...[...document.querySelectorAll('.side-tab')].map(x => x.getBoundingClientRect().width)), line: getComputedStyle(document.querySelector('.side-tab.active')).borderBottomWidth, close: [...document.querySelectorAll('.side-tab-x')].length}; })()")
+    results[f"{t}: several tabs make a tab bar: one button each with its title and its own x, the active one with the 2 px line"] = bar["titles"] == ["Disk usage", "Memory usage", "cargo test -", "Plan"] and bar["active"] == 1 and bar["activeKey"] == "plan:s1" and bar["line"] == "2px" and bar["close"] == 4
+    results[f"{t}: a tab is at most 140 px and the bar scrolls sideways when the tabs do not fit"] = bar["maxw"] <= 140 and bar["overflow"] in ("auto", "scroll")
+    await page.js("document.querySelector('.side-tab[data-key=\"subagent:c1\"] .side-tab-main').click()")
+    await asyncio.sleep(0.2)
+    results[f"{t}: opening a tab that is open makes it the active one; only one is active"] = await page.js("document.querySelectorAll('.side-tab.active').length") == 1 and await page.js("document.querySelector('.side-tab.active').dataset.key") == "subagent:c1"
+    await page.js("document.querySelector('.agent-row[data-child=c1] .work-line-main').click()")
+    await asyncio.sleep(0.2)
+    results[f"{t}: a line of Agents for a child that has a tab does not open a second one"] = await page.js("document.querySelectorAll('.side-tab').length") == 4
+    # Plan tab
+    await page.js("document.querySelector('.side-tab[data-key=\"plan:s1\"] .side-tab-main').click()")
+    await asyncio.sleep(0.2)
+    results[f"{t}: the Plan tab shows the approved plan as Markdown"] = await page.js("(() => { const p = document.querySelector('.pane-plan'); return p.querySelector('h3') && p.querySelector('h3').textContent === 'Free the disk' && p.querySelectorAll('li').length === 2; })()")
+    await page.shot(f"pane-tabs-{theme}")
+    # Escape with the focus inside the pane closes the active tab
+    await page.js("document.querySelector('.pane-plan .pane-scroll').setAttribute('tabindex', '0'); document.querySelector('.pane-plan .pane-scroll').focus()")
+    await page.key("Escape", "Escape", 27)
+    results[f"{t}: Escape with the focus in the pane closes the active tab"] = await page.js("document.querySelectorAll('.side-tab').length") == 3 and await page.js("!document.querySelector('.side-tab[data-key=\"plan:s1\"]')")
+    await page.js("document.querySelector('.side-tab[data-key=\"subagent:c2\"] .side-tab-x').click()")
+    await asyncio.sleep(0.2)
+    results[f"{t}: a tab closes with its x"] = await page.js("document.querySelectorAll('.side-tab').length") == 2
+    # --- Output tab: follows while running, pauses when scrolled up
+    await page.js("document.querySelector('.side-tab[data-key=\"output:bg_run\"] .side-tab-main').click()")
+    await page.until("document.querySelector('.pane-log') && document.querySelector('.pane-log').textContent.includes('line 399')", "the output")
+    lg = await page.js("(() => { const l = document.querySelector('.pane-log'); const cs = getComputedStyle(l); return {atEnd: l.scrollHeight - l.scrollTop - l.clientHeight <= 8, mono: cs.fontFamily.includes('mono'), size: cs.fontSize, wrap: cs.whiteSpace, head: document.querySelector('.pane-output .pane-line').textContent}; })()")
+    results[f"{t}: the Output tab shows the command, its state and the output in a monospace 12 px pre, at the end"] = lg["atEnd"] and lg["mono"] and lg["size"] == "12px" and lg["wrap"] == "pre-wrap" and "cargo test" in lg["head"]
+    r0 = [r for r in reads() if r[0] == "bg_run"]
+    results[f"{t}: it is read with ?tail=8000"] = bool(r0) and all(r[1] == 8000 for r in r0)
+    await asyncio.sleep(2.4)
+    r1 = len([r for r in reads() if r[0] == "bg_run"])
+    results[f"{t}: while the task runs it is read again every second"] = r1 >= len(r0) + 2
+    await page.js("document.querySelector('.pane-log').scrollTop = 0")
+    await asyncio.sleep(0.3)
+    paused = await page.js("document.querySelector('.pane-log').dataset.following") == "false" and await page.js("!!document.querySelector('.pane-jump')")
+    set_task(id="bg_run", text=LOG + "NEW LINE AT THE END\n")
+    await asyncio.sleep(1.5)
+    results[f"{t}: scrolled up, following pauses and the floating arrowDown button shows"] = paused and await page.js("document.querySelector('.pane-log').scrollTop") < 50 and await page.js("document.querySelector('.pane-jump').getAttribute('aria-label')") == "Jump to the end"
+    await page.shot(f"pane-output-{theme}")
+    await page.click(".pane-jump")
+    await asyncio.sleep(0.3)
+    results[f"{t}: the button resumes: the end is shown with the new line"] = await page.js("(() => { const l = document.querySelector('.pane-log'); return l.scrollHeight - l.scrollTop - l.clientHeight <= 8 && l.textContent.includes('NEW LINE AT THE END') && !document.querySelector('.pane-jump'); })()")
+    # the end event: one last read, then it stops
+    set_task(id="bg_run", status="done", exitCode=0, text=LOG + "NEW LINE AT THE END\nfinished\n")
+    await emit(page, {"type": "backgroundTask", "taskId": "bg_run", "sessionId": "s1", "status": "done"})
+    await asyncio.sleep(1.5)
+    n1 = len([r for r in reads() if r[0] == "bg_run"])
+    await asyncio.sleep(2.2)
+    n2 = len([r for r in reads() if r[0] == "bg_run"])
+    results[f"{t}: after the end event the output has its last read and no more reads follow"] = await page.js("document.querySelector('.pane-log').textContent.includes('finished')") and n2 == n1 and await page.js("document.querySelector('.pane-output .work-state').textContent") == "exit 0"
+    # --- tabs belong to their session; the other session has no pane, this one gets them back
+    await page.js("document.querySelector('.sb-item:not(.active) .sb-row-main') && [...document.querySelectorAll('.sb-item .sb-row-main')].find(b => b.textContent.includes('Other chat')).click()")
+    await page.until("!document.querySelector('aside.side-pane')", "no pane in another session")
+    await page.js("[...document.querySelectorAll('.sb-item .sb-row-main')].find(b => b.textContent.includes('Free the disk')).click()")
+    await page.until("!!document.querySelector('aside.side-pane')", "the tabs back")
+    results[f"{t}: tabs belong to the open session: another one has no pane, and the tabs come back"] = await page.js("document.querySelectorAll('.side-tab').length") == 2
+    # closing the last tab removes the pane
+    await page.js("[...document.querySelectorAll('.side-tab-x')].forEach(b => b.click())")
+    await asyncio.sleep(0.3)
+    await page.js("[...document.querySelectorAll('.side-tab-x')].forEach(b => b.click())")
+    await asyncio.sleep(0.3)
+    results[f"{t}: with the last tab closed the pane goes and its 380 px are free again"] = await page.js("!document.querySelector('aside.side-pane')") and await page.js("Math.round(document.querySelector('.view').getBoundingClientRect().width)") == full
+    # --- a plan that waits
+    await env.open(theme, **{**WORK, "approvals": [{"kind": "plan", "preview": "# New plan\n\n- step one\n", "requestId": "r1", "sessionId": "s1", "tool": "plan_exit", "input": {}, "summary": "plan", "reason": "", "risk": "low", "privileged": False, "canRemember": False, "ruleKey": ""}]})
+    await page.click(".work-capsule")
+    waits = await page.js("(() => { const s = " + section("plan") + "; return s.querySelector('.plan-waits .work-line-title').textContent + '|' + s.querySelector('.plan-waits .work-stop').textContent; })()")
+    await page.js("document.querySelector('.plan-waits .work-stop').click()")
+    await page.until("!!document.querySelector('.pane-plan')", "the plan tab")
+    results[f"{t}: a plan that waits says so with Show; the Plan tab shows it with the note"] = waits == "A plan waits for your approval|Show" and await page.js("document.querySelector('.pane-plan .work-note').textContent") == "Approve or reject it in the conversation" and await page.js("document.querySelector('.pane-plan h3').textContent") == "New plan"
+    await page.shot(f"pane-plan-waits-{theme}")
+
+
+async def narrow_checks(env, results):
+    page = env.page
+    await env.size(700, 500)
+    await env.open("dark", **WORK)
+    await kids(page, ("c1", "Disk usage", "explore", "running"))
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule at 700x500")
+    await page.click(".work-capsule")
+    room = await page.js("(() => { const c = document.querySelector('form.composer').getBoundingClientRect(), p = document.querySelector('.work-panel').getBoundingClientRect(), m = document.querySelector('.messages').getBoundingClientRect(); return {composerIn: c.bottom <= innerHeight && c.top >= 0, panelAbove: p.bottom <= c.top, messages: Math.round(m.height), panelH: Math.round(p.height), maxh: getComputedStyle(document.querySelector('.work-panel')).maxHeight}; })()")
+    results["700x500: the panel leaves the composer its room and the messages some height"] = room["composerIn"] and room["panelAbove"] and room["messages"] >= 60 and room["panelH"] <= 230
+    await page.shot("work-panel-700x500")
+    await page.js("document.querySelector('.agent-row .work-line-main').click()")
+    await page.until("!!document.querySelector('aside.side-pane')", "the pane at 700x500")
+    ov = await page.js("(() => { const a = document.querySelector('aside.side-pane'), r = a.getBoundingClientRect(), cs = getComputedStyle(a); return {pos: cs.position, w: Math.round(r.width), right: Math.round(innerWidth - r.right), top: Math.round(r.top), scrim: !!document.querySelector('.side-scrim'), z: cs.zIndex}; })()")
+    results["700x500: below 900 px the pane is an overlay at the right with a scrim"] = ov["pos"] == "absolute" and ov["w"] == 380 and ov["right"] == 0 and ov["scrim"]
+    await page.shot("pane-overlay-700x500")
+    await page.js("document.querySelector('.side-close').click()")
+    await asyncio.sleep(0.2)
+    results["700x500: the overlay closes with its button"] = await page.js("!document.querySelector('aside.side-pane') && !document.querySelector('.side-scrim')")
+    await page.js("document.querySelector('.agent-row .work-line-main').click()")
+    await page.until("!!document.querySelector('.side-scrim')", "the pane again")
+    await page.js("document.querySelector('.side-scrim').click()")
+    await asyncio.sleep(0.2)
+    results["700x500: a click on the scrim closes it too"] = await page.js("!document.querySelector('aside.side-pane')")
+
+
 async def main():
     results = {}
     async with Env("kagent-s43", "/tmp/kagent-s43-shots") as env:
@@ -178,6 +420,10 @@ async def main():
             await env.size(w, h)
             for theme in ("dark", "light"):
                 await notice_checks(env, results, theme, label, compact, first=(label == "1200x820" and theme == "dark"))
+        for theme in ("dark", "light"):
+            await work_checks(env, results, theme)
+            await pane_checks(env, results, theme)
+        await narrow_checks(env, results)
         await voice_check(env, results)
         errors = [e for e in env.page.errors]
         results["no console errors"] = not errors

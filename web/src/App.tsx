@@ -11,6 +11,8 @@ import Icon from "./components/Icon";
 import ResizeEdges from "./components/ResizeEdges";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toasts from "./components/Toasts";
+import SidePane from "./components/work/SidePane";
+import { usePane } from "./components/work/state";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
 import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
@@ -58,6 +60,7 @@ function setCompactInUrl(compact: boolean) {
 export default function App() {
   const s = useStore();
   const narrow = useNarrow();
+  const pane = usePane();
   const [compact, setCompact] = useState(initialCompact);
   const isApp = new URLSearchParams(location.search).has("app");
   // Local switch (from the daemon's `layout` command) vs. a click here, which also asks
@@ -168,7 +171,8 @@ export default function App() {
       </header>
       <div className="shell">
       <Sidebar />
-      <main>
+      <main className={pane ? "with-pane" : ""}>
+        <div className="view">
         <ErrorBoundary key={s.view} name={s.view}>
         {s.view === "chat" && <Chat />}
         {s.view === "voice" && <Voice />}
@@ -179,6 +183,8 @@ export default function App() {
         {s.view === "settings" && <SettingsPage />}
         {s.view === "system" && <System />}
         </ErrorBoundary>
+        </div>
+        <SidePane />
       </main>
       </div>
       <ResizeEdges />

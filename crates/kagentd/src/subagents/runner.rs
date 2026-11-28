@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use kagent_core::agent::children::ModelInfo;
 use kagent_core::agent::Agent;
+use kagent_core::protocol::AgentEvent;
 use kagent_core::tools::agents::AgentAccess;
 use kagent_core::tools::background::Background;
 use kagent_providers::ProviderStore;
+use tokio::sync::broadcast;
 
 use crate::subagents::ProfileHub;
 
@@ -30,6 +32,7 @@ impl Subagents {
         providers: Arc<ProviderStore>,
         task_out: impl AsRef<Path>,
         max_concurrent: u32,
+        events: broadcast::Sender<AgentEvent>,
     ) -> Arc<Self> {
         profiles.reload();
         access.attach(&agent);
@@ -53,6 +56,10 @@ impl Subagents {
             tokio::spawn(async move {
                 let _ = tell.notify(&session, &text).await;
             });
+        }));
+        // A change of status of a task goes to the windows (work-windows.md section 4.1), before the notification above.
+        Background::shared().set_event_sink(Arc::new(move |id, session, status| {
+            let _ = events.send(AgentEvent::BackgroundTask { task_id: id.to_string(), session_id: session.to_string(), status: status.label().to_string() });
         }));
         agent.set_max_concurrent_children(max_concurrent as usize).await;
         Arc::new(Self { profiles, access })

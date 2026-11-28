@@ -26,6 +26,13 @@ SESSIONS = {}
 DIRS = set()
 PROJECTS = []
 OPENED = []  # the sessions the window read (`GET /api/sessions/:id`), in order
+# The work panel (S43; set with `reset`): the background tasks per session, the output of a task, the messages per session,
+# the pending approvals, and the reads of an output (`GET /api/background/:id/output`) as (task, tail).
+TASKS = {}
+OUTPUT = {}
+MESSAGES = {}
+APPROVALS = []
+READS = []
 
 
 # The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
@@ -42,6 +49,14 @@ def reset(**kw):
     CFG.update(kw)
     CALLS.clear()
     OPENED.clear()
+    READS.clear()
+    TASKS.clear()
+    TASKS.update({k: [dict(t) for t in v] for k, v in kw.get("tasks", {}).items()})
+    OUTPUT.clear()
+    OUTPUT.update(kw.get("outputs", {}))
+    MESSAGES.clear()
+    MESSAGES.update(kw.get("messages", {}))
+    APPROVALS[:] = kw.get("approvals", [])
     SESSIONS.clear()
     DIRS.clear()
     DIRS.update(kw.get("dirs", ()))
@@ -159,6 +174,17 @@ class Mock(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path == "/__calls":
             return self.send(200, {"calls": CALLS})
+        if path == "/__output":
+            # A task changes while the page runs: its output and/or its status (S43).
+            for ts in TASKS.values():
+                for t in ts:
+                    if t["id"] == body["id"]:
+                        t.update({k: v for k, v in body.items() if k in ("status", "exitCode", "seconds")})
+            if "text" in body:
+                OUTPUT[body["id"]] = body["text"]
+            return self.send(200, {"ok": True})
+        if path == "/__reads":
+            return self.send(200, {"reads": READS})
         if path == "/__opened":
             return self.send(200, {"opened": OPENED})
         if path == "/api/state":
@@ -168,8 +194,41 @@ class Mock(BaseHTTPRequestHandler):
             state["settings"]["chatModel"] = CFG["default"]
             state["settings"]["liveModel"] = "gemini::live"
             state["running"] = CFG.get("running", [])
+            state["pendingApprovals"] = APPROVALS
             state["alertsOpen"] = CFG.get("alerts", 0)
             return self.send(200, state)
+        mt = re.fullmatch(r"/api/sessions/([^/]+)/(background|todo|plan)", path)
+        if mt and mt.group(1) in SESSIONS:
+            m = SESSIONS[mt.group(1)]
+            if mt.group(2) == "background" and method == "GET":
+                return self.send(200, {"tasks": TASKS.get(m["id"], [])})
+            if mt.group(2) == "todo" and method == "PUT":
+                CALLS.append(f"PUT {path} {json.dumps(body)}")
+                m["todo"] = body["items"]
+                return self.send(200, {"items": m["todo"]})
+            if mt.group(2) == "plan" and method == "POST":
+                CALLS.append(f"POST {path} {json.dumps(body)}")
+                m["planning"] = bool(body["active"])
+                return self.send(200, {"planning": m["planning"]})
+        mb = re.fullmatch(r"/api/background/([^/]+)/(output|stop)", path)
+        if mb:
+            found = next((t for ts in TASKS.values() for t in ts if t["id"] == mb.group(1)), None)
+            if not found:
+                return self.send(404, {"error": {"code": "not_found", "message": f"no background task '{mb.group(1)}'"}})
+            if mb.group(2) == "stop" and method == "POST":
+                CALLS.append(f"POST {path}")
+                if found["status"] != "running":
+                    return self.send(409, {"error": {"code": "conflict", "message": f"the task already ended ({found['status']})"}})
+                found["status"] = "killed"
+                return self.send(200, found)
+            if mb.group(2) == "output" and method == "GET":
+                tail = int(re.search(r"tail=(\d+)", self.path).group(1)) if "tail=" in self.path else 4000
+                READS.append([found["id"], tail])
+                return self.send(200, {"task": found, "output": OUTPUT.get(found["id"], "")[-tail:]})
+        ms = re.fullmatch(r"/api/sessions/([^/]+)/subagents/([^/]+)/stop", path)
+        if ms and method == "POST":
+            CALLS.append(f"POST {path}")
+            return self.send(200, {"status": "cancelled"})
         if path == "/api/models":
             return self.send(200, {"chat": CFG["models"], "fast": CFG["models"], "vision": [], "live": []})
         if path == "/api/providers":
@@ -231,7 +290,7 @@ class Mock(BaseHTTPRequestHandler):
                 return self.send(200, m)
             if method == "GET":
                 OPENED.append(m["id"])
-                return self.send(200, {"meta": m, "messages": []})
+                return self.send(200, {"meta": m, "messages": MESSAGES.get(m["id"], [])})
         if path.startswith("/api/"):
             status, data, ctype = daemon(method, path, body)
             return self.send(status, data, ctype)
@@ -314,6 +373,15 @@ class Page:
     async def center(self, sel):
         r = await self.js(f"(() => {{ const r = document.querySelector({json.dumps(sel)}).getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }})()")
         return r
+
+
+def set_task(**body):
+    """Change a task of the mock while the page runs: `id`, and `text` (its output), `status`, `exitCode`."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__output", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
+def reads():
+    return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__reads").read())["reads"]
 
 
 def calls():

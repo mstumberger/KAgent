@@ -27,6 +27,7 @@ pub fn error_body(code: &str, message: impl Into<String>) -> String {
     json!({"error": {"code": code, "message": message.into()}}).to_string()
 }
 
+#[derive(Debug)]
 pub struct HttpError(pub StatusCode, pub &'static str, pub String);
 
 impl IntoResponse for HttpError {
@@ -102,6 +103,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/cancel", post(api::cancel_session))
         .route("/sessions/{id}/compact", post(crate::compact_api::compact_session))
         .route("/sessions/{id}/todo", put(crate::todo_api::put_todo))
+        .route("/sessions/{id}/background", get(crate::background_api::get_list))
+        .route("/background/{task_id}/output", get(crate::background_api::get_output))
+        .route("/background/{task_id}/stop", post(crate::background_api::post_stop))
         .route("/sessions/{id}/plan", post(crate::plan_api::post_plan))
         .route("/sessions/{id}/model", put(crate::model_api::put_model))
         .route("/sessions/{id}/project", put(crate::project_api::put_project))
