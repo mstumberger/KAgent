@@ -97,6 +97,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/models", get(api::list_models))
         .route("/tools", get(api::list_tools))
         .route("/tools/{name}/call", post(api::call_tool))
+        .route("/ui/tools/{name}/call", post(api::call_tool_ui))
         .route("/sessions", get(api::list_sessions).post(api::create_session))
         .route("/sessions/{id}", get(api::get_session).delete(api::delete_session))
         .route("/sessions/{id}/messages", post(api::post_message))

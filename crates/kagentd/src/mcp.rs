@@ -3,7 +3,8 @@
 //!
 //! A thin client of the running daemon: every call goes through
 //! `POST /api/tools/:name/call`, so permissions, approval cards (in the KAgent UI),
-//! the change journal and the audit log apply exactly as for chat turns.
+//! the change journal and the audit log apply. The route is the MCP entry: the session is `mcp`
+//! and the origin `agent`, so every call that is not read-only asks, in every permission mode.
 //! Hand-rolled instead of an SDK: the server surface is four methods.
 
 use serde_json::{json, Value};
@@ -75,7 +76,7 @@ async fn handle(d: &Daemon, msg: &Value) -> Option<Value> {
         "tools/call" => {
             let name = msg.pointer("/params/name").and_then(Value::as_str).unwrap_or("");
             let args = msg.pointer("/params/arguments").cloned().unwrap_or(json!({}));
-            match d.post(&format!("/api/tools/{name}/call"), json!({"input": args, "sessionId": "mcp"})).await {
+            match d.post(&format!("/api/tools/{name}/call"), json!({"input": args})).await {
                 Ok(v) => {
                     let status = v["status"].as_str().unwrap_or("error");
                     Ok(json!({
