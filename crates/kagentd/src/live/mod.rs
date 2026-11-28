@@ -104,6 +104,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     // The session started at login (voice.md section 14): it ends by itself after a time without speech of the owner.
     let login = st.listen_start.claim(std::time::Instant::now());
     let login_idle = login.as_ref().map(|l| l.plan.idle);
+    // Said once, first, in that session only (voice.md section 14.5).
+    let mut greeting = login.as_ref().filter(|l| l.plan.greeting).map(|_| crate::listen_start::greeting_now(&st));
     let mut last_speech = std::time::Instant::now();
     let mut end_detail = String::new();
     let _ = out.send(json!({"type": "session", "sessionId": session}));
@@ -306,11 +308,12 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                         continue 'conn;
                                     }
                                 }
-                                // The morning report waits for the first session after its time (calendar.md section 6):
-                                // a [SAY] text turn, read as it stands, once.
+                                // The greeting of a session started at login, and the morning report that waits for the first
+                                // session after its time (calendar.md section 6): one [SAY] text turn, read as it stands, once.
                                 if first {
-                                    if let Some(report) = st.calendar.take_spoken() {
-                                        if !send_up(&mut up_tx, UpMsg::Text(protocol::say_frame(&report).to_string().into())).await {
+                                    let report = st.calendar.take_spoken();
+                                    if let Some(text) = crate::listen_start::spoken_turn(greeting.take().as_deref(), report.as_deref()) {
+                                        if !send_up(&mut up_tx, UpMsg::Text(protocol::say_frame(&text).to_string().into())).await {
                                             continue 'conn;
                                         }
                                     }
