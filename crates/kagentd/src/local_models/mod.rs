@@ -5,14 +5,19 @@
 
 pub mod fit;
 pub mod http;
+pub mod manage;
 pub mod ollama;
+pub mod pull;
 pub mod tool;
 
 #[cfg(test)]
 mod fake;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_pull;
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 use kagent_core::platform::gpu::{self, Gpu};
@@ -21,6 +26,7 @@ use kagent_providers::ProviderStore;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 
 use self::fit::{Entry, Fit, Job};
 use crate::settings::Settings;
@@ -49,25 +55,40 @@ pub struct PullRow {
 /// Where the machine's numbers come from: the probes, or fixed values (tests).
 pub enum Hardware {
     Probe,
-    #[allow(dead_code)] // built by the tests
+    #[cfg_attr(not(test), allow(dead_code))] // built by the tests
     Fixed { gpu: Option<Gpu>, ram_total_mb: u64 },
+}
+
+/// Where the free disk space comes from: `df` on Ollama's model folder, or a fixed value (tests).
+pub enum Disk {
+    Probe,
+    #[cfg_attr(not(test), allow(dead_code))] // built by the tests
+    Fixed(Option<u64>),
+}
+
+/// The rows, whether a worker is going through them, and the way to stop the running one.
+#[derive(Default)]
+pub struct Pulls {
+    pub rows: Vec<PullRow>,
+    pub running: bool,
+    pub cancel: HashMap<String, CancellationToken>,
 }
 
 pub struct LocalModels {
     pub(crate) providers: Arc<ProviderStore>,
     pub(crate) settings: Arc<RwLock<Settings>>,
-    #[allow(dead_code)] // read by the pulls
     pub(crate) events: broadcast::Sender<AgentEvent>,
     pub(crate) list: Vec<Entry>,
     /// Ollama's address when it is not the provider's (tests).
     pub(crate) base_override: Option<String>,
     pub(crate) hardware: Hardware,
-    pub(crate) pulls: Mutex<Vec<PullRow>>,
+    pub(crate) disk: Disk,
+    pub(crate) pulls: Mutex<Pulls>,
 }
 
 impl LocalModels {
     pub fn new(providers: Arc<ProviderStore>, settings: Arc<RwLock<Settings>>, events: broadcast::Sender<AgentEvent>) -> Arc<Self> {
-        Arc::new(Self { providers, settings, events, list: fit::shipped(), base_override: None, hardware: Hardware::Probe, pulls: Mutex::new(Vec::new()) })
+        Arc::new(Self { providers, settings, events, list: fit::shipped(), base_override: None, hardware: Hardware::Probe, disk: Disk::Probe, pulls: Mutex::new(Pulls::default()) })
     }
 
     /// Ollama's address: the Ollama provider's, else the default.
@@ -81,11 +102,15 @@ impl LocalModels {
         }
     }
 
-    /// The owner's Ollama provider (the first one that speaks Ollama's API), if any.
-    pub fn ollama_provider(&self) -> Option<kagent_providers::config::ProviderEntry> {
+    /// The owner's providers that speak Ollama's API, in their order.
+    pub fn ollama_providers(&self) -> Vec<kagent_providers::config::ProviderEntry> {
         let file = self.providers.providers();
-        let found = file.order.iter().filter_map(|id| file.providers.get(id)).find(|p| p.template_id == "ollama" || p.api.api_type == kagent_providers::ApiType::OllamaNative);
-        found.cloned()
+        file.order.iter().filter_map(|id| file.providers.get(id)).filter(|p| p.template_id == "ollama" || p.api.api_type == kagent_providers::ApiType::OllamaNative).cloned().collect()
+    }
+
+    /// The first of them, if any.
+    pub fn ollama_provider(&self) -> Option<kagent_providers::config::ProviderEntry> {
+        self.ollama_providers().into_iter().next()
     }
 
     async fn machine(&self) -> (Option<Gpu>, u64) {
@@ -100,22 +125,21 @@ impl LocalModels {
     }
 
     /// The settings that name a model of the list, `(setting, ref)`.
-    fn named_as(&self, model_ref: &str) -> Vec<&'static str> {
+    pub(crate) fn named_as(&self, model_ref: &str) -> Vec<&'static str> {
         let s = self.settings.read().unwrap();
         crate::api::providers::named_models(&s).into_iter().filter(|(_, r)| r == model_ref).map(|(k, _)| k).collect()
     }
 
     /// `provider::id` of a model in the owner's Ollama provider, when it has a row for it.
-    fn model_ref(&self, installed_id: &str) -> Option<String> {
+    pub(crate) fn model_ref(&self, installed_id: &str) -> Option<String> {
         let p = self.ollama_provider()?;
         p.models.iter().any(|m| m.id == installed_id).then(|| format!("{}::{installed_id}", p.id))
     }
 
     pub fn pull_rows(&self) -> Vec<PullRow> {
-        self.pulls.lock().unwrap().clone()
+        self.pulls.lock().unwrap().rows.clone()
     }
 
-    #[allow(dead_code)] // used by the pulls
     pub(crate) fn emit_pulls(&self) {
         let _ = self.events.send(AgentEvent::LocalModelsChanged { pulls: json!(self.pull_rows()) });
     }

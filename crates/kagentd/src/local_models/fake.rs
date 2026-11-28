@@ -25,6 +25,8 @@ pub enum Step {
     Gate,
     /// The model is now installed (as `GET /api/tags` lists it).
     Install(u64),
+    /// The model is installed under another name (`nomic-embed-text` is `nomic-embed-text:latest`).
+    InstallAs(String, u64),
     /// Keep the stream open until the client goes away.
     Hang,
 }
@@ -94,7 +96,6 @@ impl FakeOllama {
     }
 
     pub fn release(&self) {
-        self.gate.notify_waiters();
         self.gate.notify_one();
     }
 
@@ -167,6 +168,7 @@ async fn pull(State(c): State<Ctx>, Json(body): Json<Value>) -> Response {
                 Step::Wait(d) => tokio::time::sleep(d).await,
                 Step::Gate => c.gate.notified().await,
                 Step::Install(bytes) => c.state.lock().unwrap().models.push((id.clone(), bytes)),
+                Step::InstallAs(name, bytes) => c.state.lock().unwrap().models.push((name, bytes)),
                 Step::Hang => std::future::pending::<()>().await,
             }
         }

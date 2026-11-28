@@ -210,26 +210,31 @@ pub async fn delete_provider(State(st): State<Arc<AppState>>, Path(id): Path<Str
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-pub async fn fetch_models(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
-    let provider = st.providers.provider(&id).ok_or_else(|| not_found(format!("unknown provider {id}")))?;
+/// "Fetch models" of a provider (models.md section 3): the model list of the provider's own
+/// API merged into its rows. The route and the local models page (after a download) use it.
+pub async fn refresh_models(store: &ProviderStore, id: &str) -> ApiResult<kagent_providers::ProviderEntry> {
+    let provider = store.provider(id).ok_or_else(|| not_found(format!("unknown provider {id}")))?;
     match kagent_providers::discovery::fetch_models(&provider).await {
         Ok(ids) => {
             // Merged into the entry as it is now, not the copy taken before the request:
             // a change saved while the fetch ran stays.
-            let updated = st.providers.update(&id, |p| {
-                *p = kagent_providers::discovery::merge_models(p, ids);
-                p.models_fetched_at = Some(chrono::Utc::now().to_rfc3339());
-            });
-            match updated {
-                Ok(p) => Ok(super::ok_json(st.providers.view(&p))),
-                Err(e) => Err(super::internal(e)),
-            }
+            store
+                .update(id, |p| {
+                    *p = kagent_providers::discovery::merge_models(p, ids);
+                    p.models_fetched_at = Some(chrono::Utc::now().to_rfc3339());
+                })
+                .map_err(super::internal)
         }
         Err(e) => {
-            st.providers.set_error(&id, &format!("{e:#}"));
+            store.set_error(id, &format!("{e:#}"));
             Err(HttpError(StatusCode::BAD_GATEWAY, "provider_error", format!("{e:#}")))
         }
     }
+}
+
+pub async fn fetch_models(State(st): State<Arc<AppState>>, Path(id): Path<String>) -> ApiResult<Response> {
+    let p = refresh_models(&st.providers, &id).await?;
+    Ok(super::ok_json(st.providers.view(&p)))
 }
 
 pub async fn test_provider(State(st): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
