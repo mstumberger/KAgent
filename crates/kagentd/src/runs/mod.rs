@@ -6,6 +6,8 @@ pub mod settings;
 pub mod tickets;
 
 #[cfg(test)]
+mod gated;
+#[cfg(test)]
 mod tests;
 
 use std::path::{Path, PathBuf};

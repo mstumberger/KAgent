@@ -873,3 +873,36 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
    pane shows the job, todo, files and transcript tail; Send and Interrupt post the right body; receipts change from queued to delivered
    on `subagentUpdated`; the box is disabled for an ended worker.
 7. The owner: start a subagent, tell it "leave the tests alone" and watch it acknowledge; interrupt it during a long command.
+
+## S-workflows Workers and workflows (workflows.md)
+1. **[auto]** Definitions: the YAML subset (maps, lists, flow, quotes, comments, errors with a line number); every rule names its field; `kind:
+   coder` and `isolation: worktree` are refused with a clear message; a reviewer equal to the implementer is refused; the four shipped
+   workflows are valid; a file with a shipped name is not used.
+2. **[auto]** The plan parser: valid, the last block wins, no block, bad JSON, a cycle, a duplicate id, an unknown dependency, 30 and 31 tasks. A
+   malformed plan is sent back once to the same planner with what is wrong; a second one fails the run with the first problem.
+3. **[auto]** The loop on the scripted model: approve at round 1 (the second implementer is told the first one's report); changes then approved
+   (the same implementer session, only `must` findings back, `should` ones in the report); three rounds then the owner's `more_round`, `accept`
+   and `drop` (the dependents are blocked); a worker that fails (the others go on); a malformed verdict sent back once, then the task fails; a
+   reviewer cannot change anything.
+4. **[auto]** The plan gate: nothing is implemented before approval; reject with a reason goes to the same planner, three rejections stop the
+   run; the owner's edits (title, order, removal) are what is stored; `plan-only`, `implement-review` and `review-only` run.
+5. **[auto]** Limits: at most `parallel` implementers run at once and tasks whose files overlap never do; `workflows.maxRuns` active runs.
+6. **[auto]** Stop in each state (planning, awaiting approval, working, needs the owner, paused): the workers end, the tasks are `stopped`, nothing
+   is written by a worker that finished late. Pause and Continue start the interrupted stage again with a new worker.
+7. **[auto]** Restart in each state: a second engine over the same folder turns `planning` and `working` into `paused` ("the daemon restarted"),
+   keeps `awaiting_approval`, `needs_owner` and the final states, never continues by itself, and Continue finishes the run.
+8. **[auto]** The mailbox and the questions: a blocking `ask` waits and its answer is the result; a question goes to the Brain of the starting
+   conversation and, unanswered, to the owner as a card and a notice; a non-blocking answer is a message read at the worker's next request;
+   ids are idempotent, 8 waiting at most, a long text goes to a file, `[from ...]` and `[owner]` texts are refused, receipts expire.
+9. **[auto]** The tools: `report_progress` and `ask` are offered to a worker only and refused at execution elsewhere; a worker has no
+   `workflow_*` tool; `workflow_run` and `workflow_stop` are `always_ask`; `workflow_answer` refuses a forged prefix.
+10. **[auto]** The API functions (bodies, statuses, the redactor) and the tickets: the run is a ticket, each task a child that follows the task's
+    state, a stopped run leaves its tickets in `backlog` with a note and the label `stopped`, a ticket the owner moved is not moved back.
+11. **[auto]** `scripts/test-runs-web.py` (mocked API; dark and light, 1200x820 and 700x500): the entry Runs; the tree with dots and keys, arrow
+    keys, Enter; the run's tabs; the steps strip; progress with struck-through items; running time ticking; Ended (n); a task opens its worker
+    in the steering pane; Changes in the diff view; Pause, Continue, Stop; the approval card (reject needs a reason, edit and approve post the
+    list); a decision and a question; New run posts its body; refusals are alerts; no horizontal scroll at 700x500.
+12. **[gated]** `KAGENT_IT=1 cargo test -p kagentd plan_only_against_the_real_local_model -- --nocapture`: `plan-only` on `qwen2.5:7b-instruct`
+    in a temporary folder; the run ends `done`, or fails with a reason (a small model may not return a valid plan).
+13. The owner: say "run plan-implement-review on a small change in this project", approve the plan on the board, force one round of changes,
+    and see the tickets of the tasks move.

@@ -478,3 +478,19 @@ folder, then rename). `<id>` is `inbox`, or `<folder name, [a-z0-9-], at most 24
 
 The change journal (section 7) gains one field for a file edit: `op.afterBackup`, the path of `<data>/changes/aft_<uuid>`, the text
 that `write_file` or `edit_file` wrote (the text before is the backup of the undo). The diff view reads both (`diff.md` section 3).
+
+## 17. Workflow files, runs/ and settings.workflows (v0.0.3)
+
+Spec: `workflows.md`.
+
+- `<config>/workflows/<name>.yaml`: a definition (`workflows.md` section 2), read when a workflow is listed or started, so a file
+  edited by hand counts at once. The name is the file's. A file with a shipped name, a `kind: coder` worker, a profile that does not
+  exist or any other error is not used and is listed with its reason by `GET /api/workflows`. The agent has no tool that writes here.
+  The shipped definitions are built into the daemon (`workflows/*.yaml` in the source tree).
+- `<data>/runs/<runId>/`: `run.json` (mode 0600, atomic write, the whole run with a copy of its definition), `plan.json`, `plan.md`,
+  `messages/<id>.txt` for a long message to a worker. A file that cannot be read is skipped with a warning and left on disk. A run that
+  was planning or working comes back `paused` ("the daemon restarted") when the daemon starts.
+- `settings.workflows` (a typed section; protected from the `settings` tool, which decides how much runs unattended): `maxRuns`, 1 to 4,
+  default 2, how many runs are `planning`, `awaiting_approval` or `working` at once. A value outside the range makes the file invalid;
+  an unknown key is refused with the suggestion.
+- Session meta: the session of a run has `origin: "run"` (the workers are its children).

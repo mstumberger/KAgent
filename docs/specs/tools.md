@@ -622,3 +622,18 @@ Details and the prompt rule ("Add to the todo ... makes a ticket; `todo_write` i
 `tickets.md` section 5. Registered by the daemon like `usage` (a cell the store fills) and listed in `group_of` with `settings`.
 
 `agent_tell` (section 21, `steering.md` section 5) is the subagent tool added in the same item.
+
+## 31. Workflow runs (group `agent`; v0.0.3)
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `workflow_run` | MUT, risk medium, `always_ask` (the summary names the workflow, the project and the workers) | `{workflow, goal, project?, ticket?}` | starts a run (`workflows.md`), the calling session answers its workers' questions; "Started run run_1a2b3c4d \"title\" (plan-only): planning." |
+| `workflow_status` | RO | `{run?}` | one run with its tasks and open questions, or the runs of the calling session's project |
+| `workflow_stop` | MUT, risk low, `always_ask` | `{run}` | stops a run |
+| `workflow_answer` | MUT, no approval (it answers a worker, it approves nothing) | `{run, question, text?, ask_owner?}` | the answer reaches the worker; a text that starts like the owner's or a coworker's message is refused; `ask_owner` turns the question into a card |
+| `report_progress` | no approval | `{steps: [{title, status}]}` | a worker's own steps, shown under its task |
+| `ask` | no approval | `{question, options?, blocking?}` | a worker's question (`blocking` default true: the answer is the result, up to 30 minutes) |
+
+`report_progress` and `ask` are offered only to a worker of a run and refused at execution to every other session ("... is for a worker
+of a workflow run"); a read-only worker (planner, reviewer) may call them. A subagent has none of the four `workflow_*` tools (the depth
+rule). Registered by the daemon through `WorkflowAccess` (a handle the engine fills) and listed in `group_of` with `settings`.

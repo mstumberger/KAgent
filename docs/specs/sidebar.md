@@ -539,3 +539,9 @@ header in the DOM: `.win-controls` is a later child of `.app`, drawn at the righ
 title bar (`position: absolute`, 36 px high; the header keeps room for it; the strip between
 the buttons still drags and a double click on it still maximizes). The header holds the
 toggle, KAgent, Stop all and the voice chip. Check: `scripts/test-sidebar-web.py`.
+
+### Amendment 2026-11-28 (v0.0.3): the Runs entry
+
+The views under the list are now nine: Voice, Tasks, Tickets, **Runs**, Alerts, Changes, Security, System, Settings (`nav.ts` `VIEWS`, the
+daemon's `ui.rs` allow-list, the icon `bot`). The view is the board of `workflows.md` section 8. It is called **Runs**, not Work: "Work" is
+the work panel and the widget's sheet of `work-windows.md`. `scripts/test-sidebar-web.py` expects the nine.
