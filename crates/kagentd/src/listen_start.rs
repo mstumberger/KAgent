@@ -6,6 +6,7 @@ mod greeting;
 mod http;
 pub mod login;
 pub mod start;
+pub mod stop;
 
 pub use greeting::{greeting_now, spoken_turn};
 pub use http::listen_start as route;
