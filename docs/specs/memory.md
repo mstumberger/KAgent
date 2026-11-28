@@ -87,7 +87,7 @@ Related memories:
 - Prompt rule (working rules): "Save a memory when you learn something durable: a
   preference or a correction from the owner, a machine fact no tool can derive
   (addresses, devices, pinned versions, what a past fix was), a decision. One fact per
-  file. Never store secrets (keys, passwords, tokens). To correct a memory, save the
+  file. Secrets (keys, passwords, tokens) are refused by `memory_save`. To correct a memory, save the
   new one with `replaces`."
 - By the owner: "remember that ..." (a normal request) and Settings -> Memory.
 - Review: the UI shows how many agent-written memories are unreviewed; opening one

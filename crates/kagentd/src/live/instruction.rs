@@ -26,15 +26,15 @@ const DESTRUCTIVE: &str = concat!(
 const LISTENING: &str = concat!(
     "Listening: the user speaks English or Slovenian. Transcripts are noisy: a fragment in ",
     "another language (German, Spanish, Italian, Japanese...) or one that makes no sense in ",
-    "context is a mis-hearing or background noise: ignore it or ask the user to repeat; never ",
-    "type, send or act on it."
+    "context is a mis-hearing or background noise: ignore it or ask the user to repeat; an action ",
+    "that follows only such a fragment is asked out loud first."
 );
 
 const DICTATION: &str = concat!(
     "Dictation: when the user says what to write to someone, the message is only their words for ",
     "the other person, never the instruction around it ('send this', 'yes', 'tell him', 'okay'). ",
-    "Use the `message` tool: it types without sending; read the exact text back and send only ",
-    "after a yes. If the user says 'what I told you', use their earlier exact words; if you are ",
+    "Use the `message` tool: it types without sending; read the exact text back; `send` is ",
+    "refused until the owner has answered. If the user says 'what I told you', use their earlier exact words; if you are ",
     "not sure, ask."
 );
 
@@ -53,7 +53,7 @@ const LOOK: &str = "To see the screen call `screen`; never describe the screen w
 
 const RETRIES: &str = concat!(
     "Retries: when something did not work, check first (look again with screen, focus_context) and ",
-    "fix the cause; do not repeat the same action blindly, and never type the same text twice."
+    "fix the cause; do not repeat the same action blindly: the same changing call twice within 20 seconds is refused."
 );
 
 /// The rules of a live model that acts itself (`live` and `auto`): the text of S10
@@ -160,7 +160,7 @@ mod tests {
         assert!(!routed.contains("Recent conversation"), "the history frames carry the conversation");
         assert!(live.starts_with("PROMPT\n\n- The owner calls the chat model 'the Brain'") && live.contains("VOICE MODE: you are speaking out loud."), "{live}");
         assert!(live.contains("VOICE MODE: you are speaking out loud.") && !live.contains("Recent conversation") && !live.contains("`think`,"), "live is today's text without the Recent conversation block:\n{live}");
-        assert!(live.contains("Retries: when something did not work, check first (look again with screen, focus_context) and fix the cause; do not repeat the same action blindly, and never type the same text twice."));
+        assert!(live.contains("Retries: when something did not work, check first (look again with screen, focus_context) and fix the cause; do not repeat the same action blindly: the same changing call twice within 20 seconds is refused."));
         assert!(auto.starts_with(&live) && auto.contains("one function, `think`"), "auto is live plus the think rule");
         // voice.md section 12: the model that acts itself knows what `needs_confirmation` is.
         for text in [&live, &auto] {
