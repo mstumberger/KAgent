@@ -89,7 +89,8 @@ pub fn sentence(summary: &str, strong: bool, destructive: bool) -> String {
 }
 
 impl VoiceConfirm {
-    /// The step for a call the engine would ask about, at `now`.
+    /// The step for a call the engine would ask about, at `now` (the tests' short form of `step_saying`).
+    #[cfg(test)]
     pub fn step(&self, tool: &str, args: &Value, a: &CallAssessment, now: Instant) -> Step {
         self.step_saying(tool, args, a, now, None)
     }
