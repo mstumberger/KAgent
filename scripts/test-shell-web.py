@@ -208,6 +208,196 @@ async def router(env, results, theme):
     await env.size(1200, 820)
 
 
+OT = "/home/virus/code/other"
+CONVO = dict(DATA, dirs=[M.KA, OT], running=["s2"], projects=[{"path": M.KA, "name": "kagent", "agentsMd": True}, {"path": OT, "name": "other", "agentsMd": False}])
+ROWS = "[...document.querySelectorAll('.sb-item .sb-title')].map(e => e.textContent)"
+row = lambda title: f"[...document.querySelectorAll('.sb-item')].find(r => r.querySelector('.sb-title, .sb-rename') && (r.querySelector('.sb-title') ? r.querySelector('.sb-title').textContent : '') === {json.dumps(title)})"
+group_of = lambda title: f"(() => {{ let n = {row(title)}; while (n && !n.classList.contains('sb-group')) n = n.parentElement; return n ? n.querySelector('.sb-section-name').textContent : null; }})()"
+MENU = "[...document.querySelectorAll('.menu [role=menuitem]')].map(i => i.textContent.replace(/F2|Del$/, '').trim())"
+
+
+async def open_menu(page, title):
+    await page.js(f"{row(title)}.querySelector('.sb-more').click()")
+    await page.until("!!document.querySelector('.menu')", f"the menu of {title}")
+
+
+async def pick(page, label):
+    await page.js(f"[...document.querySelectorAll('.menu [role=menuitem]')].find(i => i.textContent.startsWith({json.dumps(label)})).click()")
+    await asyncio.sleep(0.15)
+
+
+async def conversations(env, results, theme):
+    t, page = theme, env.page
+    knob = "try { localStorage.setItem('kagent.undo-ms', '700'); } catch (e) {}"
+    await env.open(theme, init=knob, **CONVO)
+    await page.until("!!document.querySelector('.sb-item')", "the list")
+    # The menu: what was there, and what is new.
+    await open_menu(page, "Why is the fan loud and what can be done about it in the long run")
+    items = await page.js(MENU)
+    results[f"{t}: the row menu has Rename, Pin, Move to project, Attach folder, Archive and Delete"] = items == ["Rename", "Pin", "Move to project...", "Attach folder...", "Archive", "Delete"]
+    await page.key("Escape", "Escape", 27)
+    long_title = "Why is the fan loud and what can be done about it in the long run"
+
+    # Rename: from the menu, with F2, Enter saves, Escape and an empty title change nothing.
+    await open_menu(page, long_title)
+    await pick(page, "Rename")
+    await page.until("!!document.querySelector('.sb-rename')", "the rename field")
+    results[f"{t}: Rename turns the title into a field holding the title"] = await page.js("document.querySelector('.sb-rename').value") == long_title
+    await page.js("(() => { const i = document.querySelector('.sb-rename'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, '  The loud   fan '); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    await page.key("Enter", "Enter", 13)
+    await page.until(f"{row('The loud fan')} !== undefined", "the new title")
+    results[f"{t}: Enter saves the title, trimmed and on one line, with one PUT"] = 'PUT /api/sessions/s3/title {"title": "The loud fan"}' in calls() and not await page.js("!!document.querySelector('.sb-rename')")
+    results[f"{t}: after a rename the focus is back on the row"] = await page.js("document.activeElement.classList.contains('sb-row-main') && document.activeElement.textContent.includes('The loud fan')")
+    n = len(calls())
+    await page.js(f"{row('The loud fan')}.querySelector('.sb-row-main').focus()")
+    await page.key("F2", "F2", 113)
+    await page.until("!!document.querySelector('.sb-rename')", "F2 renames")
+    await page.key("Escape", "Escape", 27)
+    await page.until("!document.querySelector('.sb-rename')", "Escape closes the field")
+    results[f"{t}: F2 opens the field and Escape closes it without a call"] = len(calls()) == n
+    await page.js(f"{row('The loud fan')}.querySelector('.sb-row-main').focus()")
+    await page.key("F2", "F2", 113)
+    await page.until("!!document.querySelector('.sb-rename')", "F2 again")
+    await page.js("(() => { const i = document.querySelector('.sb-rename'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, '   '); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    await page.key("Enter", "Enter", 13)
+    await page.until("!document.querySelector('.sb-rename')", "an empty title is not saved")
+    results[f"{t}: an empty title is not saved and the row keeps its title"] = len(calls()) == n and await page.js("!!" + row("The loud fan"))
+
+    # Move to a project: the submenu, and "No project".
+    await open_menu(page, "The loud fan")
+    await pick(page, "Move to project")
+    await page.until("[...document.querySelectorAll('.menu [role=menuitem]')].some(i => i.textContent.startsWith('No project'))", "the projects")
+    results[f"{t}: Move to project lists the projects and No project, and checks the current one"] = (await page.js(MENU))[-1] == "No project" and "other" in await page.js(MENU) and await page.js("document.querySelector('.menu [aria-checked=true], .menu [role=menuitem].checked, .menu .pop-check') !== null")
+    await pick(page, "other")
+    await page.until(f"{group_of('The loud fan')} === 'other'", "the row in its new project")
+    results[f"{t}: picking a project moves the conversation (PUT project) and the row changes section"] = f'PUT /api/sessions/s3/project {json.dumps({"path": OT})}' in calls()
+    await open_menu(page, "The loud fan")
+    await pick(page, "Move to project")
+    await page.until("!!document.querySelector('.menu')", "the submenu again")
+    await pick(page, "No project")
+    await page.until(f"{group_of('The loud fan')} === 'This machine'", "back to no project")
+    results[f"{t}: No project takes the conversation out of its project"] = 'PUT /api/sessions/s3/project {"path": null}' in calls()
+
+    # Drag a row onto a project heading; the group lights up while it is over.
+    drag = lambda title, target, step: f"""(() => {{ window.__dt = window.__dt || new DataTransfer(); const dt = window.__dt; const r = {row(title)};
+      const g = [...document.querySelectorAll('.sb-group')].find(x => x.querySelector('.sb-section-name') && x.querySelector('.sb-section-name').textContent === {json.dumps(target)});
+      if ({json.dumps(step)} === 'over') {{ r.dispatchEvent(new DragEvent('dragstart', {{bubbles: true, dataTransfer: dt}})); g.dispatchEvent(new DragEvent('dragover', {{bubbles: true, cancelable: true, dataTransfer: dt}})); }}
+      else if ({json.dumps(step)} === 'leave') g.dispatchEvent(new DragEvent('dragleave', {{bubbles: true, relatedTarget: document.body, dataTransfer: dt}}));
+      else {{ r.dispatchEvent(new DragEvent('dragstart', {{bubbles: true, dataTransfer: dt}})); g.dispatchEvent(new DragEvent('dragover', {{bubbles: true, cancelable: true, dataTransfer: dt}})); g.dispatchEvent(new DragEvent('drop', {{bubbles: true, cancelable: true, dataTransfer: dt}})); window.__dt = null; }}
+    }})()"""
+    await page.js(drag("The loud fan", "kagent", "over"))
+    await page.until("!!document.querySelector('.sb-group.drop')", "the project lit while a row is over it")
+    await page.js(drag("The loud fan", "kagent", "leave"))
+    await page.until("!document.querySelector('.sb-group.drop')", "the light out after leaving")
+    results[f"{t}: a row dragged over a project lights the project up, and leaving puts it out"] = True
+    await page.js(drag("The loud fan", "kagent", "drop"))
+    await page.until(f"{group_of('The loud fan')} === 'kagent'", "the dropped row")
+    results[f"{t}: dropping a row on a project moves it (the same PUT as the menu)"] = calls().count(f'PUT /api/sessions/s3/project {json.dumps({"path": M.KA})}') == 1
+    await page.js(drag("The loud fan", "This machine", "drop"))
+    await page.until(f"{group_of('The loud fan')} === 'This machine'", "dropped on This machine")
+    results[f"{t}: dropping a row on This machine takes it out of its project"] = calls().count('PUT /api/sessions/s3/project {"path": null}') == 2
+
+    # Archive: a group at the foot, left out of the search unless the filter is pressed; a running one is refused.
+    await open_menu(page, "The loud fan")
+    await pick(page, "Archive")
+    await page.until(f"{row('The loud fan')} === undefined", "the archived row leaves the list")
+    results[f"{t}: Archive hides the row and puts it in a collapsed Archived group at the foot"] = 'PUT /api/sessions/s3/archive {"archived": true}' in calls() and await page.js("document.querySelector('.sb-archived .sb-section-name').textContent") == "Archived" and await page.js("document.querySelector('.sb-archived .sb-section').getAttribute('aria-expanded')") == "false" and await page.js("document.querySelectorAll('.sb-archived .sb-item').length") == 0
+    await page.js("document.querySelector('.sb-search input').focus()")
+    await page.js("(() => { const i = document.querySelector('.sb-search input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'loud'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    await page.until("document.querySelector('.sb-empty') && document.querySelector('.sb-empty').textContent.includes('No session matches')", "the search without it")
+    results[f"{t}: the search leaves archived conversations out"] = True
+    await page.js("document.querySelector('.sb-filter').click()")
+    await page.until("!!document.querySelector('.sb-item .sb-title')", "the search with the filter")
+    results[f"{t}: the Archived filter brings them into the search"] = await page.js(ROWS) == ["The loud fan"] and await page.js("document.querySelector('.sb-filter').getAttribute('aria-pressed')") == "true"
+    await page.js("document.querySelector('.sb-filter').click()")
+    await page.js("(() => { const i = document.querySelector('.sb-search input'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ''); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    await page.until("!!document.querySelector('.sb-archived .sb-section')", "the list again")
+    await page.js("document.querySelector('.sb-archived .sb-section').click()")
+    await page.until("document.querySelectorAll('.sb-archived .sb-item').length === 1", "the archived group open")
+    await open_menu(page, "The loud fan")
+    results[f"{t}: an archived row's menu has Unarchive and no Pin or Move"] = await page.js(MENU) == ["Rename", "Unarchive", "Delete"]
+    await pick(page, "Unarchive")
+    await page.until(f"{group_of('The loud fan')} === 'This machine'", "unarchived")
+    results[f"{t}: Unarchive brings the row back to its place"] = 'PUT /api/sessions/s3/archive {"archived": false}' in calls() and await page.js("!document.querySelector('.sb-archived')")
+    n = len(calls())
+    await open_menu(page, "Unit tests for the loop")
+    await pick(page, "Archive")
+    await page.until("!!document.querySelector('.toast')", "the refusal as a toast")
+    results[f"{t}: a running conversation is not archived (a notice with the reason, no call)"] = "running" in await page.js("document.querySelector('.toast').textContent") and len(calls()) == n and await page.js("!!" + row("Unit tests for the loop"))
+    await page.js("document.querySelector('.toast-close').click()")
+
+    # Delete: hidden at once with an Undo toast; Undo cancels; the daemon deletes when the toast ends.
+    hexed = "A conversation with a hex id"
+    await open_menu(page, hexed)
+    await pick(page, "Delete")
+    await page.until(f"{row(hexed)} === undefined", "the deleted row hidden")
+    results[f"{t}: Delete hides the row at once and says so with an Undo toast, with no call yet"] = await page.js("document.querySelector('.toast').textContent.includes('Undo')") and not any(c.startswith("DELETE") for c in calls())
+    await open_menu(page, "The loud fan")
+    await pick(page, "Delete")
+    await page.until(f"{row('The loud fan')} === undefined", "the second row hidden")
+    await page.js("[...document.querySelectorAll('.toast')].find(x => x.textContent.includes('hex id')).querySelector('.toast-action').click()")
+    await page.until(f"{row(hexed)} !== undefined", "undone")
+    await page.until("!document.querySelector('.toast')", "the other toast ended", 6)
+    await until_call(page, "DELETE /api/sessions/s3")
+    results[f"{t}: when the toast ends the daemon is called (DELETE), and the row is gone for good"] = not await page.js("!!" + row("The loud fan"))
+    results[f"{t}: Undo showed the row again and its conversation is never deleted"] = "DELETE /api/sessions/ab12" not in calls() and await page.js("!!" + row(hexed))
+    # The open conversation goes: the next one opens, and it is a replace in the history.
+    mirror = await page.js("JSON.parse(sessionStorage.getItem('kagent.nav')).entries.length")
+    await page.js(f"{row('Free the disk')}.querySelector('.sb-row-main').focus()")
+    await page.key("Delete", "Delete", 46)
+    await page.until(f"{row('Free the disk')} === undefined", "deleted by the key")
+    await page.until(f"!{PATH}.endsWith('/s1')", "the next conversation opens")
+    results[f"{t}: Delete on the focused row deletes it; when it was open the next one opens as a replace"] = await page.js("JSON.parse(sessionStorage.getItem('kagent.nav')).entries.length") == mirror
+    await page.js("[...document.querySelectorAll('.toast-action')].find(b => b.textContent === 'Undo').click()")
+    await page.until(f"{row('Free the disk')} !== undefined && {PATH}.endsWith('/s1')", "undo brings it back open")
+    results[f"{t}: Undo of the open conversation opens it again"] = "DELETE /api/sessions/s1" not in calls()
+    # A conversation that runs is refused here, with no call; one the daemon refuses at the end comes back with the reason.
+    n = len(calls())
+    await open_menu(page, "Unit tests for the loop")
+    await pick(page, "Delete")
+    await page.until("!!document.querySelector('.toast') && document.querySelector('.toast').textContent.includes('running')", "the running refusal")
+    results[f"{t}: a running conversation is not deleted (a notice with the reason, no call, the row stays)"] = len(calls()) == n and await page.js("!!" + row("Unit tests for the loop"))
+    await page.js("document.querySelector('.toast-close').click()")
+    lib.CFG["deny_delete"] = ["ab12"]
+    await open_menu(page, hexed)
+    await pick(page, "Delete")
+    await page.until(f"{row(hexed)} === undefined", "hidden before the refusal")
+    await until_call(page, "DELETE /api/sessions/ab12")
+    await page.until(f"{row(hexed)} !== undefined && [...document.querySelectorAll('.toast')].some(x => x.textContent.includes('Not deleted'))", "the row back with the reason")
+    results[f"{t}: a delete the daemon refuses at the end brings the row back with its reason"] = "running" in await page.js("[...document.querySelectorAll('.toast')].find(x => x.textContent.includes('Not deleted')).textContent")
+    lib.CFG["deny_delete"] = []
+    # Closing the window during the undo time: the delete is done (a keepalive request), the conversation is not left half there.
+    calls_before = calls().count("DELETE /api/sessions/ab12")
+    await open_menu(page, hexed)
+    await pick(page, "Delete")
+    await page.until(f"{row(hexed)} === undefined", "hidden before the window closes")
+    await page.send("Page.navigate", url="about:blank")
+    await until_call(page, "DELETE /api/sessions/ab12", count=calls_before + 1)
+    results[f"{t}: closing the window during the undo time sends the delete at once (it is done, not lost)"] = lib.SESSIONS.get("ab12") is None
+    # The real ten seconds.
+    await env.open(theme, **CONVO)
+    await page.until("!!document.querySelector('.sb-item')", "the list again")
+    await open_menu(page, long_title)
+    await pick(page, "Delete")
+    await page.until(f"{row(long_title)} === undefined", "hidden")
+    t0 = asyncio.get_event_loop().time()
+    await page.until("document.querySelectorAll('.toast').length === 1", "the toast")
+    await asyncio.sleep(3)
+    still = await page.js("document.querySelectorAll('.toast').length === 1") and "DELETE /api/sessions/s3" not in calls()
+    await until_call(page, "DELETE /api/sessions/s3", seconds=14)
+    took = asyncio.get_event_loop().time() - t0
+    results[f"{t}: the toast and the wait are 10 seconds (the delete came after {took:.1f} s)"] = still and 8.5 < took < 13
+
+
+async def until_call(page, call, count=1, seconds=10):
+    end = asyncio.get_event_loop().time() + seconds
+    while asyncio.get_event_loop().time() < end:
+        if calls().count(call) >= count:
+            return
+        await asyncio.sleep(0.1)
+    raise RuntimeError(f"timeout: {call} was not called: {calls()[-5:]}")
+
+
 async def matrix(env, results):
     """The matrix of every page at every size, dark and light: any finding fails (shell.md section 3)."""
     found = await M.run_matrix(env, "/tmp/kagent-v003-shell-shots/after")
@@ -223,6 +413,7 @@ async def main():
     async with Env("kagent-shell-test", SHOTS) as env:
         for theme in ("dark", "light"):
             await router(env, results, theme)
+            await conversations(env, results, theme)
         await matrix(env, results)
         # The 404s are routes of the stand-in; the 409 is the refusal of a delete the suite asked for.
         errors = [e for e in env.page.errors if "404" not in e and "409" not in e]

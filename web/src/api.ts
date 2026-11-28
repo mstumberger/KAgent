@@ -58,6 +58,15 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** A request that outlives the page (`keepalive`): what a window that is closing still has to send. No answer is read. */
+export function sendOnExit(method: string, path: string) {
+  try {
+    void fetch(`${BASE}${path}`, { method, keepalive: true, headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY) ?? ""}` } }).catch(() => {});
+  } catch {
+    // nothing more can be done while the page goes away
+  }
+}
+
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),

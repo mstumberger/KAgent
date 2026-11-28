@@ -353,4 +353,23 @@ mod tests {
         assert_eq!(r.status, TurnStatus::Cancelled);
         assert_eq!(r.text, "half a sen");
     }
+
+    #[tokio::test]
+    async fn a_title_the_owner_chose_is_not_replaced_by_the_automatic_one() {
+        let say = |t: &str| Step::Say { deltas: vec![], response: ModelResponse { text: t.into(), ..Default::default() } };
+        let Rig { agent, session: sid, mut events, _dir } = rig(vec![say("ok"), say("ok"), say("Fan noise")], vec![]).await;
+        // An untouched session is named after its first question (the placeholder rule) ...
+        let other = agent.store().create("New session").await.unwrap().id;
+        started(&agent, &other, "why is the fan so loud today").await.wait().await;
+        wait_finished(&mut events, TurnStatus::Completed).await;
+        assert!(!super::super::title::is_placeholder(&agent.store().meta(&other).await.unwrap().title));
+        // ... one the owner renamed keeps the owner's words, whatever it is asked, also when its title was the placeholder.
+        agent.store().save_meta(&{ let mut m = agent.store().meta(&sid).await.unwrap(); m.title = String::new(); m }).await.unwrap();
+        agent.set_title(&sid, "Mine").await.unwrap();
+        started(&agent, &sid, "why is the fan so loud today").await.wait().await;
+        wait_finished(&mut events, TurnStatus::Completed).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let meta = agent.store().meta(&sid).await.unwrap();
+        assert_eq!((meta.title.as_str(), meta.renamed), ("Mine", true));
+    }
 }

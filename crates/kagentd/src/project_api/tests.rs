@@ -30,16 +30,31 @@ struct Rig {
 }
 
 async fn rig() -> Rig {
+    rig_with(Arc::new(NoModel)).await
+}
+
+/// A model that never answers until its turn is cancelled: a turn that stays running.
+struct Hang;
+
+#[async_trait]
+impl ModelClient for Hang {
+    async fn complete(&self, _request: ModelRequest, _deltas: mpsc::UnboundedSender<ModelDelta>, cancel: CancellationToken) -> anyhow::Result<ModelResponse> {
+        cancel.cancelled().await;
+        anyhow::bail!("cancelled")
+    }
+}
+
+async fn rig_with(model: Arc<dyn ModelClient>) -> Rig {
     let dir = tempfile::tempdir().unwrap();
     let store = SessionStore::new(dir.path().join("sessions")).unwrap();
     let meta = store.create("t").await.unwrap();
     let (events, rx) = broadcast::channel(16);
-    let cfg = AgentConfig { model_ref: String::new(), system_prompt: String::new(), max_iterations: 4, options: Default::default(), privilege: Default::default(), context_tokens: 0, fallback_model_ref: String::new(), fallback_context_tokens: 0, fallback_max_output: None };
+    let cfg = AgentConfig { model_ref: "fake::test".into(), system_prompt: String::new(), max_iterations: 4, options: Default::default(), privilege: Default::default(), context_tokens: 0, fallback_model_ref: String::new(), fallback_context_tokens: 0, fallback_max_output: None };
     let agent = Agent::new(AgentDeps {
         services: None,
         hooks: None,
         audit: None,
-        model: Arc::new(NoModel),
+        model,
         tools: Arc::new(ToolRegistry::new()),
         permissions: Arc::new(PermissionEngine::new(PermissionMode::Ask, vec![])),
         broker: PermissionBroker::new(events.clone(), Duration::from_secs(5)),
@@ -294,4 +309,90 @@ async fn the_list_of_a_folder_has_its_top_level_sessions_only() {
 fn a_listing_takes_a_parent_or_a_project_not_both() {
     assert_eq!(refusal(list_filters(Some("p"), Some("/tmp"))), bad("give parent or project, not both"));
     assert!(list_filters(Some("p"), None).is_ok() && list_filters(None, Some("/tmp")).is_ok() && list_filters(None, None).is_ok());
+}
+
+#[test]
+fn the_title_is_its_words_on_one_line_of_1_to_120_characters() {
+    assert_eq!(title_of(&json!({"title": "  Free   the\n disk "})), Ok("Free the disk".into()));
+    assert_eq!(title_of(&json!({"title": "a".repeat(120)})), Ok("a".repeat(120)));
+    assert_eq!(title_of(&json!({"title": "a".repeat(121)})), Err("the title has 121 characters: at most 120".into()));
+    assert_eq!(title_of(&json!({"title": " \n "})), Err("the title is empty".into()));
+    for body in [json!({}), json!({"title": 5}), json!({"title": "x", "extra": 1}), json!("x"), json!(null)] {
+        assert_eq!(title_of(&body), Err("expected {title: 1 to 120 characters}".to_string()), "{body}");
+    }
+}
+
+#[tokio::test]
+async fn a_rename_is_stored_announced_once_and_kept_against_the_automatic_titles() {
+    let mut r = rig().await;
+    let meta = set_title(&r.agent, &r.id, &json!({"title": "  My own   name "})).await.ok().unwrap();
+    assert_eq!((meta.title.as_str(), meta.renamed), ("My own name", true));
+    assert_eq!(events(&mut r), 1);
+    set_title(&r.agent, &r.id, &json!({"title": "My own name"})).await.ok().unwrap();
+    assert_eq!(events(&mut r), 0, "the same title again changes nothing");
+    let stored = r.agent.store().meta(&r.id).await.unwrap();
+    assert_eq!((stored.title.as_str(), stored.renamed), ("My own name", true));
+    assert_eq!(refusal(set_title(&r.agent, &r.id, &json!({"title": ""})).await), bad("the title is empty"));
+    let e = refusal(set_title(&r.agent, "no-such", &json!({"title": "x"})).await);
+    assert_eq!((e.0, e.1), (StatusCode::NOT_FOUND, "not_found"));
+    let child = r.agent.store().create_with("job", SessionOrigin::Subagent, Some(r.id.clone())).await.unwrap();
+    let e = refusal(set_title(&r.agent, &child.id, &json!({"title": "x"})).await);
+    assert_eq!((e.0, e.1), (StatusCode::CONFLICT, "conflict"));
+}
+
+#[tokio::test]
+async fn archive_and_unarchive_with_their_refusals_and_the_event_only_on_a_change() {
+    let mut r = rig().await;
+    for body in [json!({}), json!({"archived": "yes"}), json!({"archived": true, "pinned": true}), json!(true)] {
+        assert_eq!(refusal(set_archived(&r.agent, &r.id, &body).await), bad("expected {archived: true or false}"), "{body}");
+    }
+    assert!(set_archived(&r.agent, &r.id, &json!({"archived": true})).await.ok().unwrap().archived);
+    assert_eq!(events(&mut r), 1);
+    set_archived(&r.agent, &r.id, &json!({"archived": true})).await.ok().unwrap();
+    assert_eq!(events(&mut r), 0);
+    assert!(r.agent.store().meta(&r.id).await.unwrap().archived, "stored");
+    assert!(!set_archived(&r.agent, &r.id, &json!({"archived": false})).await.ok().unwrap().archived);
+    assert_eq!(events(&mut r), 1);
+    let e = refusal(set_archived(&r.agent, "no-such", &json!({"archived": true})).await);
+    assert_eq!((e.0, e.1), (StatusCode::NOT_FOUND, "not_found"));
+    let child = r.agent.store().create_with("job", SessionOrigin::Subagent, Some(r.id.clone())).await.unwrap();
+    let e = refusal(set_archived(&r.agent, &child.id, &json!({"archived": true})).await);
+    assert_eq!((e.0, e.1), (StatusCode::CONFLICT, "conflict"));
+}
+
+#[tokio::test]
+async fn a_running_conversation_cannot_be_archived_or_deleted_but_can_be_brought_back() {
+    let r = rig_with(Arc::new(Hang)).await;
+    set_archived(&r.agent, &r.id, &json!({"archived": true})).await.ok().unwrap();
+    // The handle stays alive: a turn whose handle is dropped is cancelled.
+    let _turn = r.agent.send_with(&r.id, "hello".into(), kagent_core::protocol::Via::Text, Default::default()).await.unwrap();
+    for _ in 0..100 {
+        if r.agent.is_running(&r.id).await {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(r.agent.is_running(&r.id).await);
+    let reason = "the conversation is running: stop it first";
+    let e = refusal(set_archived(&r.agent, &r.id, &json!({"archived": true})).await);
+    assert_eq!((e.0, e.1, e.2.as_str()), (StatusCode::CONFLICT, "conflict", reason));
+    let e = refusal(refuse_running(&r.agent, &r.id).await);
+    assert_eq!((e.0, e.1, e.2.as_str()), (StatusCode::CONFLICT, "conflict", reason), "delete is refused the same way");
+    assert!(!set_archived(&r.agent, &r.id, &json!({"archived": false})).await.ok().unwrap().archived, "a running conversation may come back from the archive");
+    assert!(r.agent.store().meta(&r.id).await.is_ok(), "nothing was deleted");
+    // A running subagent keeps its parent from being deleted.
+    r.agent.cancel(&r.id).await;
+    let idle = rig().await;
+    assert!(refuse_running(&idle.agent, &idle.id).await.is_ok());
+}
+
+#[tokio::test]
+async fn deleting_a_session_removes_its_files_and_its_images_folder() {
+    let r = rig().await;
+    let images = r.agent.store().images_dir(&r.id);
+    tokio::fs::create_dir_all(&images).await.unwrap();
+    tokio::fs::write(images.join("a.png"), b"png").await.unwrap();
+    r.agent.delete_session(&r.id).await.unwrap();
+    assert!(r.agent.store().meta(&r.id).await.is_err());
+    assert!(!images.exists(), "the images folder goes with the conversation");
 }

@@ -108,7 +108,7 @@ def reset(**kw):
 
 def meta(sid, extra=None):
     m = {"id": sid, "title": "Chat " + sid, "createdAt": "2026-11-27T08:00:00Z", "updatedAt": "2026-11-27T08:00:00Z", "messageCount": 0, "origin": "chat",
-         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False, "imagesNoticeShown": False}
+         "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False, "imagesNoticeShown": False, "archived": False, "renamed": False}
     m.update(extra or {})
     return m
 
@@ -639,13 +639,29 @@ class Mock(BaseHTTPRequestHandler):
             m["updatedAt"] = m["createdAt"] = CFG.get("now", m["createdAt"])
             SESSIONS[m["id"]] = m
             return self.send(201, m)
-        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model|/project|/pin|/images-notice)?", path)
+        mm = re.fullmatch(r"/api/sessions/([^/]+)(/model|/project|/pin|/images-notice|/title|/archive)?", path)
         if mm and mm.group(1) in SESSIONS:
             m = SESSIONS[mm.group(1)]
             if method == "DELETE" and not mm.group(2):
                 CALLS.append(f"DELETE {path}")
+                # The daemon refuses a running conversation (shell.md section 5); `reset(deny_delete=[ids])` makes the mock refuse the others too.
+                if m["id"] in CFG.get("running", []) or m["id"] in CFG.get("deny_delete", []):
+                    return self.send(409, {"error": {"code": "conflict", "message": "the conversation is running: stop it first"}})
                 del SESSIONS[m["id"]]
                 return self.send(204, b"", "application/json")
+            if mm.group(2) == "/title" and method == "PUT":
+                CALLS.append(f"PUT {path} {json.dumps(body)}")
+                title = " ".join(str((body or {}).get("title", "")).split())
+                if not 1 <= len(title) <= 120:
+                    return self.send(400, {"error": {"code": "invalid_input", "message": "the title is empty" if not title else "the title is too long"}})
+                m["title"], m["renamed"] = title, True
+                return self.send(200, m)
+            if mm.group(2) == "/archive" and method == "PUT":
+                CALLS.append(f"PUT {path} {json.dumps(body)}")
+                if body.get("archived") and m["id"] in CFG.get("running", []):
+                    return self.send(409, {"error": {"code": "conflict", "message": "the conversation is running: stop it first"}})
+                m["archived"] = bool(body["archived"])
+                return self.send(200, m)
             if mm.group(2) == "/project" and method == "PUT":
                 CALLS.append(f"PUT {path} {json.dumps(body)}")
                 value = (body or {}).get("path")
@@ -762,6 +778,7 @@ class Page:
 
 async def dd_open(page, trigger_sel):
     """Open the list of a Dropdown (the themed select of the settings screen) with a real click on its trigger."""
+    await page.js(f"document.querySelector({json.dumps(trigger_sel)}).scrollIntoView({{block: 'center'}})")
     x, y = await page.center(trigger_sel)
     await page.send("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
     await page.send("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", clickCount=1)

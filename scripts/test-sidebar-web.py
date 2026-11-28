@@ -65,14 +65,14 @@ async def main():
             await asyncio.sleep(0.6)
 
         async def menu_items():
-            return await page.js("[...document.querySelectorAll('.menu [role=menuitem]')].map(e => e.textContent.trim())")
+            return await page.js("[...document.querySelectorAll('.menu [role=menuitem]')].map(e => e.textContent.trim().replace(/(F2|Del)$/, ''))")
 
         async def open_menu(title):
             await page.js(f"{row(title)}.querySelector('.sb-more').click()")
             await page.until("!!document.querySelector('.menu')", f"the menu of {title}")
 
         async def pick(label):
-            await page.js(f"[...document.querySelectorAll('.menu [role=menuitem]')].find(e => e.textContent.trim() === {json.dumps(label)}).click()")
+            await page.js(f"[...document.querySelectorAll('.menu [role=menuitem]')].find(e => e.textContent.trim().replace(/(F2|Del)$/, '') === {json.dumps(label)}).click()")
             await asyncio.sleep(0.25)
 
         async def type_text(text):
@@ -128,13 +128,14 @@ async def main():
         # ================================================================ attach, detach, pin, new, search
         await open_page("dark")
         await open_menu("Why is the fan loud")
-        results["menu: a session without a folder offers Pin, Attach folder..., Delete"] = await menu_items() == ["Pin", "Attach folder...", "Delete"]
+        results["menu: a session without a folder offers Rename, Pin, Move to project..., Attach folder..., Archive, Delete"] = await menu_items() == ["Rename", "Pin", "Move to project...", "Attach folder...", "Archive", "Delete"]
         results["menu: it is a role=menu in a portal, fixed, inside the window, with a focus on it"] = await page.js("(() => { const m = document.querySelector('.menu'), r = m.getBoundingClientRect(); return m.getAttribute('role') === 'menu' && m.parentElement === document.body && getComputedStyle(m).position === 'fixed' && r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && document.activeElement === m && getComputedStyle(m).zIndex === '20'; })()")
         await page.shot("menu-dark")
         await page.key("Escape", "Escape", 27)
         results["menu: Escape closes it and the focus goes back to the ... button"] = await page.js(f"!document.querySelector('.menu') && {ACTIVE} === {row('Why is the fan loud')}.querySelector('.sb-more')")
         await open_menu("Why is the fan loud")
-        await page.key("ArrowDown", "ArrowDown", 40)
+        for _ in range(3):
+            await page.key("ArrowDown", "ArrowDown", 40)
         await page.key("Enter", "Enter", 13, 0, "\r")
         await page.until("!!document.querySelector('.attach')", "the attach popup from the keyboard")
         results["menu: Down and Enter pick Attach folder..."] = True
@@ -153,7 +154,7 @@ async def main():
         results["attach: a pick sends one PUT and the session moves to the group of the folder"] = len(calls()) == before + 1 and calls()[-1] == f'PUT /api/sessions/s4/project {{"path": "{OT}"}}' and not await page.js("!!document.querySelector('.attach')")
         results["attach: the group has the session, and the others stay"] = await page.js(LABELS) == ["Pinned", "KAgent", "other", "This machine"] and await page.js(f"{ROWS}.filter(x => x === 'Why is the fan loud').length") == 1
         await open_menu("Why is the fan loud")
-        results["menu: with a folder it offers Change folder... and Detach folder"] = await menu_items() == ["Pin", "Change folder...", "Detach folder", "Delete"]
+        results["menu: with a folder it offers Change folder... and Detach folder"] = await menu_items() == ["Rename", "Pin", "Move to project...", "Change folder...", "Detach folder", "Archive", "Delete"]
         await pick("Change folder...")
         await page.until("!!document.querySelector('.attach')", "change")
         results["attach: the current folder has a check"] = await page.js(f"[...document.querySelectorAll('.attach [role=option]')].find(r => r.title === {json.dumps(OT)}).getAttribute('aria-selected')") == "true"
@@ -169,7 +170,7 @@ async def main():
         await page.until(f"{section_of('Why is the fan loud')} === 'Pinned'", "pin")
         results["menu: Pin moves the row to the top section"] = calls()[-1] == 'PUT /api/sessions/s4/pin {"pinned": true}' and (await page.js(LABELS))[0] == "Pinned"
         await open_menu("Why is the fan loud")
-        results["menu: a pinned session offers Unpin"] = (await menu_items())[0] == "Unpin"
+        results["menu: a pinned session offers Unpin"] = (await menu_items())[1] == "Unpin"
         await pick("Unpin")
         await page.until(f"{section_of('Why is the fan loud')} === 'This machine'", "unpin")
         results["menu: Unpin puts it back"] = calls()[-1] == 'PUT /api/sessions/s4/pin {"pinned": false}'
@@ -180,14 +181,20 @@ async def main():
         await page.send("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="right", clickCount=1)
         await page.send("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="right", clickCount=1)
         await page.until("!!document.querySelector('.menu')", "the context menu")
-        results["menu: a right click on a row opens the same menu"] = await menu_items() == ["Pin", "Attach folder...", "Delete"]
+        results["menu: a right click on a row opens the same menu"] = await menu_items() == ["Rename", "Pin", "Move to project...", "Attach folder...", "Archive", "Delete"]
         await page.key("Escape", "Escape", 27)
         results["menu: after a right click the focus goes back to the row"] = await page.js(f"{ACTIVE} === {row('Old chat')}.querySelector('.sb-row-main')")
         # delete
         await open_menu("Old chat")
         await pick("Delete")
         await page.until(f"!{row('Old chat')}", "delete")
-        results["menu: Delete sends DELETE with no confirmation and the row goes"] = calls()[-1] == "DELETE /api/sessions/s6"
+        # Since the shell (shell.md section 5) the row goes at once and the DELETE is sent when the Undo toast ends (closing it ends it).
+        await page.js("document.querySelector('.toast-close').click()")
+        for _ in range(50):
+            if calls() and calls()[-1] == "DELETE /api/sessions/s6":
+                break
+            await asyncio.sleep(0.1)
+        results["menu: Delete asks nothing, the row goes at once, and the DELETE is sent when its Undo toast ends"] = calls()[-1] == "DELETE /api/sessions/s6"
         # new session in a project
         before = len(calls())
         await page.js(f"[...document.querySelectorAll('.sb-head')].find(h => h.querySelector('.sb-section-name').textContent === 'KAgent').querySelector('.sb-add').click()")
@@ -418,7 +425,7 @@ async def main():
             await asyncio.sleep(0.3)
             await page.shot(f"widget-sheet-{theme}")
             await open_menu("Why is the fan loud")
-            results[f"{t}: the row menu works in the sheet, inside the window"] = await menu_items() == ["Pin", "Attach folder...", "Delete"] and await page.js("(() => { const r = document.querySelector('.menu').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()")
+            results[f"{t}: the row menu works in the sheet, inside the window"] = await menu_items() == ["Rename", "Pin", "Move to project...", "Attach folder...", "Archive", "Delete"] and await page.js("(() => { const r = document.querySelector('.menu').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()")
             await page.shot(f"widget-menu-{theme}")
             await page.key("Escape", "Escape", 27)
             results[f"{t}: Escape closes the menu and keeps the sheet"] = await page.js("!document.querySelector('.menu') && !!document.querySelector('.sheet')")

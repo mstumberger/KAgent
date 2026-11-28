@@ -61,6 +61,8 @@ export interface Store {
   /** The projects of `GET /api/projects` (read when "Attach folder" opens), with the roots they come from. */
   projects: ProjectView[] | null;
   projectRoots: string[];
+  /** Sessions the owner deleted whose 10 s of undo run (shell.md section 5): the sidebar does not list them. */
+  hiddenSessions: string[];
   /** The running screen watch, as the daemon says (screen-watch.md section 4): the chip in the title bar reads only this. */
   watch: Watch | null;
 }
@@ -100,6 +102,7 @@ let store: Store = {
   sidebarClosed: prefs.closed,
   projects: null,
   projectRoots: [],
+  hiddenSessions: [],
   watch: null,
 };
 

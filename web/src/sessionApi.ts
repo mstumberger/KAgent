@@ -30,6 +30,10 @@ export interface SessionMeta {
   pinned?: boolean;
   /** The line "Images are sent to <provider>." was shown in this conversation (vision.md section 2). */
   imagesNoticeShown?: boolean;
+  /** Put away by the owner (shell.md section 5): listed under "Archived", left out of the search. */
+  archived?: boolean;
+  /** The owner chose the title: the automatic ones do not replace it. */
+  renamed?: boolean;
 }
 
 /** One item of a session's todo list (api.md section 6). */
@@ -69,6 +73,16 @@ export function putProject(id: string, path: string | null): Promise<SessionMeta
 /** Pin or unpin a session; the answer is the meta. */
 export function putImagesNotice(id: string): Promise<SessionMeta> {
   return api.put(`/api/sessions/${id}/images-notice`, {});
+}
+
+/** Rename a session (1 to 120 characters); the answer is the meta. A refusal is an `ApiError` with the daemon's message. */
+export function putTitle(id: string, title: string): Promise<SessionMeta> {
+  return api.put(`/api/sessions/${id}/title`, { title });
+}
+
+/** Archive or unarchive a session; the answer is the meta. 409 while it runs. */
+export function putArchive(id: string, archived: boolean): Promise<SessionMeta> {
+  return api.put(`/api/sessions/${id}/archive`, { archived });
 }
 
 export function putPin(id: string, pinned: boolean): Promise<SessionMeta> {

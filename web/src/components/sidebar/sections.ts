@@ -23,9 +23,14 @@ export function folderName(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-/** Pinned, then a section per folder (in the order of the newest session of each), then this machine. */
+/** The sessions the owner put away (shell.md section 5), newest first: the "Archived" group at the foot of the list. */
+export function archivedOf(sessions: SessionRow[]): SessionRow[] {
+  return newestFirst(sessions.filter((s) => s.archived));
+}
+
+/** Pinned, then a section per folder (in the order of the newest session of each), then this machine. Archived sessions are not in them. */
 export function projectSections(sessions: SessionRow[], closed: string[]): Section[] {
-  const all = newestFirst(sessions);
+  const all = newestFirst(sessions.filter((s) => !s.archived));
   const out: Section[] = [];
   const pinned = all.filter((s) => s.pinned);
   if (pinned.length) out.push({ key: "pinned", kind: "pinned", title: "Pinned", sessions: pinned, closed: false });
@@ -56,7 +61,7 @@ function bucket(updatedAt: number, now: number): { key: string; title: string } 
 /** Every session, newest first, under a heading wherever the bucket changes. */
 export function recentSections(sessions: SessionRow[], now: number): Section[] {
   const out: Section[] = [];
-  for (const s of newestFirst(sessions)) {
+  for (const s of newestFirst(sessions.filter((x) => !x.archived))) {
     const b = bucket(stamp(s), now);
     const last = out[out.length - 1];
     if (last && last.key === b.key) last.sessions.push(s);
@@ -65,9 +70,9 @@ export function recentSections(sessions: SessionRow[], now: number): Section[] {
   return out;
 }
 
-/** The sessions whose title or folder contains `query` (either case), newest first. */
-export function searchSessions(sessions: SessionRow[], query: string): SessionRow[] {
+/** The sessions whose title or folder contains `query` (either case), newest first; archived ones only when `archived` (the filter of the search). */
+export function searchSessions(sessions: SessionRow[], query: string, archived = false): SessionRow[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  return newestFirst(sessions).filter((s) => (s.title || "New session").toLowerCase().includes(q) || (s.project ?? "").toLowerCase().includes(q));
+  return newestFirst(archived ? sessions : sessions.filter((s) => !s.archived)).filter((s) => (s.title || "New session").toLowerCase().includes(q) || (s.project ?? "").toLowerCase().includes(q));
 }

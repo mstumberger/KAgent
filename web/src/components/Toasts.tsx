@@ -19,9 +19,9 @@ function ToastItem({ toast, open }: { toast: Toast; open: boolean }) {
   // Hover or focus holds the timer; a new count or text starts it again.
   useEffect(() => {
     if (toast.kind === "error" || held) return;
-    const timer = setTimeout(() => dismiss(toast.id), INFO_MS);
+    const timer = setTimeout(() => dismiss(toast.id), toast.ms ?? INFO_MS);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.kind, toast.at, held]);
+  }, [toast.id, toast.kind, toast.at, toast.ms, held]);
   useLayoutEffect(() => {
     const el = text.current;
     if (el && !more) setClipped(el.scrollHeight > el.clientHeight + 1);
@@ -52,6 +52,18 @@ function ToastItem({ toast, open }: { toast: Toast; open: boolean }) {
           {(clipped || more) && (
             <button type="button" className="toast-link" aria-expanded={more} onClick={() => setMore(!more)}>
               {more ? "less" : "more"}
+            </button>
+          )}
+          {toast.local && (
+            <button
+              type="button"
+              className="toast-link toast-action"
+              onClick={() => {
+                toast.local?.run();
+                dismiss(toast.id, false);
+              }}
+            >
+              {toast.local.label}
             </button>
           )}
           {toast.action && (

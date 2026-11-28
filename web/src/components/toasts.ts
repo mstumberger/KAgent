@@ -26,6 +26,18 @@ export interface Toast {
   at: number;
   sessionId: string | null;
   action: NoticeAction | null;
+  /** A button the page itself answers (the Undo of a delete, shell.md section 5): pressing it runs `run` and closes the toast without `onEnd`. */
+  local: LocalAction | null;
+  /** How long the toast stays, in ms, instead of the 6 s of an info toast. */
+  ms: number | null;
+  /** Called once when the toast ends by its time or by being closed, not when its local button was pressed (a delete is done then). */
+  onEnd: (() => void) | null;
+}
+
+/** A button of a notice that runs code of the page. */
+export interface LocalAction {
+  label: string;
+  run: () => void;
 }
 
 /** A notice as the event carries it; the page's own failures give `text` alone. */
@@ -36,6 +48,9 @@ export interface Notice {
   sessionId?: string | null;
   kind?: NoticeKind | string | null;
   action?: NoticeAction | null;
+  local?: LocalAction | null;
+  ms?: number | null;
+  onEnd?: (() => void) | null;
 }
 
 /** An `info` or `recovery` toast closes after this long (notices.md section 2). */
@@ -110,10 +125,10 @@ export function pushNotice(n: Notice) {
   let list = kind === "recovery" && key ? toasts.filter((t) => !(t.key === key && t.kind === "error")) : toasts;
   const same = key ? list.find((t) => t.key === key && t.kind === kind) : undefined;
   if (same) {
-    const merged = { ...same, count: same.count + 1, text: n.text, at, sessionId: n.sessionId ?? same.sessionId, action: n.action ?? same.action };
+    const merged = { ...same, count: same.count + 1, text: n.text, at, sessionId: n.sessionId ?? same.sessionId, action: n.action ?? same.action, local: n.local ?? same.local, ms: n.ms ?? same.ms, onEnd: n.onEnd ?? same.onEnd };
     list = [merged, ...list.filter((t) => t !== same)];
   } else {
-    list = [{ id: next++, key, level: n.level ?? "info", kind, text: n.text, count: 1, at, sessionId: n.sessionId ?? null, action: n.action ?? null }, ...list];
+    list = [{ id: next++, key, level: n.level ?? "info", kind, text: n.text, count: 1, at, sessionId: n.sessionId ?? null, action: n.action ?? null, local: n.local ?? null, ms: n.ms ?? null, onEnd: n.onEnd ?? null }, ...list];
   }
   set(list);
   // An error is said once per key in a live session, by the status line of the voice.
@@ -129,12 +144,17 @@ export function notify(text: string, kind: "error" | "info" = "error", sessionId
   pushNotice({ level: kind === "info" ? "info" : "error", text, kind, sessionId });
 }
 
-export function dismiss(id: number) {
+/** Close a toast. Its `onEnd` runs unless `ended` is false (the owner pressed its local button). */
+export function dismiss(id: number, ended = true) {
+  const gone = toasts.find((t) => t.id === id);
   set(toasts.filter((t) => t.id !== id));
+  if (ended) gone?.onEnd?.();
 }
 
 export function dismissAll() {
+  const gone = toasts;
   set([]);
+  gone.forEach((t) => t.onEnd?.());
 }
 
 export function getToasts(): Toast[] {

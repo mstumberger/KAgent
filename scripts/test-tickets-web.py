@@ -130,7 +130,7 @@ async def checks(env, results, theme):
     await page.until("document.querySelectorAll('.tk-item').length === 1", "the label filter")
     results[f"{t}: the label filter lists the labels of all tickets and filters"] = await page.js(ROWS) == ["KA-2"] and "usage" in await dd_values(page, ".dd-trigger[aria-label=Label]")
     await dd_set(page, ".dd-trigger[aria-label=Label]", "")
-    await page.js("(() => { const i = document.querySelector('input[aria-label=\\"Filter tickets\\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'certificate'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    await page.js("(() => { const i = document.querySelector('input[aria-label=\"Filter tickets\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'certificate'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
     await page.until("document.querySelectorAll('.tk-item').length === 1", "the text filter")
     results[f"{t}: the text filter reads the title (any case)"] = await page.js(ROWS) == ["IN-1"]
     await page.js("(() => { const i = document.querySelector('input[aria-label=\"Filter tickets\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'overlay'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
