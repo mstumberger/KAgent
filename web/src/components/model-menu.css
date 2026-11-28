@@ -97,10 +97,9 @@
   bottom: calc(100% + 8px);
   z-index: 30;
   box-sizing: border-box;
-  width: max-content;
-  min-width: 260px;
-  max-width: min(360px, calc(100vw - 32px));
-  max-height: min(420px, 60vh);
+  width: 520px;
+  max-width: calc(100vw - 32px);
+  max-height: min(560px, 80vh);
   overflow-y: auto;
   overscroll-behavior: contain;
 }

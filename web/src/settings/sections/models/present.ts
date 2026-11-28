@@ -1,7 +1,7 @@
 // How a model is shown in the lists (models.md sections 7.4, 7.6 and 7.8): the label
 // of its context window, its id as the owner reads it, why one cannot be used, and the
 // options of a picker. A .ts file, so the component files export components only.
-import type { ModelView, ProviderView, Settings } from "../../../api";
+import type { ProviderView, Settings } from "../../../api";
 import type { DropdownOption } from "../../Dropdown";
 import { API_FORMATS } from "./shared";
 
@@ -68,14 +68,4 @@ export function unusableWhy(ref: string, providers: ProviderView[]): string | nu
   if (!model.enabled) return "model switched off";
   if (!model.roles.includes("chat")) return "not a chat model";
   return null;
-}
-
-/** The options of a Defaults picker: none, a current value that is not in the list, then the chat models. */
-export function modelOptions(chat: ModelView[], providers: ProviderView[], current: string, none: string): DropdownOption[] {
-  const providerName = (ref: string) => providers.find((p) => ref.startsWith(`${p.id}::`))?.name ?? ref.split("::")[0];
-  const kept: DropdownOption[] =
-    current && !chat.some((m) => m.ref === current)
-      ? [{ value: current, label: bareId(current.split("::").slice(1).join("::")), hint: unusableWhy(current, providers) ?? "not in the list" }]
-      : [];
-  return [{ value: "", label: none }, ...kept, ...chat.map((m) => ({ value: m.ref, label: bareId(m.id), hint: providerName(m.ref) }))];
 }

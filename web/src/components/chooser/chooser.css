@@ -131,3 +131,9 @@
   top: auto;
   bottom: calc(100% + 4px);
 }
+
+/* The widget's sheet is short: the columns scroll in less room. */
+.sheet .mc-providers,
+.sheet .mc-models {
+  max-height: 170px;
+}

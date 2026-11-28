@@ -31,6 +31,8 @@ interface Props {
   /** A row above the columns that picks `null` ("Default", "none", "The chat model"). */
   none?: ChooserNone;
   kept?: ChooserKept;
+  /** The ref whose provider is shown first when it opens (the answering model, when `value` is the default); `value` by default. */
+  focusRef?: string | null;
   /** The limits ring of a provider. */
   ring?: (providerId: string) => ReactNode;
   onEscape?: () => void;
@@ -40,19 +42,20 @@ interface Props {
 
 type Col = "none" | "p" | "m";
 
-export default function ModelChooser({ models, value, onPick, none, kept, ring, onEscape, autoFocus = true }: Props) {
+export default function ModelChooser({ models, value, focusRef, onPick, none, kept, ring, onEscape, autoFocus = true }: Props) {
   const uid = useId();
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [chips, setChips] = useState<ReadonlySet<ChipKey>>(new Set());
   const [recent] = useState(readRecent);
   const groups = useMemo(() => groupsOf(models, query, chips, recent), [models, query, chips, recent]);
-  const [activeId, setActive] = useState(() => models.find((m) => m.ref === value)?.providerId ?? "");
+  const start = focusRef ?? value;
+  const [activeId, setActive] = useState(() => models.find((m) => m.ref === start)?.providerId ?? "");
   const active: Group | undefined = groups.find((g) => g.id === activeId) ?? groups.find((g) => g.id !== RECENT) ?? groups[0];
   const [col, setCol] = useState<Col>("p");
   const [mi, setMi] = useState(() => {
-    const m = models.find((x) => x.ref === value);
-    return m ? models.filter((x) => x.providerId === m.providerId).findIndex((x) => x.ref === value) : 0;
+    const m = models.find((x) => x.ref === start);
+    return m ? models.filter((x) => x.providerId === m.providerId).findIndex((x) => x.ref === start) : 0;
   });
   const at = Math.min(mi, Math.max((active?.models.length ?? 1) - 1, 0));
 

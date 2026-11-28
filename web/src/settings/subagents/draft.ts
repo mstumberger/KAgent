@@ -44,9 +44,3 @@ export function draftErrors(d: Draft, taken: string[], editing: boolean): Partia
 
 /** What goes to the daemon (the name is in the path). */
 export const bodyOf = (d: Draft): ProfileBody => ({ description: d.description.trim(), model: d.model, toolGroups: d.groups, maxIterations: Number(d.iterations), prompt: d.prompt });
-
-/** A model the providers know (`GET /api/models`): its ref and what to call it. */
-export interface ModelRef {
-  ref: string;
-  name?: string;
-}
