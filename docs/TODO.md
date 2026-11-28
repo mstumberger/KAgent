@@ -120,3 +120,10 @@ first three are done first.
   its 90-day high") fire as alerts with measured history of that asset. Alerts on
   Telegram, the desktop and by voice; a Markets view; a block in the morning report.
   No orders are placed, no trading keys are held, and nothing is predicted.
+- [ ] Local OCR: text read from images on this machine, on the processor, with
+  positions (a small OCR model downloaded from the Local models page; the model, its
+  licence and format are checked first). A `read_text` tool for files, images and the
+  screen; a turn's images go to the Brain as text first, with a setting to never
+  upload pictures; screen watch checks text goals with OCR instead of the vision
+  model; the click tool can find a label on the screen; scanned documents become text
+  with their tables.
