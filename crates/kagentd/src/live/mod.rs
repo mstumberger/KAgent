@@ -11,7 +11,7 @@ pub mod approve;
 pub mod brain;
 mod confirm;
 pub mod context;
-mod instruction;
+pub(crate) mod instruction;
 pub mod protocol;
 pub use think_times::median_ms as think_median_ms;
 mod think_times;

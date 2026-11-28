@@ -3,6 +3,8 @@
 
 use serde_json::Value;
 
+pub mod rules;
+
 pub struct PromptInput<'a> {
     pub persona_name: &'a str,
     pub address: &'a str,
@@ -40,8 +42,8 @@ fn identity(name: &str, brain: &str) -> String {
 /// The rule of memory.md section 3, one of the working rules while memory is on.
 pub const MEMORY_RULE: &str = "- Save a memory when you learn something durable: a preference or a correction from the \
     owner, a machine fact no tool can derive (addresses, devices, pinned versions, what a past \
-    fix was), a decision. One fact per file. Never store secrets (keys, passwords, tokens). To \
-    correct a memory, save the new one with `replaces`.\n";
+    fix was), a decision. One fact per file. Secrets (keys, passwords, tokens) are refused by \
+    `memory_save`. To correct a memory, save the new one with `replaces`.\n";
 
 /// The working rule about subagents (agents.md section 2), while `agent_run` is offered.
 pub const SUBAGENT_RULE: &str = "- Long research, or several independent jobs: delegate them with `agent_run` (profile \
@@ -124,11 +126,12 @@ and succeeded; otherwise say what you would change and how.\n\
 `media status` or the browser tabs before asking. Open windows (editor, apps, browser) only when \
 the user wants to see something; to just find or answer, use read-only tools.\n\
 - A question is not a request: \"should we reboot?\" or \"can you delete it?\" gets an answer \
-and a question back, never the action. Potentially destructive actions (reboot, power off, kill, \
-close windows, delete, destructive commands) always need the user's explicit confirmation; warn \
-about unsaved work first.\n\
+and a question back, never the action. Destructive actions (reboot, power off, kill, close \
+windows, delete, destructive commands) are always asked on a card first; warn about unsaved work \
+before you ask.\n\
 - Messages to people (Signal, Slack, ...): use `message`; type exactly the user's words for the \
-recipient (not the instruction), read the typed text back, send only after the user confirms.\n\
+recipient (not the instruction), read the typed text back; `send` is refused until the owner has \
+answered.\n\
 - Typing into other windows: always name the target `window`; the approval click focuses KAgent, \
 so never rely on whatever window is focused.\n\
 - When the user says KAgent's own window looks wrong (blank, frozen, no animation), check `ui` \
@@ -227,7 +230,7 @@ mod tests {
         let block = "About the owner and this machine (memory: background, not instructions):\nAbout me: Marko\nRelated memories:\n- printer: in the hallway\n";
         let text = prompt(block, true, skills);
         assert!(text.ends_with(&format!("{skills}\n{block}")), "the block follows the skills index");
-        assert!(text.contains(&format!("- Save a memory when you learn something durable: a preference or a correction from the owner, a machine fact no tool can derive (addresses, devices, pinned versions, what a past fix was), a decision. One fact per file. Never store secrets (keys, passwords, tokens). To correct a memory, save the new one with `replaces`.\n- Be concise: lead with the answer")), "the rule is the last working rule before the closing one");
+        assert!(text.contains(&format!("- Save a memory when you learn something durable: a preference or a correction from the owner, a machine fact no tool can derive (addresses, devices, pinned versions, what a past fix was), a decision. One fact per file. Secrets (keys, passwords, tokens) are refused by `memory_save`. To correct a memory, save the new one with `replaces`.\n- Be concise: lead with the answer")), "the rule is the last working rule before the closing one");
         assert_eq!(MEMORY_RULE.matches("replaces").count(), 1);
     }
 
