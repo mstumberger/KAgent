@@ -33,6 +33,8 @@ pub const INTERRUPTED: &str = "cancelled: the user interrupted";
 
 /// The tool that is declared to the live model in `live` and `auto` whatever `voice.toolGroups` holds.
 pub const SETTINGS_TOOL: &str = "settings";
+/// The tool of "look at my screen", declared in `live` and `auto` whatever `voice.toolGroups` holds.
+pub const SCREEN_TOOL: &str = "screen";
 
 /// The statuses of a `think` result (tools.md section 24).
 pub const OK: &str = "ok";
@@ -111,13 +113,24 @@ pub fn mode(st: &AppState) -> (VoiceSection, VoiceBrain, &'static str) {
 /// `live`. In registry order. A group that is off for chat gives none: the agent
 /// refuses those tools at execution, so they are not offered either.
 pub fn tools(st: &AppState, mode: VoiceBrain, groups: &[String]) -> Vec<ToolSpec> {
+    select_tools(st.agent.advertised_specs(), mode, groups)
+}
+
+/// `tools` over the specs the agent advertises (pure, tested).
+pub fn select_tools(advertised: Vec<ToolSpec>, mode: VoiceBrain, groups: &[String]) -> Vec<ToolSpec> {
     let mut out = Vec::new();
     if mode != VoiceBrain::Live {
         out.push(protocol::think_spec());
     }
     if mode != VoiceBrain::Routed {
-        // `settings` is declared whatever `voice.toolGroups` holds (voice-control.md section 1).
-        out.extend(st.agent.advertised_specs().into_iter().filter(|t| t.name == SETTINGS_TOOL || groups.iter().any(|g| g == kagent_core::tools::group_of(&t.name))));
+        // `settings` is declared whatever `voice.toolGroups` holds (voice-control.md section 1), and so is `screen`, as
+        // the live model uses it (vision.md section 3): its frame goes to this session.
+        out.extend(
+            advertised
+                .into_iter()
+                .filter(|t| t.name == SETTINGS_TOOL || t.name == SCREEN_TOOL || groups.iter().any(|g| g == kagent_core::tools::group_of(&t.name)))
+                .map(|t| if t.name == SCREEN_TOOL { crate::screen::live::live_spec() } else { t }),
+        );
     }
     out
 }

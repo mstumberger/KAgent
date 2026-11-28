@@ -48,6 +48,9 @@ const CONFIRM: &str = concat!(
     "we fix it?', 'should we reboot?'): answer the question and offer the action instead."
 );
 
+/// Looking at the screen (vision.md section 3): `screen` puts a screenshot in the live model's view.
+const LOOK: &str = "To see the screen call `screen`; never describe the screen without having looked in this turn.";
+
 const RETRIES: &str = concat!(
     "Retries: when something did not work, check first (screen with window, focus_context) and ",
     "fix the cause; do not repeat the same action blindly, and never type the same text twice."
@@ -118,7 +121,7 @@ pub fn live(chat_prompt: &str, address: &str) -> String {
     // The Brain, `settings` and name lines (voice-control.md): this model has the tool whatever the chat
     // prompt was built with, and a line the chat prompt already holds is not said twice.
     let rules: String = prompt::owner_rules(true, address).lines().filter(|l| !chat_prompt.contains(l)).map(|l| format!("{l}\n")).collect();
-    format!("{chat_prompt}\n\n{rules}{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{SAY}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
+    format!("{chat_prompt}\n\n{rules}{VOICE_MODE}{CARD}\n{DESTRUCTIVE}\n{CONFIRM}\n{LOOK}\n{SAY}\n{LISTENING}\n{DICTATION}\n{RETRIES}")
 }
 
 /// `auto` (voice.md section 1): the instruction of `live`, and when to call `think`.
@@ -164,6 +167,11 @@ mod tests {
             assert!(text.contains("status `needs_confirmation` means nothing was done yet") && text.contains("call the same tool again with exactly the same arguments"), "{text}");
         }
         assert!(!routed.contains("needs_confirmation"), "routed has no tools of its own");
+        // vision.md section 3: the model that acts itself looks at the screen with `screen`, once per sentence.
+        for text in [&live, &auto] {
+            assert_eq!(text.matches("To see the screen call `screen`; never describe the screen without having looked in this turn.").count(), 1, "{text}");
+        }
+        assert!(!routed.contains("call `screen`"), "routed has no tools of its own: the Brain looks");
         // calendar.md section 6: the morning report reaches a `live` session as a [SAY] text turn.
         for text in [&routed, &live, &auto] {
             assert_eq!(text.matches("A message that starts with [SAY] is your own answer: read what follows word for word, adding nothing.").count(), 1, "{text}");

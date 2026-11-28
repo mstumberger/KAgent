@@ -6,6 +6,7 @@
 //! model then calls the same tool with the same arguments again, and that call runs with
 //! its card answered by the voice, so nothing waits for a click.
 
+use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -45,6 +46,8 @@ pub enum Step {
 #[derive(Default)]
 pub struct VoiceConfirm {
     pending: Mutex<Option<Pending>>,
+    /// Tools the owner said yes to for the rest of the voice session (`screen`, vision.md section 3).
+    covered: Mutex<HashSet<String>>,
 }
 
 /// Within this time the same changing call (tool and arguments) is not run twice: a
@@ -88,6 +91,28 @@ pub fn sentence(summary: &str, strong: bool, destructive: bool) -> String {
 impl VoiceConfirm {
     /// The step for a call the engine would ask about, at `now`.
     pub fn step(&self, tool: &str, args: &Value, a: &CallAssessment, now: Instant) -> Step {
+        self.step_saying(tool, args, a, now, None)
+    }
+
+    /// The tool was said yes to once in this voice session: its later calls are not asked.
+    pub fn covers(&self, tool: &str) -> bool {
+        self.covered.lock().unwrap().contains(tool)
+    }
+
+    /// A call that is asked once per voice session (vision.md section 3): the first is asked with
+    /// `say`, and the owner's yes covers every later call of the tool in this session.
+    pub fn step_once(&self, tool: &str, args: &Value, a: &CallAssessment, say: &str, now: Instant) -> Step {
+        if self.covers(tool) {
+            return Step::Run;
+        }
+        let step = self.step_saying(tool, args, a, now, Some(say));
+        if step == Step::Run {
+            self.covered.lock().unwrap().insert(tool.to_string());
+        }
+        step
+    }
+
+    fn step_saying(&self, tool: &str, args: &Value, a: &CallAssessment, now: Instant, say: Option<&str>) -> Step {
         let key = key(tool, args);
         let mut pending = self.pending.lock().unwrap();
         if let Some(p) = pending.as_ref().filter(|p| p.key == key && now.duration_since(p.asked_at) <= VALID_FOR) {
@@ -101,13 +126,13 @@ impl VoiceConfirm {
                     return Step::Refused(json!({"status": "denied", "output": "not executed: the owner said no. Do not try again unless they ask."}));
                 }
                 None => {
-                    let say = sentence(&a.summary, p.strong, a.destructive);
+                    let say = say.map_or_else(|| sentence(&a.summary, p.strong, a.destructive), str::to_string);
                     return Step::Ask(json!({"status": "needs_confirmation", "say": say, "output": "not executed yet: the owner has not confirmed. Say the `say` text and wait for their answer."}));
                 }
             }
         }
         let strong = a.privileged || a.destructive;
-        let say = sentence(&a.summary, strong, a.destructive);
+        let say = say.map_or_else(|| sentence(&a.summary, strong, a.destructive), str::to_string);
         *pending = Some(Pending { key, summary: a.summary.clone(), strong, asked_at: now, heard: String::new(), answer: None });
         Step::Ask(json!({
             "status": "needs_confirmation",
@@ -137,6 +162,36 @@ impl VoiceConfirm {
 mod tests {
     use super::*;
     use kagent_core::tool::{CallAssessment, ToolContract};
+
+    /// vision.md section 3: the first look of a voice session is asked out loud, the yes covers the later ones.
+    #[test]
+    fn a_look_is_asked_once_per_voice_session() {
+        let c = VoiceConfirm::default();
+        let a = assessment("screenshot of the window", false);
+        let args = json!({"target": "window"});
+        let say = "I want to look at your active window. Say yes to go ahead, or no.";
+        let t0 = Instant::now();
+        assert!(!c.covers("screen"));
+        let Step::Ask(v) = c.step_once("screen", &args, &a, say, t0) else { panic!("the first look is asked") };
+        assert_eq!((v["status"].as_str(), v["say"].as_str()), (Some("needs_confirmation"), Some(say)), "the sentence of the spec, word for word");
+        assert_eq!(c.step_once("screen", &args, &a, say, t0), c.step_once("screen", &args, &a, say, t0), "asked again until the owner answers");
+        assert!(!c.covers("screen"), "nothing is covered before a yes");
+        assert_eq!(c.hear("yes"), Some(Answer::Yes));
+        assert_eq!(c.step_once("screen", &args, &a, say, t0), Step::Run, "the yes runs the call");
+        assert!(c.covers("screen"));
+        // Later looks, also of another target, run without a question.
+        assert_eq!(c.step_once("screen", &json!({"target": "monitor"}), &a, "x", t0), Step::Run);
+        assert_eq!(c.step_once("screen", &args, &a, say, t0 + VALID_FOR * 10), Step::Run, "however long after");
+        // Another tool is not covered by it.
+        assert!(!c.covers("terminal"));
+        // A new voice session (a new VoiceConfirm) asks again; a no is not remembered.
+        let fresh = VoiceConfirm::default();
+        assert!(matches!(fresh.step_once("screen", &args, &a, say, t0), Step::Ask(_)));
+        assert_eq!(fresh.hear("no"), Some(Answer::No));
+        assert!(matches!(fresh.step_once("screen", &args, &a, say, t0), Step::Refused(_)));
+        assert!(!fresh.covers("screen"), "a no covers nothing");
+        assert!(matches!(fresh.step_once("screen", &args, &a, say, t0), Step::Ask(_)), "and the next look is asked again");
+    }
 
     fn assessment(summary: &str, destructive: bool) -> CallAssessment {
         let contract = ToolContract::read_only("system_power", "", json!({"type": "object"}));

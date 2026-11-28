@@ -14,6 +14,7 @@ use kagent_core::protocol::{Message, ToolCall, Via};
 use super::approve::{self, Answer};
 use super::confirm::{Repeats, Step, VoiceConfirm};
 use super::{brain, protocol};
+use crate::screen::live as look;
 use crate::AppState;
 
 /// A tool call of the live model, off the audio loop: an approval can take a minute.
@@ -36,13 +37,28 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
         // setting), runs only after the owner's own "yes" / "confirm"; its card, if it
         // has one, is then answered by that voice, not by a click.
         st.agent.prime_call(&call).await;
+        // "Look at my screen" (vision.md section 3): the frame goes to this session, not to a vision model.
+        let is_screen = c.name == "screen";
+        let _frame_goes_here = is_screen.then(|| look::register(&call.id, tool_tx.clone()));
         if let Some((assessment, ask)) = st.agent.voice_gate(&session, &call) {
             let refuse = |state: &str, response: Value| {
                 calls.finish(&call.id);
                 let _ = out.send(json!({"type": "tool", "callId": call.id, "name": c.name, "state": state}));
                 let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, response)]));
             };
-            if ask {
+            if is_screen {
+                // Refused before it is asked: a locked screen, and KAgent's own approval cards.
+                if let Some(why) = look::refusal(look::is_locked().await, st.agent.broker().pending().len()) {
+                    return refuse("denied", json!({"status": "error", "output": why}));
+                }
+                // Asked out loud once per voice session, whatever the permission mode: the frame leaves the machine.
+                let say = look::question(look::target_of(&c.args));
+                match confirm.step_once(&c.name, &c.args, &assessment, &say, Instant::now()) {
+                    Step::Run => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
+                    Step::Ask(response) => return refuse("awaiting voice confirmation", response),
+                    Step::Refused(response) => return refuse("denied", response),
+                }
+            } else if ask {
                 match confirm.step(&c.name, &c.args, &assessment, Instant::now()) {
                     Step::Run => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
                     Step::Ask(response) => return refuse("awaiting voice confirmation", response),
@@ -50,7 +66,8 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
                 }
             }
             // A live model that repeats one changing action is stopped after the first.
-            if !assessment.read_only && !repeats.first(&c.name, &c.args, Instant::now()) {
+            // A second look is not a repeat of an action: the screen changes.
+            if !is_screen && !assessment.read_only && !repeats.first(&c.name, &c.args, Instant::now()) {
                 let output = "not executed: you ran exactly this a moment ago and it is done. Do not repeat it; tell the owner the result, or do something else.";
                 return refuse("duplicate", json!({"status": "duplicate", "output": output}));
             }
