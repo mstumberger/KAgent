@@ -86,6 +86,7 @@ pub fn full_view(s: &Settings) -> Value {
         ("screenWatch", section::<crate::screen_watch::ScreenWatchSection>(s, "screenWatch")),
         ("subagents", section::<crate::subagents::SubagentsSection>(s, "subagents")),
         ("hooks", section::<crate::hooks::config::HooksSection>(s, "hooks")),
+        ("usage", section::<crate::usage::settings::UsageSection>(s, "usage")),
     ];
     for (key, v) in sections {
         m.insert(key.into(), v);

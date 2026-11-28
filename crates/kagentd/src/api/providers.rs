@@ -166,8 +166,11 @@ pub async fn provider_templates(State(st): State<Arc<AppState>>) -> ApiResult<Re
     Ok(super::ok_json(json!({"templates": st.providers.templates()})))
 }
 
+/// `GET /api/providers`: the rows of the store, each with its tightest limit (usage.md section 5).
 pub async fn list_providers(State(st): State<Arc<AppState>>) -> ApiResult<Response> {
-    Ok(super::ok_json(json!({"providers": st.providers.masked()})))
+    let mut rows = st.providers.masked();
+    st.usage.add_tightest(&mut rows, chrono::Local::now());
+    Ok(super::ok_json(json!({"providers": rows})))
 }
 
 pub async fn add_provider(State(st): State<Arc<AppState>>, Json(body): Json<Value>) -> ApiResult<Response> {

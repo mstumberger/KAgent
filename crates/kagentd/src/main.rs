@@ -187,8 +187,6 @@ async fn run() -> anyhow::Result<()> {
     let snapshot = machine::MachineSnapshot::system().await;
     let machine = snapshot.current();
     let (events, _) = broadcast::channel(1024);
-    // Usage and limits (usage.md): the providers client reports every answer to the hub.
-    let usage = usage::UsageHub::open(&paths.data, providers.clone(), events.clone());
     let audit = std::sync::Arc::new(kagent_core::audit::AuditLog::open(&paths.data.join("audit.jsonl"))?);
     audit.append_start(VERSION).ok();
     // One skills library for the prompt, `load_skill` and the skills API, rescanned between turns.
@@ -296,6 +294,8 @@ async fn run() -> anyhow::Result<()> {
     engine.set_overrides(settings::parse_overrides(&settings.tool_overrides));
     let settings_arc = Arc::new(std::sync::RwLock::new(settings));
     let _ = settings_cell.set(settings_arc.clone());
+    // Usage and limits (usage.md): the providers client reports every answer to the hub.
+    let usage = usage::UsageHub::open(&paths.data, providers.clone(), settings_arc.clone(), events.clone());
     // Hooks (hooks.md): the owner's own commands at the points of the agent's life. The agent
     // cannot write them (hooks.md section 5); a change applies from the next event.
     let hooks = Arc::new(hooks::HookHub::new(settings_arc.clone(), paths.settings(), audit.clone(), events.clone()));
