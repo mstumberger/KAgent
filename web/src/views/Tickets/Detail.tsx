@@ -4,6 +4,7 @@ import Icon from "../../components/Icon";
 import Markdown from "../../components/Markdown";
 import { openSession } from "../../store";
 import { errorMessage, type Change, type Link, type LinkKind, type Ticket, type TState, type Priority } from "./api";
+import TicketChanges from "./TicketChanges";
 import { PRIORITIES, PRIORITY_LABEL, STATES, STATE_LABEL } from "./model";
 
 interface Props {
@@ -66,6 +67,7 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
   const [note, setNote] = useState("");
   const [linkKind, setLinkKind] = useState<LinkKind>("range");
   const [linkValue, setLinkValue] = useState("");
+  const [tab, setTab] = useState<"details" | "changes">("details");
   const save = async (change: Change) => {
     try {
       await onChange(t.key, change);
@@ -85,7 +87,7 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
   };
   const parents = siblings.filter((s) => s.key !== t.key);
   return (
-    <aside className="tk-detail" aria-label={`Ticket ${t.key}`} data-key={t.key}>
+    <aside className={`tk-detail${tab === "changes" ? " wide" : ""}`} aria-label={`Ticket ${t.key}`} data-key={t.key}>
       <div className="tk-detail-head">
         <h3>{t.key}</h3>
         <span className="tk-project">{projectName}</span>
@@ -94,7 +96,18 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
           <Icon name="close" size={14} />
         </button>
       </div>
+      <div className="tk-tabs" role="tablist" aria-label="Ticket">
+        {(["details", "changes"] as const).map((x) => (
+          <button key={x} type="button" role="tab" aria-selected={tab === x} onClick={() => setTab(x)}>
+            {x === "details" ? "Details" : "Changes"}
+          </button>
+        ))}
+      </div>
       {error && <div className="tk-error" role="alert">{error}</div>}
+      {tab === "changes" ? (
+        <TicketChanges ticket={t} onAddLink={(link) => onChange(t.key, { links: [...t.links, link] })} />
+      ) : (
+        <>
       <Text id="tk-title" label="Title" value={t.title} onSave={(title) => void save({ title })} />
       <div className="tk-grid">
         <label className="tk-field" htmlFor="tk-state">
@@ -231,6 +244,8 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
           ))}
         </ol>
       </div>
+        </>
+      )}
       <div className="tk-actions">
         {confirm ? (
           <>

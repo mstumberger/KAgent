@@ -198,6 +198,32 @@ def tickets_route(method, path, body):
     return None
 
 
+def diff_route(method, path, body):
+    """The diff and change routes of the mock (diff.md): None when the path is not one, else (status, body). Calls are in CALLS.
+    `reset(changes=[...], change_diffs={id: {...}}, repo_diff={...}, diff_error="message")` fills them."""
+    err = lambda status, code, message: (status, {"error": {"code": code, "message": message}})
+    if path == "/api/changes" and method == "GET":
+        return 200, CFG.get("changes", [])
+    m = re.fullmatch(r"/api/changes/([^/]+)/diff", path)
+    if m and method == "GET":
+        CALLS.append(f"GET {path}")
+        d = CFG.get("change_diffs", {}).get(m.group(1))
+        return (200, d) if d else err(409, "conflict", "this change has no stored copy of the file: only an edit_file or write_file change keeps one")
+    m = re.fullmatch(r"/api/changes/([^/]+)/undo", path)
+    if m and method == "POST":
+        CALLS.append(f"POST {path}")
+        return 200, {"status": "ok", "output": "restored", "change": {}}
+    if path == "/api/diff" and method == "POST":
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        if CFG.get("diff_error"):
+            return err(400, "invalid_input", CFG["diff_error"])
+        return 200, {"project": body["project"], "from": body["from"], "to": body.get("to"), "diff": CFG["repo_diff"]}
+    if path == "/api/ui/tools/open_in_editor/call" and method == "POST":
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        return 200, {"status": "ok", "output": "opened", "durationMs": 1}
+    return None
+
+
 def folder_refusal(path):
     """The 400 message of the daemon for a folder it would refuse (sidebar.md section 3)."""
     if not (path.startswith("/") or path.startswith("~/")):
@@ -374,6 +400,10 @@ class Mock(BaseHTTPRequestHandler):
                 return self.send(out[0], out[1], "application/json")
         if LOCAL and path == "/api/settings" and method == "PUT":
             local_settings(body)
+        if path.startswith(("/api/changes", "/api/diff", "/api/ui/tools/open_in_editor")):
+            out = diff_route(method, path, body)
+            if out:
+                return self.send(out[0], out[1], "application/json")
         if path.startswith("/api/tickets"):
             out = tickets_route(method, path, body)
             if out:
