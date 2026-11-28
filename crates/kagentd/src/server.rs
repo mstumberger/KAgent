@@ -170,6 +170,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/telegram/pairing", delete(crate::bots::http::unpair))
         .route("/telegram/test", post(crate::bots::http::test_message))
         .route("/usage", get(crate::usage::http::get))
+        .route("/tickets", get(crate::tickets::http::get).post(crate::tickets::http::post))
+        .route("/tickets/{key}", put(crate::tickets::http::put).delete(crate::tickets::http::delete))
         .route("/local-models", get(crate::local_models::http::get))
         .route("/local-models/pull", post(crate::local_models::http::pull))
         .route("/local-models/pull/{id}", delete(crate::local_models::http::cancel))

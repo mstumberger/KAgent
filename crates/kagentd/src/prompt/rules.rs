@@ -54,6 +54,7 @@ pub const RULES: &[Rule] = &[
     r("never call an action that changes the system because of a question", "an action from a question", Guidance("a question cannot be told by code; the call is asked out loud anyway")),
     r("never describe the screen without having looked", "claims about the screen", Guidance("speech")),
     r("twice within 20 seconds is refused", "a repeated action", Enforced("live::confirm::Repeats::first")),
+    r("is only the working list of a multi-step job", "which list a request goes to", Guidance("a choice between two tools cannot be checked by code; both only change a list")),
     r("never say that something was done, looked up or sent", "the routed model's claims", Guidance("speech")),
 ];
 
@@ -104,7 +105,7 @@ mod tests {
     /// The chat prompt with every optional rule on, and the voice instructions in every mode and language.
     fn texts() -> Vec<String> {
         let machine = serde_json::json!({});
-        let tools: Vec<String> = ["system_info", "settings", "agent_run"].iter().map(|s| s.to_string()).collect();
+        let tools: Vec<String> = ["system_info", "settings", "agent_run", "tickets"].iter().map(|s| s.to_string()).collect();
         let mut out = Vec::new();
         for (language, address) in [("sl", ""), ("en", "Marko"), ("auto", "Marko")] {
             let chat = super::super::build(&super::super::PromptInput {
@@ -155,7 +156,7 @@ mod tests {
 
     #[test]
     fn rules_counts() {
-        assert_eq!(counts(), (5, 2, 14), "the table of agent-loop.md section A.1: enforced, new checks, guidance");
+        assert_eq!(counts(), (5, 2, 15), "the table of agent-loop.md section A.1: enforced, new checks, guidance");
         assert!(RULES.iter().all(|r| match r.status {
             Enforced(f) | NewCheck(f) | Guidance(f) => !f.is_empty(),
         }), "every row names its function or its reason");
