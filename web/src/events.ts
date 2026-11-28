@@ -26,6 +26,8 @@ export type AgentEvent =
   | { type: "sessionMetaChanged"; sessionId: string; meta: import("./api").SessionMeta }
   | { type: "memoryChanged"; name: string; removed: boolean }
   | { type: "tasksChanged" }
+  /** A ticket was created, changed or deleted (tickets.md section 4). */
+  | { type: "ticketChanged"; key: string; project: string | null; removed: boolean }
   | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
   | { type: "telegramStatus"; status: string; detail: string }
   /** The Google Calendar connection changed state (calendar.md section 7). */

@@ -29,6 +29,9 @@ export function handleEvent(ev: AgentEvent) {
       set({ alertsTick: getStore().alertsTick + 1 });
       void refreshState();
       break;
+    case "ticketChanged":
+      set({ ticketsTick: getStore().ticketsTick + 1 });
+      break;
     case "changeRecorded":
       set({ changesTick: getStore().changesTick + 1 });
       break;

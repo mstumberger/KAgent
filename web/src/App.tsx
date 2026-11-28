@@ -26,6 +26,7 @@ import Alerts from "./views/Alerts";
 import Changes from "./views/Changes";
 import Security from "./views/Security";
 import Tasks from "./views/Tasks";
+import Tickets from "./views/Tickets";
 
 /** Voice keeps running across tabs: show it (and mute/stop) everywhere. */
 function VoiceChip() {
@@ -166,6 +167,7 @@ export default function App() {
         {s.view === "chat" && <Chat />}
         {s.view === "voice" && <Voice />}
         {s.view === "tasks" && <Tasks />}
+        {s.view === "tickets" && <Tickets />}
         {s.view === "alerts" && <Alerts />}
         {s.view === "changes" && <Changes />}
         {s.view === "security" && <Security />}

@@ -1,0 +1,76 @@
+/* The tickets view (tickets.md section 6). Colours are the tokens of styles/base.css, so dark and light both work. */
+.tickets { display: flex; height: 100%; min-height: 0; position: relative; }
+.tk-main { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
+.tk-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.tk-head h2 { margin: 0; font-size: 20px; }
+.tk-head .spacer, .tk-detail-head .spacer { flex: 1; }
+.tk-switch { display: inline-flex; border: 1px solid var(--rim); border-radius: 8px; overflow: hidden; }
+.tk-switch button { border: 0; border-radius: 0; background: transparent; padding: 5px 12px; }
+.tk-switch button[aria-pressed="true"] { background: color-mix(in srgb, var(--ice) 18%, transparent); color: var(--ink); }
+.tk-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.tk-filters input { flex: 1; min-width: 140px; }
+.tk-new { display: flex; gap: 8px; margin-bottom: 12px; }
+.tk-new input { flex: 1; }
+.tk-error { color: var(--bad); font-size: 12.5px; margin: 6px 0; }
+.tk-none { color: var(--dim); font-size: 13px; padding: 8px 2px; }
+.tk-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tk-count { color: var(--dim); font-size: 12px; margin-left: 6px; }
+
+.tk-section { margin-bottom: 14px; }
+.tk-section h3, .tk-column h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.tk-fold { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; padding: 2px 4px; font-weight: 600; }
+.tk-fold svg { transition: transform 0.12s; }
+.tk-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.tk-quick input { width: 100%; margin-bottom: 6px; }
+
+.tk-item { display: flex; align-items: center; gap: 8px; border: 1px solid var(--rim); border-radius: 8px; background: var(--glass); padding: 6px 10px; margin-bottom: 5px; cursor: pointer; }
+.tk-item:hover { border-color: var(--rim-strong); }
+.tk-item:focus-visible { outline: 2px solid var(--ice); outline-offset: 1px; }
+.tk-item.selected { border-color: var(--ice); background: color-mix(in srgb, var(--ice) 10%, var(--glass)); }
+.tk-key { font-family: ui-monospace, monospace; font-size: 12px; color: var(--dim); flex-shrink: 0; }
+.tk-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-pri { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--rim); flex-shrink: 0; }
+.tk-pri.pr-urgent { color: var(--bad); border-color: var(--bad); }
+.tk-pri.pr-high { color: var(--signal); border-color: var(--signal); }
+.tk-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--rim); flex-shrink: 0; }
+.tk-label button { border: 0; background: transparent; padding: 0; display: inline-flex; color: var(--dim); }
+.tk-project, .tk-assignee, .tk-by { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.tk-move, .tk-icon { border: 0; background: transparent; padding: 3px 5px; flex-shrink: 0; color: var(--dim); }
+.tk-move:hover, .tk-icon:hover { color: var(--ink); }
+
+.tk-board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px; align-items: start; min-width: 1200px; }
+.tk-column { background: var(--glass-2); border: 1px solid var(--rim); border-radius: 10px; padding: 8px; min-height: 160px; }
+.tk-column.over { border-color: var(--ice); background: color-mix(in srgb, var(--ice) 8%, var(--glass-2)); }
+.tk-column h3 { display: flex; align-items: center; }
+.tk-item.card { flex-wrap: wrap; align-items: flex-start; cursor: grab; }
+.tk-item.card .tk-title { flex-basis: 100%; white-space: normal; order: 2; }
+.tk-item.card { position: relative; padding-right: 28px; }
+.tk-item.card .tk-move { position: absolute; top: 4px; right: 4px; }
+
+.tk-detail { width: 400px; flex-shrink: 0; border-left: 1px solid var(--rim); background: var(--glass); overflow: auto; padding: 14px 16px; }
+.tk-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tk-detail-head h3 { margin: 0; font-family: ui-monospace, monospace; }
+.tk-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12.5px; }
+.tk-field > span:first-child { color: var(--dim); font-size: 12px; }
+.tk-field input, .tk-field textarea, .tk-field select { width: 100%; }
+.tk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.tk-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tk-inline { flex: 1; min-width: 100px; width: auto !important; }
+.tk-preview { border: 1px solid var(--rim); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; max-height: 180px; overflow: auto; }
+.tk-note, .tk-link { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.tk-link code { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tk-linkbtn { border: 0; background: transparent; padding: 0; color: var(--ice); text-decoration: underline; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.tk-addlink { display: flex; gap: 6px; }
+.tk-addlink select { width: auto; flex: 0 0 auto; }
+.tk-addlink input { flex: 1; min-width: 0; width: auto; }
+.tk-addlink button { white-space: nowrap; }
+.tk-history { margin: 0; padding-left: 0; list-style: none; font-size: 12px; color: var(--dim); }
+.tk-history li { padding: 2px 0; }
+.tk-history time { margin-left: 6px; opacity: 0.8; }
+.tk-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+/* A narrow window: the pane takes the whole view (the list is behind it; Close goes back). */
+@media (max-width: 900px) {
+  .tk-main { padding: 12px; }
+  .tk-detail { position: absolute; inset: 0; width: auto; border-left: 0; z-index: 3; }
+}
