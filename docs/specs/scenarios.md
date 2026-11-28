@@ -557,6 +557,51 @@ Spec: `sidebar.md` section 7 and its amendment of 2026-11-27. Items 1 to 4 are `
 
 Items 5 to 9 are `scripts/test-sidebar-web.py` (162 checks).
 
+## S43 work windows: agents, plan, progress, and notices as toasts
+Specs: `work-windows.md` section 7 and `notices.md` section 3. Items 1 to 3 and 9 to 11 are `[auto]`.
+1. **[auto]** `tools/background`: `list` gives the running tasks first and the ended ones with
+   the one that ended last first, with the command and `startedAt`, only those of the session
+   asked, at most 50; the sink sees `running` at the start, `killed` on a stop (and nothing
+   more at the end of the group) and the final status at the end, before the notification; a
+   registry without a sink behaves as before (the tests of S31 unchanged).
+2. **[auto]** `background_api.rs`: the 404s, the 400 of a `tail` out of range, the 409 of a task
+   that ended; `output` gives the tail and nothing of a token planted in the log.
+3. **[auto]** Scripted model (`tests/background.rs`): `shell {background: true}` gives
+   `backgroundTask running` and the list holds the command; at the end the final status comes
+   before the notification of S31; `stop_all` gives `killed` and tells no session.
+4. Headless Chrome (dark and light, 1200x820): with two subagents and a todo list the capsule
+   shows `2` and `3/7`; a click opens the panel; Agents lists both with state, time and Stop
+   (the route of S31); Background lists the commands and their state; Plan says off, planning
+   with Cancel plan, then the approved plan; Progress ticks and clears as before; a folded
+   section stays folded after a reload.
+5. Headless: a click on an Agents card opens the Subagent tab and the conversation stays; more
+   tabs make a tab bar; a tab closes with its x or with Escape; the Plan tab shows the plan
+   (the approved one, or the one that waits with the note); the Output tab follows a running
+   command, stops following when scrolled up, resumes with the button and stops reading after
+   the end event; tabs belong to their session.
+6. Headless at 700x500: the panel leaves the composer its room; the pane is an overlay that
+   closes with its button or the scrim.
+7. Headless, in the widget (340x460): the capsule above the bar opens the sheet Work with the
+   four sections; Stop works there; no line opens a pane.
+8. The owner, live: "Research in parallel what uses the disk and what uses the memory, then
+   summarize", with a background command: the capsule counts, the pane follows a subagent and
+   the output, Stop ends one.
+9. **[auto]** The notice event: the class of a provider error (`quota`, `key`, `busy`, `down`,
+   `other`) and its key `provider:<id>:<class>`; the event carries `key`, `sessionId` and
+   `kind` only when it has them; a recovery has the key of the error, comes once, and never
+   without a previous error (`agent/notice.rs`, `tests/notices.rs`).
+10. Headless (dark and light, 1200x820 and 340x460): two errors of one key are one toast
+    "x2"; a recovery replaces the error and goes after 6 s; an error stays; hover holds the
+    timer; close; Dismiss all with two or more; the fifth folds into "1 more"; Escape closes
+    the focused one; the tab order; a long text is cut at three lines with "more"; "Open
+    conversation" only for another session; reduced motion drops the slide; the header has no
+    notice line; a live voice session says an error once per key in its status line.
+11. The owner, live: with the chat model out of quota, one turn shows the quota toast with the
+    fallback; the next turn that the chat model answers shows "answers again" for 6 s.
+
+Items 4 to 7 and 10 are `scripts/test-work-web.py` (the daemon is stood in for when the
+owner's own holds port 7878).
+
 ## S44 settings by voice and the voice rules
 Spec: `voice-control.md` section 7. Items 1 to 7 are `[auto]`; the last two are the owner's.
 1. **[auto]** `settings get` masks the secrets; `models` lists the refs and the jobs

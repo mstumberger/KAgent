@@ -15,12 +15,12 @@ plan for a single approval before it changes anything.
   starting the next step.
 - Event: `todoUpdated {sessionId, items}` after every change.
 - UI:
-  - Chat: a panel above the composer while the list is not empty. Checkbox per item
+  - Chat: from S43 the list is the Progress section of the work panel (`work-windows.md`), not a panel of its own above the composer. Checkbox per item
     (a click marks a pending or in_progress item completed, and a completed one
     pending), a mark for `high`, "3 of 7", and Clear.
     Clicks go to `PUT /api/sessions/:id/todo`. The daemon normalises what it receives
     like `todo_write` does.
-  - Widget: a progress chip "3/7".
+  - Widget: the capsule of the work panel shows "3/7" (S43; the chip of its own is gone).
   - Opening a session shows its list (`GET /api/sessions/:id`).
 - The list is in the session file's meta, so it survives a restart.
 - The compaction prompt asks for open todo items (`compaction.md` section 3).
@@ -73,7 +73,7 @@ plan for a single approval before it changes anything.
 - Voice: a plan card is answered like any other card (`voice.md`); the changes that
   follow still go through the normal permission mode.
 - UI: a `PlanCard` in the approvals area (title "Plan", Markdown body, Approve, Reject
-  with a reason field); a "planning" chip next to the composer with Cancel plan.
+  with a reason field); the state of plan mode and Cancel plan are in the Plan section of the work panel (S43; the "planning" chip above the composer is gone).
 
 ## 3. Tests (no root, no network)
 
