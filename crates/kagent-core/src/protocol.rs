@@ -27,6 +27,39 @@ pub enum Via {
     Agent,
 }
 
+/// The pixels of an image while a request is built (`agent/vision.rs`): never stored in the
+/// session file and never sent to the UI.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct Pixels(pub std::sync::Arc<Vec<u8>>);
+
+impl std::fmt::Debug for Pixels {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pixels({} bytes)", self.0.len())
+    }
+}
+
+/// An image of a message (vision.md section 1). The pixels are a file beside the session
+/// (`session/images.rs`); this is the reference to it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageRef {
+    pub id: String,
+    /// `image/png` or `image/jpeg`: what the store kept after re-encoding.
+    pub mime: String,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: u64,
+    /// What the vision model said the image shows (vision.md section 2), made once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The model that wrote `description`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_by: Option<String>,
+    /// Set on the copy that goes into one model request.
+    #[serde(skip)]
+    pub data: Option<Pixels>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
     pub id: String,
@@ -54,6 +87,9 @@ pub struct Message {
     /// signatures). Never shown to the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_state: Option<Value>,
+    /// The images of a user message, at most 4 (vision.md section 1); empty is left out of the file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageRef>,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -78,6 +114,10 @@ impl Message {
             ..Self::base(Role::Tool, content.into())
         }
     }
+    pub fn with_images(mut self, images: Vec<ImageRef>) -> Self {
+        self.images = images;
+        self
+    }
     pub fn with_via(mut self, via: Via) -> Self {
         self.via = via;
         self
@@ -92,6 +132,7 @@ impl Message {
             is_error: false,
             via: Via::Text,
             provider_state: None,
+            images: Vec::new(),
         }
     }
 }

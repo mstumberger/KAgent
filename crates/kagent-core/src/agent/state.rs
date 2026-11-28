@@ -38,6 +38,8 @@ pub(crate) struct TurnInput {
     /// `TurnOpts::system_suffix` of this input: with the queued input it goes into
     /// the prompt of the running turn, from its next model request on.
     pub system_suffix: Option<String>,
+    /// The images of the message, stored with the session (vision.md section 1).
+    pub images: Vec<crate::protocol::ImageRef>,
 }
 
 /// What `take` did with a sent input.
@@ -349,6 +351,7 @@ mod tests {
             text: text.into(),
             via,
             system_suffix: suffix.map(str::to_string),
+            images: Vec::new(),
         };
         let s = state();
         assert!(s.is_idle());
@@ -376,7 +379,7 @@ mod tests {
     #[test]
     fn an_idle_session_starts_a_new_turn() {
         let s = state();
-        let one = TurnInput { text: "one".into(), via: Via::Text, system_suffix: None };
+        let one = TurnInput { text: "one".into(), via: Via::Text, system_suffix: None, images: Vec::new() };
         let Taken::Turn(_) = s.take(&one) else { panic!() };
         assert!(s.settle(TurnResult::failed("done")).is_none());
         assert!(s.is_idle());

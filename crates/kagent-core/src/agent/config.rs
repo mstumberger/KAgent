@@ -23,6 +23,8 @@ pub struct TurnOpts {
     /// Start the turn in plan mode (plan-todo.md section 2): the session's `planning` flag
     /// is set before the turn starts, so the loop and the prompt see it from the first request.
     pub plan: bool,
+    /// The images of the message, as `SessionStore::image_refs` made them (vision.md section 1).
+    pub images: Vec<crate::protocol::ImageRef>,
 }
 
 #[derive(Debug, Clone)]

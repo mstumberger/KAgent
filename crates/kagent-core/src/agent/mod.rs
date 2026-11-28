@@ -148,7 +148,7 @@ impl Agent {
         let this = self.clone();
         let sid = session_id.to_string();
         let plan = opts.plan;
-        let input = TurnInput { text: input, via, system_suffix: opts.system_suffix };
+        let input = TurnInput { text: input, via, system_suffix: opts.system_suffix, images: opts.images };
         Box::pin(async move {
             // Before the turn starts (plan-todo.md section 2), so its first call is restricted too.
             if plan {
@@ -202,7 +202,7 @@ impl Agent {
         // user message in the next model request: at most `hook_budget` characters a turn.
         self.turn_hooks(session_id, state, &input.text, input.via).await;
         let mut hook_budget = hooks::CONTEXT_CHARS_PER_TURN;
-        self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via)]).await?;
+        self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via).with_images(input.images)]).await?;
         let mut iteration = 0usize;
         loop {
             if cancel.is_cancelled() {
@@ -210,17 +210,13 @@ impl Agent {
             }
             // Model-request boundary: drain steering input queued while we worked.
             let mut late = String::new();
-            let steering: Vec<Message> = state
-                .pending
-                .lock()
-                .unwrap()
-                .drain(..)
-                .map(|queued| {
-                    // A queued message that names a skill adds its block from this request on.
-                    late.push_str(queued.system_suffix.as_deref().unwrap_or_default());
-                    Message::user(queued.text).with_via(queued.via)
-                })
-                .collect();
+            let queued: Vec<TurnInput> = state.pending.lock().unwrap().drain(..).collect();
+            let mut steering: Vec<Message> = Vec::new();
+            for queued in queued {
+                // A queued message that names a skill adds its block from this request on.
+                late.push_str(queued.system_suffix.as_deref().unwrap_or_default());
+                steering.push(Message::user(queued.text).with_via(queued.via).with_images(queued.images));
+            }
             self.push_messages(session_id, state, steering).await?;
             config.system_prompt.push_str(&late);
             self.push_messages(session_id, state, self.hook_messages(session_id, &mut hook_budget)).await?;

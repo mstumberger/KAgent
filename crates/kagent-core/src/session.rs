@@ -10,6 +10,8 @@ use tokio::io::AsyncWriteExt;
 use crate::protocol::{Message, Role};
 use crate::util::truncate_str;
 
+pub mod images;
+
 /// A message of a digest is cut to this many characters (compaction.md section 5).
 const DIGEST_MESSAGE_CHARS: usize = 600;
 
@@ -201,12 +203,15 @@ impl SessionStore {
             .open(self.log_path(id))
             .await?;
         f.write_all(&buf).await?;
+        // tokio's file writes in the background: flushed, so a read right after sees the lines.
+        f.flush().await?;
         Ok(())
     }
 
     pub async fn delete(&self, id: &str) -> anyhow::Result<()> {
         let _ = tokio::fs::remove_file(self.log_path(id)).await;
         let _ = tokio::fs::remove_file(self.meta_path(id)).await;
+        self.remove_images(id).await;
         Ok(())
     }
 }
