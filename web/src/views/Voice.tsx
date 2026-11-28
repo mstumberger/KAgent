@@ -6,6 +6,7 @@ import Orb, { normalizeTheme, type OrbTheme } from "../voice/Orb";
 import { newSession, openSession, setView, showView, useStore } from "../store";
 import { voice } from "../voice/controller";
 import { useVoice } from "../voice/useVoice";
+import Select from "../settings/Select";
 
 export default function Voice() {
   const s = useStore();
@@ -95,7 +96,7 @@ export default function Voice() {
       <div className="voice-side">
         <Approvals />
         <div className="voice-convo-head">
-          <select
+          <Select
             aria-label="Conversation"
             value={sid ?? ""}
             onChange={(e) => void switchTo(e.target.value)}
@@ -107,7 +108,7 @@ export default function Voice() {
               </option>
             ))}
             <option value="__new">+ New conversation</option>
-          </select>
+          </Select>
           <button className="link-btn" disabled={!sid} onClick={() => setView("chat")}>
             Open in chat
           </button>

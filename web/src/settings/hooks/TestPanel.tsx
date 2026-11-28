@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Badge } from "../ui";
 import { EVENTS, hooksApi, type Hook, type HookEventName, type TestResult } from "./api";
+import Select from "../Select";
 
 interface Props {
   hook: Hook;
@@ -69,13 +70,13 @@ export default function TestPanel({ hook, samples, onClose }: Props) {
       </p>
       <label className="ui-field">
         <span className="ui-field-label">Event of the sample</span>
-        <select value={event} aria-label="Event of the sample" onChange={(e) => pick(e.target.value as HookEventName)}>
+        <Select value={event} aria-label="Event of the sample" onChange={(e) => pick(e.target.value as HookEventName)}>
           {EVENTS.map((e) => (
             <option key={e.name} value={e.name}>
               {e.name}
             </option>
           ))}
-        </select>
+        </Select>
         <span className="hint">{info?.when}</span>
       </label>
       <label className="ui-field">

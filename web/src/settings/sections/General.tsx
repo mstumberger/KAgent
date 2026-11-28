@@ -5,6 +5,7 @@ import type { SectionProps } from "../registry";
 import { Badge, Field, GroupCard, Row, SectionPage, Toggle } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
+import Select from "../Select";
 
 const PERSONA = { name: "KAgent", address: "", language: "auto" };
 
@@ -33,11 +34,11 @@ export default function General({ title, description }: SectionProps) {
               <input value={persona.address} onChange={(e) => setPersona({ ...persona, address: e.target.value })} />
             </Field>
             <Field label="Language">
-              <select value={persona.language} onChange={(e) => setPersona({ ...persona, language: e.target.value })}>
+              <Select value={persona.language} onChange={(e) => setPersona({ ...persona, language: e.target.value })}>
                 <option value="auto">follow me (Slovenian/English)</option>
                 <option value="sl">Slovenian</option>
                 <option value="en">English</option>
-              </select>
+              </Select>
             </Field>
           </div>
           <div className="row">
@@ -84,11 +85,11 @@ export default function General({ title, description }: SectionProps) {
           </p>
         )}
         <Row label="Privilege method" hint="How KAgent runs a root action.">
-          <select aria-label="Privilege method" value={settings?.privilege ?? "sudo"} onChange={(e) => void save("privilege", e.target.value)}>
+          <Select aria-label="Privilege method" value={settings?.privilege ?? "sudo"} onChange={(e) => void save("privilege", e.target.value)}>
             <option value="sudo">sudo -n (sudoers rule, no prompt)</option>
             <option value="pkexec">pkexec (password prompt each time)</option>
             <option value="none">none (no root actions)</option>
-          </select>
+          </Select>
         </Row>
       </GroupCard>
     </SectionPage>

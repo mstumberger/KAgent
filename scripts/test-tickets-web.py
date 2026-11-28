@@ -6,7 +6,7 @@ layout; screenshots go to /tmp/kagent-v003-tickets-shots/. Run from the repo roo
 (`npx vite build --outDir <dir>`)."""
 import asyncio, json, sys
 import picker_web_lib as lib
-from picker_web_lib import Env, calls, report, ticket
+from picker_web_lib import dd_set, dd_values, Env, calls, report, ticket
 
 P1, P2 = "/home/me/code/kagent", "/home/me/code/web-ui"
 PROJECTS = [{"id": "inbox", "path": None, "name": "Inbox", "prefix": "IN", "count": 1}, {"id": "kagent-1", "path": P1, "name": "kagent", "prefix": "KA", "count": 6}, {"id": "web-ui-1", "path": P2, "name": "web-ui", "prefix": "WU", "count": 1}]
@@ -119,16 +119,18 @@ async def checks(env, results, theme):
     # --- the filters
     await page.js("[...document.querySelectorAll('.tk-switch button')].find(b => b.textContent === 'List').click()")
     await page.until("document.querySelectorAll('.tk-section').length === 6", "the list again")
-    await page.js("(() => { const s = document.querySelector('select[aria-label=Project]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, '/home/me/code/web-ui'); s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+    await dd_set(page, ".dd-trigger[aria-label=Project]", "/home/me/code/web-ui")
     await page.until("document.querySelectorAll('.tk-item').length === 1", "the project filter")
     results[f"{t}: the project filter shows that project's tickets and no project name on the rows"] = await page.js(ROWS) == ["WU-1"] and await page.js("!document.querySelector('.tk-project')")
-    await page.js("(() => { const s = document.querySelector('select[aria-label=Project]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'inbox'); s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+    await dd_set(page, ".dd-trigger[aria-label=Project]", "inbox")
     await page.until("!!document.querySelector('.tk-item[data-key=IN-1]')", "the Inbox filter")
     results[f"{t}: the Inbox filter shows the tickets without a project"] = (await page.js(ROWS)).count("IN-1") == 1 and all(k.startswith("IN") for k in await page.js(ROWS))
-    await page.js("(() => { const s = document.querySelector('select[aria-label=Project]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, ''); s.dispatchEvent(new Event('change', {bubbles: true})); const l = document.querySelector('select[aria-label=Label]'); set.call(l, 'usage'); l.dispatchEvent(new Event('change', {bubbles: true})); })()")
+    await dd_set(page, ".dd-trigger[aria-label=Project]", "")
+    await dd_set(page, ".dd-trigger[aria-label=Label]", "usage")
     await page.until("document.querySelectorAll('.tk-item').length === 1", "the label filter")
-    results[f"{t}: the label filter lists the labels of all tickets and filters"] = await page.js(ROWS) == ["KA-2"] and "usage" in await page.js("[...document.querySelectorAll('select[aria-label=Label] option')].map(o => o.value)")
-    await page.js("(() => { const l = document.querySelector('select[aria-label=Label]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(l, ''); l.dispatchEvent(new Event('change', {bubbles: true})); const i = document.querySelector('input[aria-label=\"Filter tickets\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'certificate'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+    results[f"{t}: the label filter lists the labels of all tickets and filters"] = await page.js(ROWS) == ["KA-2"] and "usage" in await dd_values(page, ".dd-trigger[aria-label=Label]")
+    await dd_set(page, ".dd-trigger[aria-label=Label]", "")
+    await page.js("(() => { const i = document.querySelector('input[aria-label=\\"Filter tickets\\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'certificate'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
     await page.until("document.querySelectorAll('.tk-item').length === 1", "the text filter")
     results[f"{t}: the text filter reads the title (any case)"] = await page.js(ROWS) == ["IN-1"]
     await page.js("(() => { const i = document.querySelector('input[aria-label=\"Filter tickets\"]'); const s2 = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; s2.call(i, 'overlay'); i.dispatchEvent(new Event('input', {bubbles: true})); })()")
@@ -146,7 +148,7 @@ async def checks(env, results, theme):
     await page.js("""(() => { const i = document.querySelector('#tk-title'); i.focus(); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'Fix the overlay focus loss'); i.dispatchEvent(new Event('input', {bubbles: true})); i.blur(); })()""")
     await page.until("!!document.querySelector('.tk-item[data-key=KA-1]') && document.querySelector('.tk-item[data-key=KA-1] .tk-title').textContent === 'Fix the overlay focus loss'", "the saved title")
     results[f"{t}: the title is saved when the focus leaves it, with one PUT carrying only that field"] = 'PUT /api/tickets/KA-1 {"title": "Fix the overlay focus loss"}' in calls()
-    await page.js("""(() => { const s = document.querySelector('#tk-state'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'in_review'); s.dispatchEvent(new Event('change', {bubbles: true})); })()""")
+    await dd_set(page, "#tk-state", "in_review")
     await page.until("document.querySelector('.tk-item[data-key=KA-1]').dataset.state === 'in_review'", "the state saved")
     results[f"{t}: the state select saves at once and the row moves section"] = 'PUT /api/tickets/KA-1 {"state": "in_review"}' in calls()
     await page.js("""(() => { const i = document.querySelector('input[aria-label="Add a label"]'); i.focus(); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'bug'); i.dispatchEvent(new Event('input', {bubbles: true})); })()""")

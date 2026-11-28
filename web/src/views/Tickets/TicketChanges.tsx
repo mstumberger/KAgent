@@ -5,6 +5,7 @@ import DiffView from "../../components/diff/DiffView";
 import type { Diff } from "../../components/diff/model";
 import { errorMessage, type Link, type Ticket } from "./api";
 import { rangeOf } from "./model";
+import Select from "../../settings/Select";
 
 interface Props {
   ticket: Ticket;
@@ -52,10 +53,10 @@ export default function TicketChanges({ ticket, onAddLink }: Props) {
       {diff && <DiffView diff={diff} label={`Changes of ${ticket.key}`} />}
       {!range && (
         <div className="tk-addlink">
-          <select aria-label="Link kind for the changes" value={kind} onChange={(e) => setKind(e.target.value as "range" | "commit")}>
+          <Select aria-label="Link kind for the changes" value={kind} onChange={(e) => setKind(e.target.value as "range" | "commit")}>
             <option value="range">Git range</option>
             <option value="commit">Commit</option>
-          </select>
+          </Select>
           <input
             type="text"
             aria-label="Range or commit to compare"

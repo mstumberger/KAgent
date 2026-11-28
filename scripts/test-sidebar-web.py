@@ -409,7 +409,7 @@ async def main():
             t = f"widget {theme}"
             await open_page(theme, query="?overlay")
             results[f"{t}: no header and no sidebar"] = await page.js("!document.querySelector('header') && !document.querySelector('aside.sidebar')")
-            results[f"{t}: the permission picker stays in the widget, as a select"] = await page.js("!!document.querySelector('.widget-top select[aria-label=\"Permission level\"]') && !document.querySelector('.sb-foot')")
+            results[f"{t}: the permission picker stays in the widget, as a dropdown"] = await page.js("!!document.querySelector('.widget-top .dd-trigger[aria-label=\"Permission level\"]') && !document.querySelector('.sb-foot')")
             results[f"{t}: a Sessions button in the top, before the hide button"] = await page.js("(() => { const b = [...document.querySelectorAll('.widget-top button')].map(x => x.getAttribute('aria-label')); return b.indexOf('Sessions') >= 0 && b.indexOf('Sessions') < b.indexOf('Hide to tray'); })()") or await page.js("!!document.querySelector('.widget-top [aria-label=Sessions]')")
             await page.shot(f"widget-{theme}")
             await page.js("document.querySelector('.widget-top [aria-label=Sessions]').click()")

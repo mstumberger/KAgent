@@ -2,6 +2,7 @@
 // open page on the right. Below 900 px the menu is a select at the top.
 import { useEffect } from "react";
 import Icon from "../components/Icon";
+import Dropdown from "./Dropdown";
 import { setSection, useStore } from "../store";
 import { GROUPS, REMEMBERED, SECTIONS, currentSection } from "./registry";
 import "./controls.css";
@@ -37,13 +38,13 @@ export default function SettingsPage() {
 
   return (
     <div className="settings" data-section={section.id}>
-      <select className="settings-jump" aria-label="Settings section" value={section.id} onChange={(e) => setSection(e.target.value)}>
-        {SECTIONS.map((x) => (
-          <option key={x.id} value={x.id}>
-            {x.title}
-          </option>
-        ))}
-      </select>
+      <Dropdown
+        className="settings-jump"
+        ariaLabel="Settings section"
+        value={section.id}
+        options={SECTIONS.map((x) => ({ value: x.id, label: x.title }))}
+        onChange={setSection}
+      />
       <nav className="settings-nav" aria-label="Settings sections">
         {groups.map((g) => (
           <div className="settings-nav-group" key={g}>

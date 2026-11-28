@@ -6,6 +6,7 @@ import { LimitBar } from "../../../components/UsageCard";
 import { count, resetText, usageOf, useUsage, type KnownLimit, type Totals } from "../../../usage";
 import { readUsage } from "../../../usageLine";
 import { useSettingPatch } from "../../useSettingPatch";
+import Select from "../../Select";
 
 const WINDOWS: KnownLimit["window"][] = ["minute", "day", "month"];
 const UNITS: KnownLimit["unit"][] = ["requests", "tokens"];
@@ -27,17 +28,17 @@ function KnownEditor({ providerId, saved }: { providerId: string; saved: KnownLi
       {rows.map((r, i) => (
         <div className="ub-known-row" key={i}>
           <input type="number" min={1} step={1} aria-label="Total" value={r.total} onChange={(e) => set(i, { total: e.target.value })} />
-          <select aria-label="Unit" value={r.unit} onChange={(e) => set(i, { unit: e.target.value as KnownLimit["unit"] })}>
+          <Select aria-label="Unit" value={r.unit} onChange={(e) => set(i, { unit: e.target.value as KnownLimit["unit"] })}>
             {UNITS.map((u) => (
               <option key={u}>{u}</option>
             ))}
-          </select>
+          </Select>
           <span>per</span>
-          <select aria-label="Window" value={r.window} onChange={(e) => set(i, { window: e.target.value as KnownLimit["window"] })}>
+          <Select aria-label="Window" value={r.window} onChange={(e) => set(i, { window: e.target.value as KnownLimit["window"] })}>
             {WINDOWS.map((w) => (
               <option key={w}>{w}</option>
             ))}
-          </select>
+          </Select>
           <button type="button" aria-label="Remove limit" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>
             Remove
           </button>

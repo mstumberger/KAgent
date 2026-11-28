@@ -7,6 +7,7 @@ import { Field, GroupCard, SectionPage } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import "../../views/tasks/tasks.css";
+import Select from "../Select";
 
 interface TasksSettings {
   onApproval?: "deny" | "wait";
@@ -46,10 +47,10 @@ export default function Tasks({ title, description }: SectionProps) {
     <SectionPage title={title} description={description}>
       <GroupCard title="Defaults of a new task" description="A task that does not choose these itself gets them. The form in the Tasks tab can set each one per task.">
         <Field label="A step that needs approval" hint="Skip it: the run goes on without it. Wait for me: the run waits for your answer until the time limit.">
-          <select aria-label="A step that needs approval" value={onApproval} disabled={!settings} onChange={(e) => setOnApproval(e.target.value as "deny" | "wait")}>
+          <Select aria-label="A step that needs approval" value={onApproval} disabled={!settings} onChange={(e) => setOnApproval(e.target.value as "deny" | "wait")}>
             <option value="deny">Skip it</option>
             <option value="wait">Wait for me</option>
-          </select>
+          </Select>
         </Field>
         <fieldset className="task-checks">
           <legend className="hint">Deliver the result to</legend>

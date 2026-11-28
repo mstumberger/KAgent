@@ -2,6 +2,7 @@
 // are `allow`, `ask` and `deny` (settings.toolOverrides); empty follows the mode.
 import type { ToolView } from "../../api";
 import { Badge, GroupCard, type BadgeTone } from "../ui";
+import Select from "../Select";
 
 const OVERRIDES: [string, string][] = [
   ["", "follows the mode"],
@@ -52,13 +53,13 @@ export default function ToolContracts({
                         </div>
                       </td>
                       <td>
-                        <select aria-label={`Override for ${c.name}`} value={overrides[c.name] ?? ""} onChange={(e) => onOverride(c.name, e.target.value)}>
+                        <Select aria-label={`Override for ${c.name}`} value={overrides[c.name] ?? ""} onChange={(e) => onOverride(c.name, e.target.value)}>
                           {OVERRIDES.map(([value, label]) => (
                             <option key={value} value={value}>
                               {label}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </td>
                       <td>{c.description.length > 120 ? `${c.description.slice(0, 120)}...` : c.description}</td>
                     </tr>

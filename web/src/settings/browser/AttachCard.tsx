@@ -6,6 +6,7 @@ import { Badge, Field, GroupCard, Row, type BadgeTone } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import { browserApi, INSTRUCTION_URL, type AttachStatus, type AttachTrust, type BrowserStatus } from "./api";
+import Select from "../Select";
 
 const TRUST: { id: AttachTrust; label: string; hint: string }[] = [
   { id: "strict", label: "Strict (asks every time)", hint: "In your own tabs, navigating, scrolling, clicks, typing and key presses show a card every time, in every mode, and nothing is remembered. Applies after a daemon restart." },
@@ -99,13 +100,13 @@ export function AttachCard() {
           </div>
         </form>
         <Row label="Trust level" hint={TRUST.find((t) => t.id === trust)?.hint}>
-          <select aria-label="Trust level" value={trust} onChange={(e) => void save("browser", { attachTrust: e.target.value as AttachTrust })}>
+          <Select aria-label="Trust level" value={trust} onChange={(e) => void save("browser", { attachTrust: e.target.value as AttachTrust })}>
             {TRUST.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
         <Row label="Connection" hint="Connect makes the browser ask: click Allow in its window. Without a call for ten minutes, KAgent disconnects.">
           <div className="row">

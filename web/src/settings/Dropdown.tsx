@@ -180,6 +180,7 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
         ref={trigger}
         type="button"
         id={id}
+        value={value}
         className="dd-trigger"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -216,6 +217,7 @@ export default function Dropdown({ ariaLabel, value, options, onChange, placehol
               key={optionId(i)}
               id={optionId(i)}
               role="option"
+              data-value={o.value}
               aria-selected={o.value === value}
               aria-disabled={o.disabled || undefined}
               className={`pop-item dd-option${i === cursor ? " cursor" : ""}${o.disabled ? " off" : ""}`}

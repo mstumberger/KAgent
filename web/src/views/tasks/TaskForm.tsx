@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useStore } from "../../store";
 import { errorMessage, moment, tasksApi, type Task, type TaskInput, type TaskKind } from "./api";
+import Select from "../../settings/Select";
 
 /** The presets: a chip fills the field with its words. Custom is on for any other text. */
 const PRESETS = [
@@ -116,10 +117,10 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
   return (
     <form className="card task-form" onSubmit={(e) => void add(e)}>
       <div className="task-form-row">
-        <select aria-label="Kind" value={form.kind} onChange={(e) => set("kind", e.target.value as TaskKind)}>
+        <Select aria-label="Kind" value={form.kind} onChange={(e) => set("kind", e.target.value as TaskKind)}>
           <option value="agent">KAgent does</option>
           <option value="remind">Remind me</option>
-        </select>
+        </Select>
         <input
           className="grow"
           aria-label="What"
@@ -184,17 +185,17 @@ export default function TaskForm({ onAdded, onError }: { onAdded: (tasks: Task[]
         <div className="task-policy">
           <label>
             Needs approval
-            <select aria-label="Needs approval" value={onApproval} onChange={(e) => set("onApproval", e.target.value as "deny" | "wait")}>
+            <Select aria-label="Needs approval" value={onApproval} onChange={(e) => set("onApproval", e.target.value as "deny" | "wait")}>
               <option value="deny">Skip it</option>
               <option value="wait">Wait for me</option>
-            </select>
+            </Select>
           </label>
           <label>
             Session
-            <select aria-label="Session" value={form.session} onChange={(e) => set("session", e.target.value as Draft["session"])}>
+            <Select aria-label="Session" value={form.session} onChange={(e) => set("session", e.target.value as Draft["session"])}>
               <option value="new">A new one for each run</option>
               <option value="reuse">One session for the task</option>
-            </select>
+            </Select>
           </label>
           <label title="A run that takes longer is cancelled with the status timeout">
             Time limit

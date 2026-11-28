@@ -8,7 +8,7 @@ Settings -> Models, the Usage block with the known-limit fields (their save), a 
 Dark and light, 1200x820 and 340x460. Screenshots go to /tmp/kagent-v003-chooser-shots/. Run from the repo root after a build of
 web/ (KAGENT_DIST=<dir> names a build elsewhere)."""
 import asyncio, json, sys
-from picker_web_lib import Env, report, setting_puts, usage_set
+from picker_web_lib import Env, dd_set, report, setting_puts, usage_set
 
 SHOTS = "/tmp/kagent-v003-chooser-shots"
 HASH_MODELS = "&view=settings&section=models"
@@ -155,7 +155,9 @@ async def settings_checks(env, results, theme, w, h):
     await page.js("[...document.querySelectorAll('.ub-known button')].find(b => b.textContent === 'Add limit').click()")
     await asyncio.sleep(0.2)
     results[f"{t}: Save is off for a new row with no total"] = await page.js("[...document.querySelectorAll('.ub-known button')].find(b => b.textContent === 'Save limits').disabled")
-    await page.js("""(() => { const rows = document.querySelectorAll('.ub-known-row'); const r = rows[rows.length - 1]; const set = (el, v) => { const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v); el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', {bubbles: true})); }; set(r.querySelector('[aria-label=Total]'), '2000000'); set(r.querySelector('[aria-label=Unit]'), 'tokens'); set(r.querySelector('[aria-label=Window]'), 'month'); })()""")
+    await page.js("""(() => { const rows = document.querySelectorAll('.ub-known-row'); const r = rows[rows.length - 1]; r.querySelector('[aria-label=Total]').id = 'new-total'; r.querySelector('[aria-label=Unit]').id = 'new-unit'; r.querySelector('[aria-label=Window]').id = 'new-window'; const el = r.querySelector('[aria-label=Total]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '2000000'); el.dispatchEvent(new Event('input', {bubbles: true})); })()""")
+    await dd_set(page, "#new-unit", "tokens")
+    await dd_set(page, "#new-window", "month")
     await asyncio.sleep(0.2)
     await page.shot(f"usage-block-{theme}-{w}x{h}")
     await page.js("[...document.querySelectorAll('.ub-known button')].find(b => b.textContent === 'Save limits').click()")

@@ -5,6 +5,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { MemoryDraft, MemoryType } from "./client";
 import { Field } from "../ui";
 import { TYPES, draftErrors } from "./shared";
+import Select from "../Select";
 
 interface Props {
   initial?: Partial<MemoryDraft>;
@@ -25,7 +26,7 @@ export default function MemoryEditor({ initial, editing = false, existing, busy,
   const [tried, setTried] = useState(false);
   const errors = tried ? draftErrors(draft, existing, editing) : {};
   const set = (field: "name" | "description" | "content") => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft((d) => ({ ...d, [field]: e.target.value }));
-  const setType = (e: ChangeEvent<HTMLSelectElement>) => setDraft((d) => ({ ...d, type: e.target.value as MemoryType }));
+  const setType = (e: { target: { value: string } }) => setDraft((d) => ({ ...d, type: e.target.value as MemoryType }));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,13 +61,13 @@ export default function MemoryEditor({ initial, editing = false, existing, busy,
         )}
       </Field>
       <Field label="Type" hint="Feedback is a correction: do this, not that, and why. It wins when two memories match a message equally well.">
-        <select value={draft.type} onChange={setType}>
+        <Select value={draft.type} onChange={setType}>
           {TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Content" hint="The fact itself, at most 4000 characters. No secrets: keys, passwords and tokens are refused.">
         <textarea className="mem-content-input" value={draft.content} aria-invalid={!!errors.content} onChange={set("content")} />

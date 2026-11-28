@@ -9,6 +9,7 @@ import Detail from "./Detail";
 import List from "./List";
 import { MODES, STATE_LABEL, addTarget, inProject, isMine, matches, readMode, storeMode, type Filters, type Mode } from "./model";
 import "./tickets.css";
+import Select from "../../settings/Select";
 
 interface KnownProject {
   path: string;
@@ -147,17 +148,17 @@ export default function Tickets() {
           </button>
         </div>
         <div className="tk-filters">
-          <select aria-label="Project" value={filters.project} onChange={(e) => setFilters({ ...filters, project: e.target.value })}>
+          <Select aria-label="Project" value={filters.project} onChange={(e) => setFilters({ ...filters, project: e.target.value })}>
             {projects.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
-          </select>
-          <select aria-label="Label" value={filters.label} onChange={(e) => setFilters({ ...filters, label: e.target.value })}>
+          </Select>
+          <Select aria-label="Label" value={filters.label} onChange={(e) => setFilters({ ...filters, label: e.target.value })}>
             <option value="">All labels</option>
             {labels.map((l) => (
               <option key={l} value={l}>{l}</option>
             ))}
-          </select>
+          </Select>
           <input type="search" placeholder="Filter tickets" aria-label="Filter tickets" value={filters.text} onChange={(e) => setFilters({ ...filters, text: e.target.value })} />
         </div>
         {adding && (

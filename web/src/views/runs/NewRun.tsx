@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { useStore } from "../../store";
 import { errorMessage, runsApi, type NewRun, type Run, type WorkflowInfo } from "./api";
+import Select from "../../settings/Select";
 
 interface Props {
   projects: string[];
@@ -71,11 +72,11 @@ export default function NewRunForm({ projects, onStarted, onCancel }: Props) {
       <h2>New run</h2>
       <label>
         <span>Workflow</span>
-        <select value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
+        <Select value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
           {workflows.map((w) => (
             <option key={w.name} value={w.name}>{w.name}</option>
           ))}
-        </select>
+        </Select>
       </label>
       {info && <p className="rn-none">{info.description}</p>}
       {info && (
@@ -91,12 +92,12 @@ export default function NewRunForm({ projects, onStarted, onCancel }: Props) {
       )}
       <label>
         <span>Project</span>
-        <select value={project} onChange={(e) => setProject(e.target.value)}>
+        <Select value={project} onChange={(e) => setProject(e.target.value)}>
           {options.length === 0 && <option value="">No project known</option>}
           {options.map((p) => (
             <option key={p} value={p}>{p.split("/").filter(Boolean).pop() ?? p} ({p})</option>
           ))}
-        </select>
+        </Select>
       </label>
       <label>
         <span>Goal</span>

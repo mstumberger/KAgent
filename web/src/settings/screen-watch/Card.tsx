@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { setSection, showView, useStore } from "../../store";
 import { GroupCard, Row, Toggle } from "../ui";
 import { useSettingPatch } from "../useSettingPatch";
+import Select from "../Select";
 
 interface ModelView {
   model: string | null;
@@ -66,22 +67,22 @@ export default function ScreenWatchCard() {
         </div>
       </Row>
       <Row label="Default length" hint="How long a watch lasts when you do not say. At most 2 hours.">
-        <select aria-label="Default length" value={minutes} onChange={(e) => put({ defaultMinutes: Number(e.target.value) })}>
+        <Select aria-label="Default length" value={minutes} onChange={(e) => put({ defaultMinutes: Number(e.target.value) })}>
           {withValue(MINUTES, minutes).map((m) => (
             <option key={m} value={m}>
               {m < 60 ? `${m} minutes` : `${m / 60} hour${m > 60 ? "s" : ""}`}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row label="Look every" hint="Seconds between looks. KAgent slows down when the model is slow.">
-        <select aria-label="Look every" value={every} onChange={(e) => put({ everySec: Number(e.target.value) })}>
+        <Select aria-label="Look every" value={every} onChange={(e) => put({ everySec: Number(e.target.value) })}>
           {withValue(EVERY, every).map((s) => (
             <option key={s} value={s}>
               {s} seconds
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row label="Confirm a hit with the cloud model" hint="When the local model says the goal is met, one frame goes to your cloud vision model to check. Off: nothing ever leaves this machine.">
         <Toggle title="Confirm a hit with the cloud model" checked={cfg.cloudConfirm ?? false} onChange={(v) => put({ cloudConfirm: v })} />

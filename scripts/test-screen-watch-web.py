@@ -8,7 +8,7 @@ widget shows it too; the card on the Desktop and apps page names the model, save
 light at 1200x820 and 340x460; screenshots go to /tmp/kagent-s48-shots/. Run from the repo root after a build of the current tree
 (KAGENT_DIST=<dir> names a build elsewhere, so the owner's web/dist is left alone)."""
 import asyncio, datetime, json, sys
-from picker_web_lib import Env, calls, report, watch
+from picker_web_lib import Env, calls, dd_set, report, watch
 
 SHOTS = "/tmp/kagent-s48-shots"
 
@@ -163,10 +163,10 @@ async def main():
         await page.js("document.querySelector('[aria-label=\"Also tell me on Telegram\"]').click()")
         await page.until("document.querySelector('[aria-label=\"Also tell me on Telegram\"]').checked", "telegram on")
         results["the Telegram switch saves screenWatch.telegram"] = 'PUT /api/settings {"screenWatch": {"telegram": true}}' in calls()
-        await page.js("(() => { const s = document.querySelector('[aria-label=\"Default length\"]'); s.value = '60'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        await dd_set(page, ".dd-trigger[aria-label=\"Default length\"]", "60")
         await page.until("document.querySelector('[aria-label=\"Default length\"]').value === '60'", "length saved")
         results["the length saves screenWatch.defaultMinutes"] = 'PUT /api/settings {"screenWatch": {"defaultMinutes": 60}}' in calls()
-        await page.js("(() => { const s = document.querySelector('[aria-label=\"Look every\"]'); s.value = '30'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        await dd_set(page, ".dd-trigger[aria-label=\"Look every\"]", "30")
         await page.until("document.querySelector('[aria-label=\"Look every\"]').value === '30'", "interval saved")
         results["the interval saves screenWatch.everySec"] = 'PUT /api/settings {"screenWatch": {"everySec": 30}}' in calls()
 

@@ -5,6 +5,7 @@ import { Field, GroupCard, Row, SectionPage } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import ScreenWatchCard from "../screen-watch/Card";
+import Select from "../Select";
 
 const EDITORS: [string, string][] = [
   ["auto", "Auto (the project's own, then the first installed)"],
@@ -31,7 +32,7 @@ export default function Desktop({ title, description }: SectionProps) {
     <SectionPage title={title} description={description}>
       <GroupCard title="Editor" description="The editor that opens when you ask to see code.">
         <Row label="Editor">
-          <select
+          <Select
             aria-label="Editor"
             value={settings?.desktop?.editor || "auto"}
             onChange={(e) => void save("desktop", { editor: e.target.value === "auto" ? "" : e.target.value })}
@@ -41,7 +42,7 @@ export default function Desktop({ title, description }: SectionProps) {
                 {name}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
       </GroupCard>
 
