@@ -142,3 +142,8 @@ first three are done first.
   OpenCode's own client and are shown as such, not worked around.
   OpenRouter (already in the catalog) gets the same treatment: models, prices and
   free models from its own list, and its key's credit and limit on the Usage card.
+- [ ] A browser extension (Brave, Chrome): right click on a selection, a link, an
+  image or the page, or pick a block of the page, and send it to KAgent as a ticket
+  with its URL, as the start of a conversation, or as a memory to review. It pairs
+  with its own narrow key (it can only capture), talks to this machine only, and what
+  it captures is page content for the model, never an instruction.
