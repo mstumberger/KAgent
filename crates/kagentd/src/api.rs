@@ -17,7 +17,9 @@ use kagent_core::tools;
 use crate::server::{bad_request, not_found, ApiResult, HttpError};
 use crate::AppState;
 
+mod images;
 mod providers;
+pub use images::{get_image, post_image, UPLOAD_BODY_BYTES};
 pub use providers::{
     add_provider, delete_provider, fetch_models, list_models, list_providers, provider_order, provider_templates, test_provider, update_provider,
 };
@@ -143,19 +145,19 @@ pub async fn post_message(
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> ApiResult<Response> {
-    let text = body
-        .get("text")
-        .and_then(Value::as_str)
-        .filter(|t| !t.trim().is_empty())
-        .ok_or_else(|| bad_request("text required"))?
-        .to_string();
+    // Text, images or both (vision.md section 1): images alone are a message.
+    let image_ids = images::image_ids(&body)?;
+    let text = body.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+    if text.trim().is_empty() && image_ids.is_empty() {
+        return Err(bad_request("text required (or images: [id])"));
+    }
     let via = match body.get("via").and_then(Value::as_str) {
         Some("voice") => Via::Voice,
         _ => Via::Text,
     };
     // `/plan <request>` starts the turn in plan mode and loses the prefix (plan-todo.md section 2).
     let (text, plan) = crate::plan_api::split_plan(text, body.get("plan").and_then(Value::as_bool));
-    if text.trim().is_empty() {
+    if text.trim().is_empty() && image_ids.is_empty() {
         return Err(bad_request("text required"));
     }
     st.calendar.hear(&text);
@@ -166,6 +168,7 @@ pub async fn post_message(
     // A message that starts with `/<skill>` gives its turn that skill's body (skills.md section 6).
     let mut opts = st.skills.turn_opts(&text);
     opts.plan = plan;
+    opts.images = images::message_images(st.agent.store(), &id, &image_ids).await?;
     let outcome = st.agent.send_with(&id, text, via, opts).await.map_err(internal)?;
     let body = match outcome {
         SendOutcome::Started { turn_id, .. } => json!({"status": "started", "turnId": turn_id}),

@@ -100,6 +100,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions", get(api::list_sessions).post(api::create_session))
         .route("/sessions/{id}", get(api::get_session).delete(api::delete_session))
         .route("/sessions/{id}/messages", post(api::post_message))
+        .route("/sessions/{id}/images", post(api::post_image).layer(axum::extract::DefaultBodyLimit::max(api::UPLOAD_BODY_BYTES)))
+        .route("/sessions/{id}/images/{image_id}", get(api::get_image))
         .route("/sessions/{id}/cancel", post(api::cancel_session))
         .route("/sessions/{id}/compact", post(crate::compact_api::compact_session))
         .route("/sessions/{id}/todo", put(crate::todo_api::put_todo))
