@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import Approvals from "../components/Approvals";
 import PermissionPicker from "../components/PermissionPicker";
 import Icon from "../components/Icon";
+import WatchChip from "../components/WatchChip";
 import { ModelBody } from "../components/ModelMenu";
 import { useChoice } from "../components/useChoice";
 import Sheet from "../components/Sheet";
@@ -118,6 +119,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
       {(onExpand || onHide) && (
         <div className="widget-top" onPointerDown={startDrag} title="Drag to move">
           <span className="widget-name">{name}</span>
+          <WatchChip compact />
           <PermissionPicker compact />
           <button className="wicon" title="Sessions" aria-label="Sessions" onClick={() => openSheet("sessions")}>
             <Icon name="sidebar" size={14} />

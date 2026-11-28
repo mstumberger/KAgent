@@ -11,6 +11,7 @@ import Icon from "./components/Icon";
 import ResizeEdges from "./components/ResizeEdges";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Toasts from "./components/Toasts";
+import WatchChip from "./components/WatchChip";
 import SidePane from "./components/work/SidePane";
 import { usePane } from "./components/work/state";
 import { voice } from "./voice/controller";
@@ -154,6 +155,7 @@ export default function App() {
             Stop all
           </button>
         )}
+        <WatchChip />
         <VoiceChip />
         {isApp && (
           <div className="win-controls" role="group" aria-label="Window">

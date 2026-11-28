@@ -4,6 +4,7 @@ import type { SectionProps } from "../registry";
 import { Field, GroupCard, Row, SectionPage } from "../ui";
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
+import ScreenWatchCard from "../screen-watch/Card";
 
 const EDITORS: [string, string][] = [
   ["auto", "Auto (the project's own, then the first installed)"],
@@ -54,6 +55,8 @@ export default function Desktop({ title, description }: SectionProps) {
           </button>
         </div>
       </GroupCard>
+
+      <ScreenWatchCard />
     </SectionPage>
   );
 }

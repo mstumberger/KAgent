@@ -3,6 +3,7 @@
 import { api, initialSection, initialSession, initialView, type StateView } from "./api";
 import { events, type AgentEvent } from "./events";
 import { notify, pushNotice } from "./components/toasts";
+import { refreshWatch } from "./screenWatch";
 import { onBackgroundTask } from "./components/work/state";
 import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState, showView } from "./store";
 
@@ -91,6 +92,10 @@ export function handleEvent(ev: AgentEvent) {
       if (getStore().state && ev.settings && typeof ev.settings === "object") applySettings(ev.settings as StateView["settings"]);
       else void refreshState();
       break;
+    case "screenWatchChanged":
+      // Only the daemon says whether a watch runs: any state but `watching` is the end.
+      set({ watch: ev.watch && ev.watch.state === "watching" ? ev.watch : null });
+      break;
     case "notice":
       pushNotice(ev);
       break;
@@ -114,6 +119,7 @@ export function init() {
   events.on(handleEvent);
   events.start(api.wsUrl);
   void refreshState();
+  void refreshWatch();
   void refreshSkills();
   void refreshModels(true);
   void refreshSessions().then(() => {
