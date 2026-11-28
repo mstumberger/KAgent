@@ -96,7 +96,7 @@ async fn a_provider_that_cannot_be_reached_falls_back_with_the_class_down() {
 #[tokio::test]
 async fn an_error_of_the_class_other_and_a_break_in_the_answer_stay_without_fallback() {
     for error in ["something odd happened", "error decoding response body: operation timed out"] {
-        let mut r = rig_of(vec![Err(error.into()), ok()]).await;
+        let r = rig_of(vec![Err(error.into()), ok()]).await;
         let SendOutcome::Started { handle, .. } = r.agent.send(&r.session, "hi".into(), Default::default()).await.unwrap() else { panic!("a turn starts") };
         assert_eq!(handle.wait().await.status, TurnStatus::Failed, "{error}");
         assert_eq!(r.model.model_refs.lock().unwrap().len(), 1, "{error}: no fallback");
