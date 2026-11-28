@@ -34,7 +34,24 @@ export const INFO_MS = 6000;
 /** How many toasts are shown before the rest fold into "N more". */
 export const SHOWN = 4;
 
+/** One line of the Activity section (work-windows.md section 5.2): the last notices, kept for the page's life. */
+export interface ActivityEntry {
+  id: number;
+  key: string | null;
+  level: string;
+  kind: NoticeKind;
+  text: string;
+  count: number;
+  at: number;
+  /** `null` for the page's own notices: they are listed in every conversation. */
+  sessionId: string | null;
+}
+
+/** How many notices of a conversation the Activity section keeps. */
+export const ACTIVITY_MAX = 20;
+
 let toasts: Toast[] = [];
+let activity: ActivityEntry[] = [];
 let next = 1;
 /** The keys of the error toasts said aloud in the live session already. */
 const said = new Set<string>();
@@ -43,6 +60,30 @@ const listeners = new Set<() => void>();
 function set(list: Toast[]) {
   toasts = list;
   listeners.forEach((l) => l());
+}
+
+/** A notice goes in the log whatever happens to its toast; the same key and kind in a row is one entry with a count. */
+function record(n: Notice, kind: NoticeKind, key: string | null, at: number) {
+  const sessionId = n.sessionId ?? null;
+  const same = key ? activity.find((a) => a.key === key && a.kind === kind && a.sessionId === sessionId) : undefined;
+  let list: ActivityEntry[];
+  if (same) {
+    list = [{ ...same, count: same.count + 1, text: n.text, at }, ...activity.filter((a) => a !== same)];
+  } else {
+    list = [{ id: next++, key, level: n.level ?? "info", kind, text: n.text, count: 1, at, sessionId }, ...activity];
+  }
+  // At most 20 per conversation, so a chatty one does not push out another's.
+  const seen = new Map<string | null, number>();
+  activity = list.filter((a) => {
+    const c = (seen.get(a.sessionId) ?? 0) + 1;
+    seen.set(a.sessionId, c);
+    return c <= ACTIVITY_MAX;
+  });
+}
+
+/** The last notices of a conversation, newest first, with the page's own ones (no session). */
+export function activityOf(sessionId: string | null): ActivityEntry[] {
+  return activity.filter((a) => a.sessionId === null || a.sessionId === sessionId).slice(0, ACTIVITY_MAX);
 }
 
 /** `error` and `warn` are `error`, `info` is `info`, unless the notice says its kind. */
@@ -55,6 +96,7 @@ export function pushNotice(n: Notice) {
   const kind = kindOf(n);
   const key = n.key || null;
   const at = Date.now();
+  record(n, kind, key, at);
   // A recovery closes the open error toast of its key, then shows itself.
   let list = kind === "recovery" && key ? toasts.filter((t) => !(t.key === key && t.kind === "error")) : toasts;
   const same = key ? list.find((t) => t.key === key && t.kind === kind) : undefined;
@@ -90,6 +132,23 @@ export function getToasts(): Toast[] {
   return toasts;
 }
 
+export function getActivity(): ActivityEntry[] {
+  return activity;
+}
+
+/** The log as it is now; it changes (a new array) with each notice. */
+export function useActivity(): ActivityEntry[] {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+    getActivity,
+  );
+}
+
 export function useToasts(): Toast[] {
   return useSyncExternalStore(
     (l) => {
@@ -100,4 +159,10 @@ export function useToasts(): Toast[] {
     },
     getToasts,
   );
+}
+
+/** How many notices the conversation has in the log. */
+export function useActivityCount(sessionId: string | null): number {
+  useActivity();
+  return activityOf(sessionId).length;
 }

@@ -12,6 +12,7 @@ import { ModelBody } from "../components/ModelMenu";
 import { useChoice } from "../components/useChoice";
 import Sheet from "../components/Sheet";
 import { Capsule, WorkSections } from "../components/WorkPanel";
+import { useActivityCount } from "../components/toasts";
 import { hasWork, useCounts } from "../components/work/counts";
 import { loadTasks } from "../components/work/state";
 import { SidebarBody } from "../components/Sidebar";
@@ -110,6 +111,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
   const pct = Math.round(v.volume * 100);
   // What goes on in the open session (work-windows.md section 5.6): the capsule above the bar opens the sheet "Work".
   const counts = useCounts(s.activeSession);
+  const notices = useActivityCount(s.activeSession);
   useEffect(() => {
     if (s.activeSession) void loadTasks(s.activeSession);
   }, [s.activeSession, s.sheet]);
@@ -166,9 +168,9 @@ export default function Overlay({ onExpand, onHide }: Props) {
         </div>
       )}
 
-      {s.activeSession && hasWork(counts) && (
+      {s.activeSession && (hasWork(counts) || notices > 0) && (
         <div className="widget-work">
-          <Capsule counts={counts} className="small" onClick={() => openSheet("work")} />
+          <Capsule counts={counts} notices={notices} className="small" onClick={() => openSheet("work")} />
         </div>
       )}
 
