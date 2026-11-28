@@ -11,6 +11,7 @@ import type { ChildView } from "../../settings/subagents/api";
 import { errorMessage, runsApi, type Run, type RunRow } from "./api";
 import ChangesTab from "./ChangesTab";
 import { groupRuns, runWord, stateLine, workerOfTask } from "./model";
+import NewRunForm from "./NewRun";
 import Overview from "./Overview";
 import PlanTab from "./PlanTab";
 import Side from "./Side";
@@ -39,7 +40,7 @@ export default function Runs() {
   const [task, setTask] = useState<string | null>(null);
   const [tabs, setTabs] = useState<Tab[]>(BASE);
   const [active, setActive] = useState("overview");
-  
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const selectedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -87,6 +88,7 @@ export default function Runs() {
     setSelected(id);
     selectedRef.current = id;
     setTask(null);
+    setCreating(false);
     setRun((r) => (r?.id === id ? r : null));
     const row = rows.find((x) => x.id === id);
     setTabs(BASE);
@@ -133,18 +135,29 @@ export default function Runs() {
   };
 
   return (
-    <div className={`runs${selected ? " has-run" : ""}`}>
+    <div className={`runs${selected || creating ? " has-run" : ""}`}>
       <div className="rn-left">
         <div className="rn-head">
           <h2>Runs</h2>
+          <button type="button" className="primary" onClick={() => setCreating(true)}>New run</button>
         </div>
         {loaded && <Tree groups={groups} run={run} selectedRun={selected} selectedTask={task} onRun={open} onTask={pickTask} />}
       </div>
       <div className="rn-centre">
-        <button type="button" className="rn-back" onClick={() => { setSelected(null); setRun(null); }}>
+        <button type="button" className="rn-back" onClick={() => { setSelected(null); setCreating(false); setRun(null); }}>
           <Icon name="chevron" size={12} /> Back to runs
         </button>
-        {!selected ? (
+        {creating ? (
+          <NewRunForm
+            projects={[...new Set(rows.map((r) => r.project))]}
+            onCancel={() => setCreating(false)}
+            onStarted={(r) => {
+              setCreating(false);
+              setRows((x) => [{ id: r.id, title: r.title, workflow: r.workflow, project: r.project, state: r.state, reason: r.reason, done: 0, total: r.tasks.length, needsOwner: false, ticket: r.ticket, createdAt: r.createdAt, updatedAt: r.updatedAt }, ...x.filter((y) => y.id !== r.id)]);
+              open(r.id);
+            }}
+          />
+        ) : !selected ? (
           <div className="rn-empty">
             <h2>No run open</h2>
             <p className="rn-none">Open a run on the left, or start one with New run.</p>
@@ -173,14 +186,14 @@ export default function Runs() {
             </div>
             <div className="rn-panel" id="rn-panel" role="tabpanel" aria-labelledby={`rn-tab-${tab.key}`}>
               {tab.kind === "overview" && <Overview run={run} onError={setError} onChanged={changed} />}
-              {tab.kind === "plan" && <PlanTab run={run} onOpenWorker={openWorker} onOpenChanges={(t) => openTab({ key: `changes:${t}`, label: `Changes ${t}`, kind: "changes", task: t })} />}
+              {tab.kind === "plan" && <PlanTab run={run} onChanged={changed} onOpenWorker={openWorker} onOpenChanges={(t) => openTab({ key: `changes:${t}`, label: `Changes ${t}`, kind: "changes", task: t })} onError={setError} />}
               {tab.kind === "worker" && <SubagentPane key={tab.session} tab={sideTab(tab)} />}
               {tab.kind === "changes" && tab.task && <ChangesTab runId={run.id} task={tab.task} stamp={run.updatedAt} />}
             </div>
           </>
         )}
       </div>
-      {run && selected && <Side run={run} task={task} onOpenWorker={openWorker} />}
+      {run && selected && !creating && <Side run={run} task={task} onOpenWorker={openWorker} />}
     </div>
   );
 }

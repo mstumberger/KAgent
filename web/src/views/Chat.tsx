@@ -127,7 +127,7 @@ export default function Chat() {
           {!s.activeSession && <div className="empty">Create a session to start.</div>}
           {messages.map((m, i) => (
             <Fragment key={i}>
-              <Bubble m={m} sessionId={s.activeSession} streaming={i === messages.length - 1 && running ? streaming : undefined} />
+              <Bubble m={m} sessionId={s.activeSession} />
               {(placed.under.get(i) ?? []).map((card) => (
                 <AgentsCard key={card.id} child={card} parentId={parentId} />
               ))}
@@ -136,7 +136,9 @@ export default function Chat() {
           {placed.loose.map((card) => (
             <AgentsCard key={card.id} child={card} parentId={parentId} />
           ))}
-          {running && streaming && messages[messages.length - 1]?.role === "user" && (
+          {/* The answer being written is a bubble of its own, after everything stored. It was once also handed to the
+              last stored message: the owner's question went blank and the answer filled into it. */}
+          {running && streaming && (
             <Bubble m={{ role: "assistant", content: "" }} streaming={streaming} thinking={s.activeSession ? s.reasoning[s.activeSession] : undefined} />
           )}
           {talking &&
