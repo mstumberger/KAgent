@@ -61,7 +61,7 @@ fn render_says_how_a_child_is_and_what_it_answered() {
 #[test]
 fn a_subagent_has_its_groups_read_only_and_no_tools_over_subagents() {
     // A profile with groups keeps its tools and loses the tools over subagents.
-    let groups = Restriction { groups: Some(vec!["system".into(), "agent".into()]), read_only: false, child: true };
+    let groups = Restriction { groups: Some(vec!["system".into(), "agent".into()]), read_only: false, child: true, worker: false };
     for tool in ["system_info", "todo_write", "plan_exit", "task_output"] {
         assert!(groups.allows(tool), "{tool} is in its groups");
     }

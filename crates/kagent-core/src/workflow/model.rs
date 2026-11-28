@@ -326,6 +326,9 @@ pub struct Run {
     /// The planner's session, while the plan can still be sent back.
     #[serde(default)]
     pub planner_session: Option<String>,
+    /// What the owner said when he rejected the plan, for the planner.
+    #[serde(default)]
+    pub feedback: Option<String>,
     /// Plans the owner rejected.
     #[serde(default)]
     pub rejections: u32,

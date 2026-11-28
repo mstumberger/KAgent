@@ -28,6 +28,8 @@ pub enum SessionOrigin {
     Telegram,
     /// A subagent's own session; not in the session list unless its parent is asked for.
     Subagent,
+    /// The session a workflow run's workers are children of (workflows.md); not in the session list.
+    Run,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -138,7 +140,7 @@ impl SessionStore {
     pub fn visible(metas: Vec<SessionMeta>, parent: Option<&str>) -> Vec<SessionMeta> {
         match parent {
             Some(id) => metas.into_iter().filter(|m| m.parent.as_deref() == Some(id)).collect(),
-            None => metas.into_iter().filter(|m| m.origin != SessionOrigin::Subagent).collect(),
+            None => metas.into_iter().filter(|m| !matches!(m.origin, SessionOrigin::Subagent | SessionOrigin::Run)).collect(),
         }
     }
 
