@@ -1,10 +1,10 @@
 // Plan mode (plan-todo.md section 2): the card of a plan the agent wants approved, in the
-// approvals area of Chat, Voice and the overlay; and the "planning" chip above the composer.
+// approvals area of Chat, Voice and the overlay. (The state of plan mode and Cancel plan are in the work panel.)
 import { useState } from "react";
 import "./plan.css";
 import type { ApprovalRequest } from "../api";
 import Markdown from "./Markdown";
-import { decideApproval, setPlan, useStore } from "../store";
+import { decideApproval } from "../store";
 
 /** Title "Plan", the plan as Markdown, Approve, and Reject with a reason field (sent as `reason`). */
 export default function PlanCard({ request }: { request: ApprovalRequest }) {
@@ -39,31 +39,5 @@ export default function PlanCard({ request }: { request: ApprovalRequest }) {
         </button>
       </div>
     </section>
-  );
-}
-
-/** The chip of a session in plan mode, with Cancel plan: `POST /api/sessions/:id/plan {active: false}`. Nothing while the session is not planning. */
-export function PlanChip({ sessionId }: { sessionId: string | null }) {
-  const s = useStore();
-  const [busy, setBusy] = useState(false);
-  if (!sessionId || !s.planning[sessionId]) return null;
-  const cancel = async () => {
-    setBusy(true);
-    try {
-      await setPlan(sessionId, false);
-    } catch {
-      // The store shows why, as a notice in the header.
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="plan-chip-row" role="status" aria-label="Plan mode">
-      <span className="plan-chip">planning</span>
-      <span className="plan-chip-note">Nothing changes until you approve the plan.</span>
-      <button type="button" className="plan-cancel" disabled={busy} onClick={() => void cancel()}>
-        Cancel plan
-      </button>
-    </div>
   );
 }

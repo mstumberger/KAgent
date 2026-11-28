@@ -10,6 +10,7 @@ import { voice } from "./voice/controller";
 import { resolveView, type View } from "./nav";
 import * as picker from "./picker";
 import { notify } from "./components/toasts";
+import { forgetSession } from "./components/work/state";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
 
 export interface Store {
@@ -43,7 +44,7 @@ export interface Store {
   /** The models a conversation may choose (picker.md section 5.6); `null` until the first read. */
   models: picker.PickerModel[] | null;
   /** The widget's one open sheet (picker.md section 5.5, sidebar.md section 5.8); S43 adds its own. */
-  sheet: "models" | "sessions" | null;
+  sheet: "models" | "sessions" | "work" | null;
   /** The sidebar (sidebar.md section 5): a rail or expanded, the drawer of a narrow window, the list it shows and the folders it closed. */
   sidebarCollapsed: boolean;
   sidebarDrawer: boolean;
@@ -197,6 +198,7 @@ export async function deleteSession(id: string) {
   const sessions = store.sessions.filter((s) => s.id !== id);
   // The daemon deleted the subagents of the session with it (agents.md section 2).
   const without = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id));
+  forgetSession(id);
   patch({ sessions, children: without(store.children), metas: without(store.metas), activeSession: store.activeSession === id ? (sessions[0]?.id ?? null) : store.activeSession });
   if (store.activeSession) void openSession(store.activeSession);
 }

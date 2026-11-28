@@ -14,11 +14,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::process::Command;
 
 mod shutdown;
+mod views;
+
+pub use views::{BackgroundTaskView, TaskEventSink};
 
 use super::exec::kill_group;
 
@@ -99,6 +103,8 @@ pub type Sink = Arc<dyn Fn(String, String) + Send + Sync>;
 struct State {
     status: TaskStatus,
     started: Instant,
+    /// When it ended (or was stopped): the time of an ended task stops counting.
+    ended: Option<Instant>,
     pid: Option<u32>,
     exit_code: Option<i32>,
     /// The task holds one of the `MAX_RUNNING` slots.
@@ -117,6 +123,8 @@ impl Inner {
 struct Task {
     id: String,
     session: String,
+    command: String,
+    started_at: DateTime<Utc>,
     file: PathBuf,
     /// Opened for appending: a cut back to the cap leaves it at the end.
     out: tokio::sync::Mutex<tokio::fs::File>,
@@ -170,6 +178,8 @@ async fn cut_back(file: &mut tokio::fs::File, path: &Path) -> std::io::Result<()
 struct Inner {
     dir: Mutex<Option<PathBuf>>,
     sink: Mutex<Option<Sink>>,
+    /// Told of every change of status (`set_event_sink`).
+    events: Mutex<Option<TaskEventSink>>,
     tasks: Mutex<HashMap<String, Arc<Task>>>,
     /// Ended tasks, oldest first: the memory of them is kept to the latest `KEPT_ENDED`.
     ended: Mutex<VecDeque<String>>,
@@ -184,13 +194,13 @@ pub struct Background(Arc<Inner>);
 impl Background {
     /// A registry of its own, writing into `dir` (tests).
     pub fn new(dir: impl Into<PathBuf>) -> Self {
-        Self(Arc::new(Inner { dir: Mutex::new(Some(dir.into())), sink: Mutex::new(None), tasks: Mutex::new(HashMap::new()), ended: Mutex::new(VecDeque::new()), running: AtomicUsize::new(0) }))
+        Self(Arc::new(Inner { dir: Mutex::new(Some(dir.into())), sink: Mutex::new(None), events: Mutex::new(None), tasks: Mutex::new(HashMap::new()), ended: Mutex::new(VecDeque::new()), running: AtomicUsize::new(0) }))
     }
 
     /// The registry the daemon's `shell` tool uses.
     pub fn shared() -> Self {
         static SHARED: OnceLock<Background> = OnceLock::new();
-        SHARED.get_or_init(|| Self(Arc::new(Inner { dir: Mutex::new(None), sink: Mutex::new(None), tasks: Mutex::new(HashMap::new()), ended: Mutex::new(VecDeque::new()), running: AtomicUsize::new(0) }))).clone()
+        SHARED.get_or_init(|| Self(Arc::new(Inner { dir: Mutex::new(None), sink: Mutex::new(None), events: Mutex::new(None), tasks: Mutex::new(HashMap::new()), ended: Mutex::new(VecDeque::new()), running: AtomicUsize::new(0) }))).clone()
     }
 
     /// Where the output files go (`<data>/task-out`), and who tells a session that a task
@@ -220,6 +230,7 @@ impl Background {
         };
         let info = task.info(&task.state.lock().unwrap());
         self.0.tasks.lock().unwrap().insert(task.id.clone(), task.clone());
+        self.emit(&task, TaskStatus::Running);
         let sink = self.0.sink.lock().unwrap().clone();
         let inner = self.0.clone();
         tokio::spawn(async move { supervise(inner, task, child, sink).await });
@@ -247,17 +258,21 @@ impl Background {
     /// `task_stop`: TERM to the process group, KILL after 2 s. False when it is not running.
     pub fn stop(&self, id: &str) -> bool {
         let Some(task) = self.0.tasks.lock().unwrap().get(id).cloned() else { return false };
-        let mut state = task.state.lock().unwrap();
-        if state.status != TaskStatus::Running {
-            return false;
+        {
+            let mut state = task.state.lock().unwrap();
+            if state.status != TaskStatus::Running {
+                return false;
+            }
+            state.status = TaskStatus::Killed;
+            state.ended = Some(Instant::now());
+            if let Some(pid) = state.pid.take() {
+                // The path of a cancelled tool call (S6): TERM, then KILL after 2 s.
+                kill_group(pid, "TERM");
+            }
+            // Stopped: its slot is free at once, whatever its pipes still do.
+            self.0.release(&mut state);
         }
-        state.status = TaskStatus::Killed;
-        if let Some(pid) = state.pid.take() {
-            // The path of a cancelled tool call (S6): TERM, then KILL after 2 s.
-            kill_group(pid, "TERM");
-        }
-        // Stopped: its slot is free at once, whatever its pipes still do.
-        self.0.release(&mut state);
+        self.emit(&task, TaskStatus::Killed);
         true
     }
 
@@ -302,9 +317,11 @@ async fn spawn(dir: &Path, session: &str, command: &str, cwd: Option<String>) ->
     let task = Arc::new(Task {
         id,
         session: session.to_string(),
+        command: command.to_string(),
+        started_at: Utc::now(),
         file,
         out: tokio::sync::Mutex::new(out),
-        state: Mutex::new(State { status: TaskStatus::Running, started: Instant::now(), pid: child.id(), exit_code: None, counted: true }),
+        state: Mutex::new(State { status: TaskStatus::Running, started: Instant::now(), ended: None, pid: child.id(), exit_code: None, counted: true }),
     });
     Ok((task, child))
 }
@@ -351,15 +368,18 @@ async fn supervise(inner: Arc<Inner>, task: Arc<Task>, mut child: tokio::process
         }
     }
     let code = status.and_then(|s| s.code());
-    let info = {
+    // A stop said it already (killed); any other end is said below, before the notification.
+    let (info, said) = {
         let mut state = task.state.lock().unwrap();
         state.pid = None;
         state.exit_code = code;
-        if state.status == TaskStatus::Running {
+        let said = state.status != TaskStatus::Running;
+        if !said {
             state.status = if code == Some(0) { TaskStatus::Done } else { TaskStatus::Failed };
+            state.ended = Some(Instant::now());
         }
         inner.release(&mut state);
-        task.info(&state)
+        (task.info(&state), said)
     };
     {
         let mut ended = inner.ended.lock().unwrap();
@@ -369,6 +389,9 @@ async fn supervise(inner: Arc<Inner>, task: Arc<Task>, mut child: tokio::process
                 inner.tasks.lock().unwrap().remove(&old);
             }
         }
+    }
+    if !said {
+        inner.emit(&task, info.status);
     }
     // A killed task tells nobody: it was stopped on purpose, as a cancelled subagent.
     if info.status != TaskStatus::Killed {

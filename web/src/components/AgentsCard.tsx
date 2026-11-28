@@ -1,10 +1,11 @@
 // An Agents card in the transcript (agents.md section 6): one subagent of the open session.
 // Its profile, state and time; a preview of its answer; Stop while it runs or waits; a click
-// opens the subagent's session read-only.
+// opens the subagent in the side pane, read-only.
 import { useEffect, useState } from "react";
 import type { Message } from "../api";
 import Markdown from "./Markdown";
-import { openSession, stopSubagent } from "../store";
+import { stopSubagent } from "../store";
+import { openTab, subagentTab } from "./work/state";
 import { PREVIEW_CHARS, elapsedOf, reportsOf, type AgentCard } from "./agents";
 import "./agents.css";
 
@@ -27,7 +28,7 @@ export default function AgentsCard({ child, parentId }: { child: AgentCard; pare
   return (
     <section className="agent-card" data-status={child.status} data-child={child.id} aria-label={`Subagent ${child.title}`}>
       <div className="agent-line">
-        <button type="button" className="agent-open" title="Open the subagent's session (read-only)" onClick={() => void openSession(child.id)}>
+        <button type="button" className="agent-open" title="Open the subagent in the side pane (read-only)" onClick={() => openTab(subagentTab(parentId, child))}>
           <span className="agent-dot" aria-hidden="true" />
           <span className="agent-title">{child.title}</span>
           <span className="agent-profile">{child.profile}</span>

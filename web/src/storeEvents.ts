@@ -3,6 +3,7 @@
 import { api, initialSection, initialSession, initialView, type StateView } from "./api";
 import { events, type AgentEvent } from "./events";
 import { notify, pushNotice } from "./components/toasts";
+import { onBackgroundTask } from "./components/work/state";
 import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState, showView } from "./store";
 
 const set = patch;
@@ -81,6 +82,9 @@ export function handleEvent(ev: AgentEvent) {
       set({ children: { ...getStore().children, [ev.sessionId]: mine.some((c) => c.id === child.id) ? mine.map((c) => (c.id === child.id ? child : c)) : [...mine, child] } });
       break;
     }
+    case "backgroundTask":
+      onBackgroundTask(ev.sessionId);
+      break;
     case "settingsChanged":
       // The event carries the whole settings (the answer of PUT /api/settings): no
       // second GET /api/state.

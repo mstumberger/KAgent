@@ -30,6 +30,8 @@ export type AgentEvent =
   | { type: "telegramStatus"; status: string; detail: string }
   /** The Google Calendar connection changed state (calendar.md section 7). */
   | { type: "calendarChanged"; state: string }
+  /** A background shell task of `sessionId` changed status (work-windows.md section 3). */
+  | { type: "backgroundTask"; taskId: string; sessionId: string; status: string }
   /** A subagent of `sessionId` changed state (agents.md section 3). */
   | { type: "subagentUpdated"; sessionId: string; child: import("./settings/subagents/api").ChildView; status: import("./settings/subagents/api").ChildStatus };
 

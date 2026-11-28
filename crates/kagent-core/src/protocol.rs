@@ -227,6 +227,10 @@ pub enum AgentEvent {
     /// `done`, `failed`, `cancelled`.
     #[serde(rename_all = "camelCase")]
     SubagentUpdated { session_id: String, child: crate::agent::children::ChildView, status: crate::agent::children::ChildStatus },
+    /// A background shell task of `session_id` changed status (work-windows.md section 3):
+    /// `running` at the start, `killed` on a stop, then the final `done`, `failed` or `killed`.
+    #[serde(rename_all = "camelCase")]
+    BackgroundTask { task_id: String, session_id: String, status: String },
 }
 
 impl AgentEvent {
