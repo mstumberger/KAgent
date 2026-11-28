@@ -31,6 +31,7 @@ export interface Store {
   changesTick: number;
   tasksTick: number; // bumps when the task list changes
   ticketsTick: number; // bumps when a ticket changed (tickets.md section 4)
+  runsTick: number; // bumps when a workflow run changed (workflows.md section 6)
   skills: SkillView[]; // the library, for the slash picker of the composer
   skillsTick: number; // bumps when the library changed, so Skills reads it again
   /** Text waiting in the chat composer ("New skill with the agent" in Settings > Skills). */
@@ -76,6 +77,7 @@ let store: Store = {
   changesTick: 0,
   tasksTick: 0,
   ticketsTick: 0,
+  runsTick: 0,
   skills: [],
   skillsTick: 0,
   composerDraft: "",

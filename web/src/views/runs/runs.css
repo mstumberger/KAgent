@@ -1,0 +1,112 @@
+/* The runs board (workflows.md section 8). Colours are the tokens of styles/base.css, so dark and light both work. */
+.runs { display: grid; grid-template-columns: 270px minmax(0, 1fr) 290px; height: 100%; min-height: 0; }
+.runs > * { min-height: 0; overflow: auto; }
+.rn-left { border-right: 1px solid var(--rim); padding: 12px 10px; }
+.rn-centre { padding: 14px 18px; }
+.rn-side { border-left: 1px solid var(--rim); padding: 12px 14px; }
+.rn-head, .rn-run-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.rn-head h2, .rn-run-head h2, .rn-new h2, .rn-empty h2 { margin: 0; font-size: 18px; }
+.rn-head h2 { flex: 1; }
+.rn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.rn-none { color: var(--dim); font-size: 12.5px; margin: 4px 0; }
+.rn-error { color: var(--bad); font-size: 12.5px; margin: 6px 0; }
+.rn-back { display: none; }
+.rn-count { color: var(--dim); font-size: 11.5px; margin-left: auto; }
+.rn-side h3 .rn-count { margin-left: 6px; font-weight: 400; }
+
+/* the status dots: a colour and a shape, and the words are in the label */
+.rn-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--dim); display: inline-block; }
+.rn-dot[data-dot="run"] { background: var(--ice); animation: rn-pulse 1.2s ease-in-out infinite; }
+.rn-dot[data-dot="owner"] { background: var(--signal); }
+.rn-dot[data-dot="done"] { background: var(--ok); }
+.rn-dot[data-dot="fail"] { background: var(--bad); }
+.rn-dot[data-dot="off"] { background: transparent; border: 1.5px solid var(--dim); width: 9px; height: 9px; box-sizing: border-box; }
+.rn-dot[data-dot="wait"] { background: var(--dim); opacity: 0.6; }
+@keyframes rn-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .rn-dot[data-dot="run"] { animation: none; } }
+
+.rn-tree button { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 7px; padding: 5px 8px; color: var(--ink); }
+.rn-tree button:hover { background: color-mix(in srgb, var(--ice) 8%, transparent); }
+.rn-tree button:focus-visible { outline: 2px solid var(--ice); outline-offset: -2px; }
+.rn-tree .selected { background: color-mix(in srgb, var(--ice) 16%, transparent); }
+.rn-project { font-weight: 600; margin-top: 6px; }
+.rn-project svg:first-child { transition: transform 0.12s; }
+.rn-project[aria-expanded="false"] svg:first-child { transform: rotate(-90deg); }
+.rn-run { padding-left: 20px !important; }
+.rn-task { padding-left: 38px !important; font-size: 12.5px; }
+.rn-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-id { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--dim); }
+.rn-key { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); }
+
+.rn-state-badge { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rim-strong); }
+.rn-state-badge[data-state="working"], .rn-state-badge[data-state="planning"] { color: var(--ice); }
+.rn-state-badge[data-state="awaiting_approval"] { color: var(--signal); }
+.rn-state-badge[data-state="done"] { color: var(--ok); }
+.rn-state-badge[data-state="failed"] { color: var(--bad); }
+.rn-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--rim); margin-bottom: 12px; overflow-x: auto; }
+.rn-tabwrap { display: inline-flex; align-items: center; border-bottom: 2px solid transparent; }
+.rn-tabwrap[data-active="true"] { border-bottom-color: var(--ice); }
+.rn-tabwrap button[role="tab"] { border: 0; background: transparent; padding: 6px 10px; white-space: nowrap; color: var(--dim); }
+.rn-tabwrap[data-active="true"] button[role="tab"] { color: var(--ink); }
+.rn-tabx { border: 0; background: transparent; padding: 3px; color: var(--dim); }
+.rn-panel { min-height: 0; }
+.rn-panel:has(.pane-subagent) { height: calc(100% - 120px); min-height: 320px; display: flex; }
+.rn-panel .pane-subagent { flex: 1; min-width: 0; }
+
+.rn-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.rn-overview h3, .rn-plan h3, .rn-side h3 { margin: 14px 0 6px; font-size: 13px; font-weight: 600; }
+.rn-side h3:first-child, .rn-side section:first-child h3 { margin-top: 0; }
+.rn-goal { white-space: pre-wrap; margin: 0; }
+.rn-report { white-space: pre-wrap; background: var(--glass); border: 1px solid var(--rim); border-radius: 8px; padding: 10px; font-size: 12px; max-height: 340px; overflow: auto; }
+.rn-steps { list-style: none; display: flex; gap: 6px; flex-wrap: wrap; padding: 0; margin: 0; }
+.rn-steps li { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--rim); border-radius: 8px; padding: 6px 10px; min-width: 110px; }
+.rn-steps li[data-active="true"] { border-color: var(--ice); background: color-mix(in srgb, var(--ice) 12%, var(--glass)); }
+.rn-step-role { font-weight: 600; font-size: 12px; }
+.rn-step-worker, .rn-step-gate { font-size: 11.5px; color: var(--dim); }
+.rn-step-gate { color: var(--signal); }
+
+.rn-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.rn-table th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--rim); }
+.rn-table td { padding: 6px 8px; border-bottom: 1px solid var(--rim); vertical-align: top; }
+.rn-link { border: 0; background: transparent; color: var(--ice); padding: 0; text-decoration: underline; }
+.rn-approval, .rn-decision, .rn-questions .rn-question { border: 1px solid var(--signal); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; background: color-mix(in srgb, var(--signal) 7%, var(--glass)); }
+.rn-approval h3, .rn-decision h4 { margin: 0 0 6px; }
+.rn-edit { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.rn-edit li { display: flex; gap: 6px; align-items: center; }
+.rn-edit input { flex: 1; min-width: 0; }
+.rn-reject { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.rn-reject label { flex: 1; display: grid; gap: 4px; font-size: 12px; color: var(--dim); }
+.rn-answer { display: flex; gap: 6px; margin-top: 6px; }
+.rn-answer input { flex: 1; }
+.rn-decision ul { margin: 4px 0 8px 18px; padding: 0; font-size: 12.5px; }
+
+.rn-check { list-style: none; padding: 0; margin: 0; border-left: 1px solid var(--rim-strong); margin-left: 6px; }
+.rn-check li { display: flex; gap: 8px; padding: 3px 0 3px 10px; font-size: 12.5px; }
+.rn-check li[data-status="in_progress"] { color: var(--ice); font-weight: 600; }
+.rn-mark { width: 12px; text-align: center; color: var(--dim); }
+.rn-struck { text-decoration: line-through; color: var(--dim); }
+.rn-agent { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; width: 100%; text-align: left; border: 1px solid var(--rim); border-radius: 8px; background: var(--glass); padding: 6px 9px; margin: 5px 0; color: var(--ink); }
+.rn-agent:focus-visible { outline: 2px solid var(--ice); outline-offset: 1px; }
+.rn-agent-title { font-weight: 600; font-size: 12.5px; flex: 1; }
+.rn-agent-word { font-size: 11.5px; color: var(--dim); }
+.rn-agent-note { flex-basis: 100%; font-size: 11.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-ended summary { cursor: pointer; font-size: 12.5px; color: var(--dim); margin: 8px 0 4px; }
+
+.rn-new { display: grid; gap: 10px; max-width: 640px; }
+.rn-new label { display: grid; gap: 4px; font-size: 12px; color: var(--dim); }
+.rn-roles { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.rn-roles li { display: grid; grid-template-columns: 100px 120px 1fr; gap: 8px; align-items: center; font-size: 12.5px; }
+.rn-empty { padding: 24px 4px; }
+
+@media (max-width: 899px) {
+  .runs { display: block; overflow: auto; }
+  .runs > * { overflow: visible; }
+  .rn-side { border-left: 0; border-top: 1px solid var(--rim); }
+  .runs.has-run .rn-left { display: none; }
+  .runs:not(.has-run) .rn-centre { display: none; }
+  .rn-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+  .rn-back svg { transform: rotate(90deg); }
+  .rn-roles li { grid-template-columns: 1fr; }
+  .rn-table { display: block; overflow-x: auto; }
+  .rn-panel:has(.pane-subagent) { height: 60vh; }
+}

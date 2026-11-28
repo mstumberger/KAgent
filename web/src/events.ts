@@ -28,6 +28,8 @@ export type AgentEvent =
   | { type: "tasksChanged" }
   /** A ticket was created, changed or deleted (tickets.md section 4). */
   | { type: "ticketChanged"; key: string; project: string | null; removed: boolean }
+  /** A workflow run or one of its tasks changed (workflows.md section 6); the view reads the run again. */
+  | { type: "runUpdated"; runId: string; project: string; state: string; done: number; total: number }
   | { type: "taskRun"; taskId: string; run: { at: string; status: string; durationSec?: number; sessionId?: string; result?: string } }
   | { type: "telegramStatus"; status: string; detail: string }
   /** The Google Calendar connection changed state (calendar.md section 7). */

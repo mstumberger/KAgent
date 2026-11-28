@@ -32,6 +32,9 @@ export function handleEvent(ev: AgentEvent) {
     case "ticketChanged":
       set({ ticketsTick: getStore().ticketsTick + 1 });
       break;
+    case "runUpdated":
+      set({ runsTick: getStore().runsTick + 1 });
+      break;
     case "changeRecorded":
       set({ changesTick: getStore().changesTick + 1 });
       break;
