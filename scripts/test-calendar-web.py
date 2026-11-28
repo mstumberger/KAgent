@@ -312,6 +312,17 @@ async def main():
         for p in (chrome, proc):
             if p:
                 p.terminate()
+        # The browser's profile (about 170 MB, in /tmp) goes with the run: left behind, they filled /tmp.
+        if chrome:
+            try:
+                chrome.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                chrome.kill()
+        for _ in range(10):
+            shutil.rmtree(locals().get("profile", "") or "/nonexistent", ignore_errors=True)
+            time.sleep(0.3)
+            if not os.path.exists(locals().get("profile", "") or "/nonexistent"):
+                break
         shutil.rmtree(home, ignore_errors=True)
     bad = [k for k, v in results.items() if not v]
     for k, v in results.items():
