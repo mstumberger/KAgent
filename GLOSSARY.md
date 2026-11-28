@@ -53,15 +53,17 @@ _Avoid_: pipeline, automation
 One execution of a workflow on one job in one project.
 _Avoid_: job, session
 
-**Task**:
-One unit of work inside a run, produced by the planner, with what "done" means.
-_Avoid_: scheduled task (that is a reminder or an automation), todo
+**Ticket**:
+One unit of work in a project's list: a key, a title, a state and what "done" means.
+The owner writes tickets, and a planner creates them as children of the ticket its run
+was started for.
+_Avoid_: issue, task (a task is a scheduled reminder or automation), todo
 
 **Round**:
 One pass of implementing a task and reviewing it.
 
 **Board**:
-The view that shows runs, their tasks and their workers.
+The view that shows a project's tickets, the runs working on them and their workers.
 
 ## Voice
 
@@ -97,3 +99,19 @@ _Avoid_: entry, time entry
 
 **Work folder**:
 A folder the owner declared as work: everything under it is tracked as work.
+
+## Models
+
+**Route**:
+An ordered list of provider and model pairs for one job: the first that is usable and
+not out of quota answers, the next takes over when it is.
+_Avoid_: fallback chain, rotation
+
+**Limit**:
+One quota of a provider with how much is used and when it resets.
+_Avoid_: quota bar, rate limit (that is one kind of limit)
+
+**Artifact**:
+A file a model made (an image, audio, a video), kept with the conversation and its
+provenance.
+_Avoid_: attachment, output
