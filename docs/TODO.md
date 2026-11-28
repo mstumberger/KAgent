@@ -47,6 +47,7 @@ first three are done first.
   board) shows projects, runs, tasks and the running and ended workers; a run that
   ends or needs the owner is announced on Telegram, the desktop, by voice and in
   the morning report.
+  Built: W1 to W3 (`docs/specs/workflows.md`): the engine, tools, API, mailbox and the Runs board with KAgent's own subagents; not built: coding agents as workers, park and continue, worktrees, the Settings page, schedules, and the Telegram, spoken and morning-report announcements.
 - [ ] Telegram as a remote: only the owner (sender checked on every message and button,
   private chat only); a command menu (runs, sessions, model, status, alerts); one
   live message per run with buttons; voice notes in through any speech-to-text

@@ -502,3 +502,28 @@ each left out when empty.
 `ticketChanged` goes out after every create, change and delete, also one by the `tickets` tool; a window reads `GET /api/tickets`
 again. `subagentUpdated` is also sent for the progress of a running subagent (its last action, its files, the receipts of the owner's
 messages) with an unchanged `status`; the start of a call at most every 500 ms per child.
+
+## 13. Workflow runs (v0.0.3)
+
+Spec: `workflows.md`. Same transport, auth and error shape as section 3 (400 `invalid_input`, 404 `not_found`, 409 `conflict`). Worker text
+passes the daemon's redactor before it leaves (`token-guard.md`).
+
+| Method path | Request | Response |
+|---|---|---|
+| GET `/api/workflows` | | `{workflows: [{name, description, shipped, steps: [{id, role, worker, model, gate}]}], invalid: [{file, reason}]}`: the shipped ones and the valid files of `<config>/workflows` |
+| GET `/api/runs` | query `project` | `{runs: [{id, title, workflow, project, state, reason, done, total, needsOwner, ticket, createdAt, updatedAt}]}` |
+| POST `/api/runs` | `{workflow, project, goal, ticket?, models?: {role: ref}, session?}` | `201` the Run; 400 for a goal that is empty or over 8000 characters, a folder that is not one (or is KAgent's own), an unknown workflow, a definition that is not valid, a model for a role the workflow lacks; 409 when `workflows.maxRuns` runs are active |
+| GET `/api/runs/:id` | | the Run (the definition as it was at the start, the tasks with rounds, workers and progress, the questions and messages); 404 |
+| POST `/api/runs/:id/stop` | | the Run, `stopped`; 409 when it ended |
+| POST `/api/runs/:id/pause` | | the Run, `paused`; 409 unless it is planning or working |
+| POST `/api/runs/:id/continue` | | the Run; 409 unless it is paused |
+| POST `/api/runs/:id/plan` | `{action: "approve", tasks?: [{id, title?}]}` or `{action: "reject", reason}` | the Run; `tasks` is the plan after the owner's edits (a task left out is removed); 409 unless it awaits approval; 400 for a reason that is empty or a removed task another depends on |
+| POST `/api/runs/:id/tasks/:task/decision` | `{choice: "more_round" \| "accept" \| "drop"}` | the Run; 409 unless the task needs the owner and the run works |
+| POST `/api/runs/:id/questions/:qid/answer` | `{text}` | the Run; 409 when answered already |
+| GET `/api/runs/:id/tasks/:task/diff` | | `{project, from: "HEAD", files, diff: Diff}`: the working tree against the last commit, only the files the task's worker changed; 409 for a folder that is not a git repository |
+
+Event (`/ws`): `{"type":"runUpdated","runId":"run_1a2b3c4d","project":"/home/me/code/kagent","state":"working","done":1,"total":3}` after every
+change of a run or one of its tasks (a worker's start or end, a round, a question, an owner's action); a window reads the run again.
+`state` is `planning`, `awaiting_approval`, `working`, `paused`, `done`, `stopped` or `failed`. The workers are subagents of the run's own
+session (origin `run`, hidden from the session list): `subagentUpdated` with that session id carries their progress, and
+`GET /api/sessions/:runSession/subagents[/:child]` and `POST /api/agents/:id/message` (section 12) steer them.

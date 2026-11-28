@@ -114,7 +114,8 @@ The planner's last message must hold one fenced `json` block:
    `{"verdict": "pass" | "changes", "findings": [{"severity": "must" | "should", "file", "line", "what", "why"}]}` in a fenced
    `json` block. `changes` needs at least one `must`; `pass` has none. A malformed verdict is sent back once to the same
    reviewer; a second one fails the task (`the reviewer did not return a valid verdict`).
-4. `pass`: `done`. `changes`: only the `must` findings go back; the `should` ones are listed in the run's report. The **same
+4. `pass`: `done`. Without an implementer step (`review-only`) a `changes` verdict also ends the task `done`: the review is the
+   product, and the run's report lists the `must` findings. With one, `changes`: only the `must` findings go back; the `should` ones are listed in the run's report. The **same
    implementer session** is continued with them (`changes`, round 2, ...), then reviewed again by a new reviewer.
 5. After round `max_rounds` (default and shipped: 3) with `changes` still: `needs_owner`, with both sides' last words. The owner
    picks `more_round` (one more round, the limit of this task is raised by one), `accept` (done as it is, marked accepted) or
@@ -139,14 +140,16 @@ rounds, the `should` findings and the changed files.
   `subagents.maxConcurrent` (more are queued by `agents.md`). At most `workflows.maxRuns` runs are active (`planning`,
   `awaiting_approval`, `working`) at once, default 2, 1..4.
 - Pause (owner): the workers are cancelled, the tasks stay in the state they were in, the run is `paused`; Continue starts the
-  stage of each interrupted task again with a new worker (the prompt says that files may already be changed).
+  stage of each interrupted task again with a new worker (the prompt says that files may already be changed). A task that was in
+  `changes` gets the findings in its new worker's prompt. A paused run takes no decision about a task.
 
 ### 3.5 Storage and restart
 
 `<data>/runs/<runId>/run.json` (mode 0600, written atomically: a temporary file in the folder, then rename), `plan.json`,
 `plan.md`, `messages/<id>.txt` for long messages. The run holds a copy of its definition. At daemon start every run in a
 non-final state is read: `planning` and `working` become `paused` with the reason "the daemon restarted" (never continued by
-itself; Continue does it, as above); `awaiting_approval` and `needs_owner` stay (nothing was running); final states stay. A file
+itself; Continue does it, as above); `awaiting_approval` stays (nothing was running), and so does a task that `needs_owner` inside a paused run (the owner decides after
+Continue); final states stay. A file
 that cannot be read is skipped with a warning and left on disk.
 
 ## 4. Communication
@@ -194,14 +197,18 @@ One mailbox per worker, kept in the run (`messages`):
 | `workflow_answer {run, question, text?, ask_owner?}` | the Brain | no (it answers a worker, it approves nothing) |
 | `report_progress`, `ask` | a worker | no |
 
-The project is the calling session's folder; `project` is accepted only as one of the known projects. A subagent (and so a
+The project is the calling session's folder; `project` is accepted only as one of the known projects (the projects list of
+`sidebar.md`). The API takes any folder that the attach check of `sidebar.md` section 3 accepts. A subagent (and so a
 worker) has none of the four `workflow_*` tools (the depth rule of `agents.md`). The system prompt has one working rule
 (`WORKFLOW_RULE`) while `workflow_run` is offered.
 
 ## 6. API and events (`api.md` section 13)
 
 `GET /api/workflows`, `GET|POST /api/runs`, `GET /api/runs/:id`, `POST /api/runs/:id/{stop,pause,continue,plan}`,
-`POST /api/runs/:id/tasks/:task/decision`, `POST /api/runs/:id/questions/:qid/answer`. Event `runUpdated`
+`POST /api/runs/:id/tasks/:task/decision`, `GET /api/runs/:id/tasks/:task/diff` (the working tree against the last commit, only
+the files the task's worker changed; the board's Changes tab), `POST /api/runs/:id/questions/:qid/answer`. `POST /api/runs` takes
+`{workflow, project, goal, ticket?, models?, session?}`: `models` maps a role word to a model ref for this run, `session` is the
+conversation that answers the workers' questions. Event `runUpdated`
 `{runId, project, state, done, total}` after every change of a run or a task; a window reads the run again. No answer holds a
 secret: the API token and provider keys are not part of a run, and worker text passes the daemon's redactor (`token-guard.md`).
 
@@ -231,14 +238,16 @@ History entries say `by: agent`; the run's ticket gets a note with the run id.
   name, state, first line of the report, age).
 - **New run**: pick a workflow (its description and workers shown), a project (the open conversation's by default), type the
   goal, optional ticket key; Start posts `POST /api/runs`.
+- A click on a task opens its worker tab (the steering pane of `steering.md`: transcript, what it is doing, the message box); the
+  worker list on the right opens them too. The plan approval is a card on the Plan tab and the run opens on that tab while it waits.
 - Keyboard: every list item is a button or a link in tab order, arrow keys move in the tree, Enter opens, Escape closes a
   dialog; icon buttons have labels; both themes; at 700 px the three columns become one with a back button.
 
 ## 9. Files
 
-`crates/kagent-core/src/workflow/{mod, yaml, definition, shipped, model, plan, verdict, prompts, roles, store, engine, drive,
-task, worker, mailbox}.rs`, `crates/kagent-core/src/tools/workflow.rs`, `workflows/*.yaml` (shipped),
-`crates/kagentd/src/runs/{mod, http, tickets, wiring}.rs`, `web/src/views/runs/`, `scripts/test-runs-web.py`.
+`crates/kagent-core/src/workflow/{mod, yaml, definition, shipped, model, plan, verdict, prompts, roles, store, git, report,
+engine, control, drive, task, worker, mailbox}.rs`, `crates/kagent-core/src/tools/workflow.rs`, `workflows/*.yaml` (shipped),
+`crates/kagentd/src/runs/{mod, settings, http, tickets, tests}.rs`, `web/src/views/runs/`, `scripts/test-runs-web.py`.
 
 ## 10. Tests
 

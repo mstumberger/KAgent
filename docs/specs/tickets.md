@@ -8,10 +8,10 @@ that outlives a conversation.
 
 ## 1. What is built, and what is not
 
-Built: the store, the routes, the event, the tool, the list, the board, "Mine now", the detail pane. Not built (later
-stages of the plan, the data model has room for them): workflow runs and their tasks as tickets (I4), related-work
+Built: the store, the routes, the event, the tool, the list, the board, "Mine now", the detail pane, and (I4, section 9) a run's tasks
+as tickets. Not built (later stages of the plan, the data model has room for them): related-work
 detection and "went off" signals (I5), align on change (I6), the Jira mirror (I7). `parent`, `links` and `assignee` exist in
-the model; `assignee` is `"owner"` or nothing in this item, and no engine reads `parent`.
+the model; `assignee` is `"owner"` or nothing in this item, and the only engine that reads `parent` is the run sync of section 9.
 
 ## 2. A ticket
 
@@ -144,3 +144,23 @@ lines. No new settings key is added (none to classify in `settings_tool/keys.rs`
 Unit tests in the module (store round trip, atomic write, never-reused keys, prefixes and collisions, each limit, history,
 parent cycles, the tool's words and its project), API tests through the same functions the routes call, the headless suite
 `scripts/test-tickets-web.py` (scenarios in `scenarios.md`, S-tickets).
+
+## 9. A run's tasks as tickets (v0.0.3, `workflows.md` section 7)
+
+A workflow run is a ticket of its project (label `run`, made when the run starts, or the key the owner gave), and each of its tasks, once the
+plan stands (approved, or the workflow has no gate), is a ticket with `parent` = the run's ticket, the label `run-task`, the task's
+`doneWhen` and its description (with the planner's tracker key as "Tracker: CYB-9868"). The keys are stored on the run (`ticket`,
+`kaTicket`). The daemon's sync (`kagentd/src/runs/tickets.rs`) listens to `runUpdated` and writes `by: agent`:
+
+| Task | Ticket |
+|---|---|
+| `waiting`, `blocked` | `todo` |
+| `implementing`, `changes` | `in_progress` |
+| `in_review`, `needs_owner` | `in_review` |
+| `done` | `done` |
+| `dropped` | `dropped` |
+| `failed`, `stopped` | `backlog`, with a note that says why ("failed: <error>", "the run was stopped before this task was done"), and the label `stopped` for a stopped one |
+
+The run's ticket follows the run (`planning`, `working`, `paused` -> `in_progress`; `awaiting_approval` -> `in_review`; `done` -> `done`;
+`failed`, `stopped` -> `backlog` with a note). A ticket is written only when its task's state changed since this daemon last wrote it, so a
+ticket the owner moved by hand is not moved back. The board's task rows show these keys.

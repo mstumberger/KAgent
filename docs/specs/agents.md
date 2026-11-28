@@ -144,6 +144,15 @@ tool group, `maxIterations` outside 1..80 or a model the providers do not know),
   and not an approval, to be acknowledged in one sentence. The message never reaches the approval broker.
 - `agent_tell` is among the tools a subagent lacks (the depth rule) and it finds only the children of the calling session.
 
+## 6b. Workers of a workflow run (v0.0.3, `workflows.md`)
+
+A run's workers are subagents: `ChildRequest.worker` marks one (it is offered `report_progress` and `ask`), the parent is the run's own
+session (origin `run`, not woken by a notification, not in the session list), and `Agent::resume_child` starts a child that ended
+(`done`) again in the same session with a new message, taking a slot or queuing like a new one: the implementer keeps its context
+between rounds. The three role profiles (`planner`, `implementer`, `reviewer`) are built into the engine; a planner and a reviewer are
+read-only whatever their profile says, and the read-only refusal does not apply to the two worker tools. `AgentEvent::RunUpdated` and
+`Agent::emit` carry the engine's events.
+
 ## 7. Tests (no root; loopback only)
 
 - Profiles: parsing; an invalid name or a missing description is skipped; a built-in

@@ -3457,3 +3457,40 @@ Phase 6 (planned 2026-11-27; S40 and S41 done)
 | S45 | for places and leave-by (optional): enable "Places API (New)" and "Routes API", create an API key restricted to those two, paste it into Settings -> Calendar (Places and travel), Test; billing must be on for the project (this use stays inside the free monthly allowance). Then restart the daemon (release rebuild) for the new tools and routes |
 | S41 | after the release rebuild: in one conversation pick another model (Ctrl+M) and ask something; the answer comes from that model while the other conversations, a task and a Telegram chat keep the default (`specs/scenarios.md` S41 item 8) |
 | S40 | once, before the first start of the new daemon: copy `~/.config/kagent/providers.json`. At load the daemon corrects the roles of the models that are not chat models (`specs/models.md` section 3) |
+
+### Session 2026-11-28 (v0.0.3: workers and workflows; `specs/workflows.md`)
+
+Stages W1, W2 and W3 of `plans/workers-and-workflows.md` (local). Eight commits on `v0.0.3`. Decisions:
+
+- **No YAML crate** was in the tree and none was added: `workflow/yaml.rs` reads the subset the definitions need (block maps and lists, flow
+  maps and lists, quoted and plain scalars, comments; anchors, tags and `|` blocks are refused with the line). Definitions are read into
+  `serde_json::Value` and then into types with `deny_unknown_fields`, each step separately so a message can say `steps[1].parallel`.
+- **The run's own session** (origin `run`, hidden from the list) is the parent of every worker, so a worker's end is stored there and wakes
+  nobody. The conversation that started the run (`originSession`) is the Brain: it is told the worker's questions, run ends and gates.
+- **Engine, not a loop in the Brain**: one driver task per active run, a task future per task; the task's persisted state is the state
+  machine, so a restart, a pause and a continue are the same code path. Every change goes through `modify` (saved atomically, then
+  `runUpdated`); `modify_if` checks the stop under the run's lock, so a worker that finishes late never overwrites a stop.
+- **Section 11 of the plan has no rule for skipping the plan approval.** It is skipped only when the definition has no `gate: owner`
+  (`implement-review` has no planner at all); the shipped definitions with a planner have the gate. By voice the card is the same.
+- **Task states** gained `failed` and `stopped` (the plan had neither): a failed worker fails its task and blocks its dependents, a stop
+  marks what was not finished. A run is `done` when every task is `done` or `dropped` (one at least `done`), `failed` when a task failed or
+  is blocked. A `changes` verdict without an implementer (`review-only`) ends the task `done`; the report lists the findings.
+- **Implementer sessions are continued** with `Agent::resume_child` (a child that ended `done` starts again in the same session and takes a
+  slot); a reviewer is a new worker each round. After a restart the old session is not resumable (the registry is in memory): a new
+  worker gets the findings in its prompt. A planner and a reviewer are read-only whatever their profile says; the read-only refusal does not
+  apply to `report_progress` and `ask`.
+- **`ask` blocks inside the tool call** (up to 30 minutes) instead of ending the worker's turn: simpler, cancellable, and the answer is the
+  tool result. Non-blocking answers go through the mailbox: a message to a running worker is queued into its session as
+  `[from orchestrator] ...` (read at its next request, like steering); messages wait at most 30 minutes, 8 per worker. Who answers: the Brain
+  through `workflow_answer` for two minutes, then the owner (a card and a notice); no starting conversation means the owner at once.
+- **Names**: the view is **Runs**, because "Work" is the work panel and the widget's sheet. The sidebar has nine views.
+- **Tickets**: `runs/tickets.rs` listens to `runUpdated`; a ticket is written only when its task's state changed since the last write, so the
+  owner's hand-made move survives. The keys are stored on the run.
+- **Settings**: `workflows.maxRuns` (1..4, default 2) is protected from the `settings` tool (it decides how much runs unattended).
+- **Prompt**: one working rule (`WORKFLOW_RULE`), no "never" or "always" sentence, so no row in the rules table.
+- **Not built**: coding agents as workers, park and continue and worktrees, the Settings page, schedules (W4 to W6); Telegram, spoken and
+  morning-report announcements of a run (a keyed notice toast and a message to the starting conversation are sent); the voice reading of the
+  plan. The reviewer's diff is `git diff HEAD` of the task's files through `std::process` (read-only flags), not the daemon's exec helper.
+- **Tests that changed on purpose**: `test-sidebar-web.py` lists nine views (count 168 unchanged) and `test-tickets-web.py` expects Tickets
+  before Runs (count 89 unchanged). With the owner's daemon on port 7878 a stand-in answers the routes the mock does not: chooser (111/112),
+  screen-watch (61/62) and calendar (59/60) show one "no console errors" failure from its 404s, the same as before this item.
