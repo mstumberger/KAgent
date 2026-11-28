@@ -10,7 +10,9 @@ pub mod env;
 pub mod http;
 pub mod look;
 pub mod run;
+pub mod say;
 pub mod settings;
+pub mod tell;
 pub mod tool;
 pub mod vision;
 
@@ -148,6 +150,8 @@ pub trait Env: Send + Sync {
     async fn look_cloud(&self, jpeg: &[u8], goal: &str) -> Option<Result<String, String>>;
     /// Tell the owner: the session, the voice, the desktop, Telegram (`tell.rs`).
     async fn tell(&self, watch: &Watch, text: &str);
+    /// Tell the session of a watch that a restart ended that it did.
+    async fn restarted(&self, watch: &Watch, text: &str);
 }
 
 struct Active {
@@ -160,7 +164,14 @@ pub struct ScreenWatch {
     events: broadcast::Sender<AgentEvent>,
     cur: Mutex<Option<Active>>,
     last: Mutex<Option<Watch>>,
+    /// Where the running watch is noted (its goal and session, never a frame), so a restart can say it ended it.
+    marker: Option<std::path::PathBuf>,
+    /// What the owner said lately, for the stop phrases (`say.rs`).
+    pub(crate) heard: Mutex<String>,
 }
+
+/// The file that says a watch was running when the daemon stopped.
+const MARKER: &str = "screen-watch.json";
 
 /// The id of a watch: `w_` and four hex digits.
 fn new_id() -> String {
@@ -168,8 +179,37 @@ fn new_id() -> String {
 }
 
 impl ScreenWatch {
-    pub fn new(env: Arc<dyn Env>, events: broadcast::Sender<AgentEvent>) -> Arc<Self> {
-        Arc::new(Self { env, events, cur: Mutex::new(None), last: Mutex::new(None) })
+    /// `data`: the daemon's data folder for the marker of a running watch; none in some tests.
+    pub fn new(env: Arc<dyn Env>, events: broadcast::Sender<AgentEvent>, data: Option<&std::path::Path>) -> Arc<Self> {
+        Arc::new(Self { env, events, cur: Mutex::new(None), last: Mutex::new(None), marker: data.map(|d| d.join(MARKER)), heard: Mutex::new(String::new()) })
+    }
+
+    fn write_marker(&self, w: &Watch) {
+        if let Some(p) = &self.marker {
+            if let Err(e) = std::fs::write(p, serde_json::to_vec(w).unwrap_or_default()) {
+                tracing::warn!("screen watch: the marker could not be written: {e}");
+            }
+        }
+    }
+
+    fn clear_marker(&self) {
+        if let Some(p) = &self.marker {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    /// At the daemon's start: a marker left behind means a watch was running when it stopped. The session
+    /// that asked for it is told, once ("the screen watch ended with the restart").
+    pub async fn start_up(&self) {
+        let Some(p) = &self.marker else { return };
+        let old = std::fs::read(p).ok().and_then(|b| serde_json::from_slice::<Watch>(&b).ok());
+        self.clear_marker();
+        if let Some(mut w) = old {
+            w.state = State::Failed;
+            w.reason = Some("the daemon restarted".into());
+            self.env.restarted(&w, &format!("The screen watch ended with the restart. (goal: {})", w.goal)).await;
+            *self.last.lock().unwrap() = Some(w);
+        }
     }
 
     /// The running watch.
@@ -205,6 +245,7 @@ impl ScreenWatch {
             cur.take()?
         };
         a.cancel.cancel();
+        self.clear_marker();
         a.watch.state = state;
         a.watch.paused = false;
         if let Some(n) = last_note {
@@ -286,6 +327,7 @@ impl ScreenWatch {
             }
             *cur = Some(Active { watch: watch.clone(), cancel: cancel.clone() });
         }
+        self.write_marker(&watch);
         self.emit(&watch);
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(u64::from(minutes) * 60);
         tokio::spawn(run::run(self.clone(), watch.clone(), model, cancel, deadline));

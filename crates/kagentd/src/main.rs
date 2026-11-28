@@ -404,10 +404,12 @@ async fn run() -> anyhow::Result<()> {
     let local_models = local_models::LocalModels::new(providers.clone(), settings_arc.clone(), events.clone());
     let _ = local_models_cell.set(local_models.clone());
     let screen_watch = screen_watch::ScreenWatch::new(
-        Arc::new(screen_watch::env::RealEnv { providers: providers.clone(), settings: settings_arc.clone(), local_models: local_models.clone(), agent: agent.clone() }),
+        Arc::new(screen_watch::env::RealEnv { providers: providers.clone(), settings: settings_arc.clone(), local_models: local_models.clone(), agent: agent.clone(), notifier: notifier.clone() }),
         events.clone(),
+        Some(&paths.data),
     );
     let _ = screen_watch_cell.set(screen_watch.clone());
+    screen_watch.start_up().await;
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,

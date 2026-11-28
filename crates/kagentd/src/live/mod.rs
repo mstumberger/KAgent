@@ -132,6 +132,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     let _ = out.send(json!({"type": "session", "sessionId": session}));
 
     let (tool_tx, mut tool_rx) = mpsc::unbounded_channel::<Value>();
+    // A hit of the screen watch is spoken into this session while it is open (screen-watch.md section 3).
+    let _spoken_into = crate::screen_watch::say::register(&session, tool_tx.clone());
     let cancel = CancellationToken::new();
     // Who thinks is read when the session connects (voice.md section 1): a change applies to the next session.
     let (section, mode, detail) = brain::mode(&st);
@@ -332,6 +334,10 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             ServerEvent::UserTranscript(t) => {
                                 user_buf.push_str(&t);
                                 st.calendar.hear(&t);
+                                // "Stop watching" ends the screen watch without a model call (voice-control.md section 4).
+                                if st.screen_watch.hear(&t) {
+                                    let _ = out.send(json!({"type": "status", "state": "live", "detail": "screen watch stopped"}));
+                                }
                                 voice_cards.hear(&st, &session, &t, &out);
                                 if let Some(answer) = voice_confirm.hear(&t) {
                                     let said = if answer == approve::Answer::Yes { "confirmed by voice" } else { "refused by voice" };

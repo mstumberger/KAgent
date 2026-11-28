@@ -5,12 +5,15 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use kagent_core::agent::Agent;
+use kagent_core::protocol::Message;
 use kagent_providers::ProviderStore;
 
 use super::capture::{self, CaptureError, WindowInfo};
+use super::tell::Deliver;
 use super::vision::{self, LocalModel};
 use super::{Env, ScreenWatchSection, Target, Watch};
 use crate::local_models::{ollama, LocalModels};
+use crate::notify::Notification;
 use crate::settings::Settings;
 
 pub struct RealEnv {
@@ -18,6 +21,23 @@ pub struct RealEnv {
     pub settings: Arc<RwLock<Settings>>,
     pub local_models: Arc<LocalModels>,
     pub agent: Arc<Agent>,
+    pub notifier: Arc<crate::notify::Notifier>,
+}
+
+#[async_trait]
+impl Deliver for RealEnv {
+    async fn session_message(&self, session_id: &str, message: Message) -> Result<(), String> {
+        self.agent.append_external(session_id, vec![message]).await.map_err(|e| format!("{e:#}"))
+    }
+    fn say(&self, session_id: &str, text: &str) -> bool {
+        super::say::speak(session_id, text)
+    }
+    async fn notify(&self, notification: Notification) {
+        let _ = self.notifier.send(notification).await;
+    }
+    fn telegram_on(&self) -> bool {
+        self.settings.read().unwrap().screen_watch_config().telegram
+    }
 }
 
 #[async_trait]
@@ -76,5 +96,10 @@ impl Env for RealEnv {
 
     async fn tell(&self, watch: &Watch, text: &str) {
         tracing::info!("screen watch {} ({}): {text}", watch.id, watch.state.name());
+        super::tell::tell(self, watch, text).await;
+    }
+
+    async fn restarted(&self, watch: &Watch, text: &str) {
+        super::tell::restarted(self, watch, text).await;
     }
 }
