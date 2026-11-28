@@ -134,6 +134,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sentinel/rebaseline", post(crate::sentinel::http::rebaseline))
         .route("/changes", get(api::list_changes))
         .route("/changes/{id}/undo", post(api::undo_change))
+        .route("/changes/{id}/diff", get(crate::diff::http::change_diff))
+        .route("/diff", post(crate::diff::http::post))
         .route("/tasks", get(crate::tasks::http::list).post(crate::tasks::http::add))
         .route("/tasks/{id}", put(crate::tasks::http::update).delete(crate::tasks::http::delete))
         .route("/tasks/{id}/run", post(crate::tasks::http::run))
