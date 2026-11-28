@@ -32,11 +32,13 @@ The daemon already serves `index.html` for a path that is not a file; `/api/...`
 | `/runs`, `/runs/<run>`, `/runs/<run>/<task>` | the runs view; a run; a task of it with its worker's tab shown |
 | `/settings`, `/settings/<section>`, `/settings/<section>/<item>` | the settings page (a plain `/settings` is filled in with the page used last); `<item>` is a provider, a skill... opened in the page |
 
-- A **place** is `{view, section, id, sub, session}`; `route.ts` turns a path into a place and back (pure, tested by
-  `scripts/test-shell-web.py` through the window and by the build). An address that is not in the table is replaced
-  (`replaceState`) by the chat. `?app`, `?compact` and any other query string are kept on every address.
-- The store stays the owner of the state (`view`, `settingsSection`, `activeSession`, `placeId`, `placeSub`);
-  `router.ts` mirrors it into the address. A store change that makes a different place **pushes** an entry; a
+- A **place** is `{view, section, id, sub, session}`; `router/route.ts` turns a path into a place and back (pure, tested through the
+  window by `scripts/test-shell-web.py`). An address that is not in the table is replaced (`replaceState`) by the chat; `/providers`
+  and `/tools` (tabs before the settings screen) open their settings pages. `?app`, `?compact` and any other query string are kept on
+  every address. A session id in an address is `[\w.:-]{1,128}`; the old `#session=` fragment takes hex ids only, as before.
+- The store stays the owner of the state (`view`, `settingsSection`, `activeSession`, and the new `placeId` and `placeSub`: a settings
+  item, a ticket key, a run and its task); `router/router.ts` mirrors it into the address, so no caller of `setView`, `openSession`
+  or `showView` changed. Tickets and Runs read their open item from `placeId` and `placeSub`. A store change that makes a different place **pushes** an entry; a
   change that only fills an empty part of the place (the first conversation opened at load, the default settings
   page, a conversation opened after the last one was deleted) **replaces**. Not places, so no entry: tabs inside a
   card, a filter, a dialog, a menu, the sidebar collapsing.
@@ -53,9 +55,10 @@ The daemon already serves `index.html` for a path that is not a file; `/api/...`
   nowhere to go, `title` "Back to Settings: Models"). The widget layout has no title bar and no buttons; the keys
   and the mouse buttons work there too.
 - `Alt+Left` and `Alt+Right` (not while a text field has the Alt+arrow of its own: they always win; text fields
-  have no Alt+arrow). The mouse's side buttons: `mouseup` with `button` 3 (Back) and 4 (Forward) with
-  `preventDefault`, and `mousedown`/`auxclick` of those buttons prevented too, so the browser does not also
-  navigate.
+  have no Alt+arrow). The mouse's side buttons: `mouseup` (and `pointerup`, where a browser sends no mouse events for them; one
+  press acts once) with `button` 3 (Back) and 4 (Forward) and `preventDefault`. Their `mousedown`, `pointerdown` and `auxclick` are
+  stopped in the capture phase, so the browser does not also navigate and a menu does not take the press for a click outside (which
+  would close it before Back could).
 - The app keeps a mirror of the stack (`{idx, entries: [{path, label, scroll}]}` in `sessionStorage`, restored on
   reload) because the History API cannot say whether Forward is possible. `history.state` carries the index of
   its entry.
@@ -64,7 +67,10 @@ The daemon already serves `index.html` for a path that is not a file; `/api/...`
   Back, not by a history entry per overlay: an entry per open menu would cost an entry per menu opened and race with
   a pick that navigates. A browser's own Back (outside the app window) closes every overlay and then changes the place.
 - **Scroll** of a page is kept per entry: the element marked `data-scroll-root="page"` (the page frame, section 4)
-  is recorded on scroll and put back after a Back or Forward once its content is tall enough (tried for 2 s).
+  is recorded on scroll and put back after a Back or Forward once its content is tall enough (tried for 2 s); a new place starts at the
+  top. The stack mirror is capped at 200 entries (a browser keeps 50).
+- A history entry the page makes without a user gesture is skipped by a browser's Back (its history-manipulation intervention); every push
+  here follows a click or a key of the owner, so none is skipped. Headless suites click with real mouse events for the same reason.
 
 ## 3. H1: the matrix (`scripts/shell-matrix.py`)
 
@@ -89,23 +95,25 @@ The result is the table in section 8 (written by the first run, before any produ
 
 Rules, written once (CSS in `web/src/styles/shell.css`, parts in `web/src/components/page/`):
 
-1. **One page frame** (`.page-frame`): fills the area beside the sidebar, scrolls on its own (`overflow: auto`,
-   `data-scroll-root="page"`), is the only scroller of a page, and holds the content in a column. The column is
-   `min(100%, 960px)` for forms and reading (`.page-frame` default), `min(100%, 1600px)` for pages with a real
-   second pane (`.wide`: Models, Skills, Runs, Tickets, Changes). Below the cap the column is the whole width; above
-   it, it is centered. Nothing has a fixed pixel width except icons.
+1. **One page frame** (`.page`, the class the plain views had already; `components/page/Page.tsx`): fills the area beside the
+   sidebar, scrolls on its own (`data-scroll-root="page"`), is the only scroller of a page, and holds the content in a column, centered
+   by its own padding. The column is `min(100%, 960px)` for forms and reading, `min(100%, 1600px)` with `wide` for a page with a real
+   second pane. A settings page is `SectionPage` in the same column (header and body alike), `wide` for Models, Skills and Memory; Changes
+   is a `wide` `.page`; Runs, Tickets and Voice are pane layouts capped at 1600 px and centered. Nothing has a fixed pixel width except
+   icons.
 2. **Two panes** split at a divider (kept per page where one exists today) and stack under 900 px.
-3. **One page header** (`PageHeader`): the title (one heading size per level: h1 for a page, h2 for a card), a
-   one-line description, and the page's actions on the right, wrapping under the title when narrow.
-4. **One form row** (`FormRow`): label and hint left, control right at 720 px and above; stacked below. **One card**
-   (`.card`): a bordered, padded block with an optional h2. Existing `settings/ui.tsx` parts (`Section`, `Row`, `Toggle`)
-   are the base: they are changed to use the frame and the row rules above, not duplicated.
+3. **One page header** (`PageHeader`; `SectionPage` draws the same title, line and actions): h2 for the title, a one-line
+   description, and the page's actions on the right, wrapping under the title when narrow.
+4. **One form row** (`FormRow`) and **one card** (`Card`) are the `Row` and `GroupCard` of `settings/ui.tsx`, re-exported by
+   `components/page/Page.tsx`: the plain views use the same parts as the settings pages, nothing was duplicated.
 5. **Tables and code scroll inside their card** (`.scroll-x`); the page never scrolls sideways. Long words wrap
    (`overflow-wrap: anywhere`) or end in an ellipsis with a `title`.
 6. **Dialogs**: `min(92vw, 720px)` wide, `max-height: 86vh` with their own scroll (the dialog is the one scroller
    while it is open).
-7. **No native `<select>`**: the existing `Dropdown` (`settings/Dropdown.tsx`) in its place, with its keyboard
-   behaviour. The mobile settings jump (`.settings-jump`) is a `Dropdown` too.
+7. **No native `<select>`**: the existing `Dropdown` (`settings/Dropdown.tsx`) in its place, with its keyboard behaviour.
+   `settings/Select.tsx` takes a select's `<option>` children and an `onChange` that reads `e.target.value`, so the 33 selects of the
+   tree changed one tag; the settings jump (`.settings-jump`, under 900 px) is a `Dropdown`. The trigger has `value` and the options
+   `data-value` (what the headless suites read and click).
 8. No nested scroll containers on a page: a list inside a page frame grows with the page; a pane that must scroll on
    its own (a transcript, a diff) is a page of its own (the frame is `overflow: hidden` there, `.fill`).
 
@@ -119,12 +127,14 @@ undo), `PUT /api/sessions/:id/project` and `/pin`, `DELETE /api/sessions/:id` (c
 subagents; its images folder goes with it, `session.rs` `delete`). Extended, not duplicated: `SessionRow.tsx` and
 `sidebar/store.ts`.
 
-- **Menu** on a row (the `...` button, a right click, the menu key and `Shift+F10`): Rename, Move to project (a
-  submenu: the projects of `GET /api/projects` and the folders conversations already use, a check on the current one,
-  and "No project"), Pin, Archive or Unarchive, Delete. `F2` renames and `Delete` deletes the focused row.
+- **Menu** on a row (the `...` button, a right click, the menu key and `Shift+F10`): Rename, Pin, Move to project (a second
+  menu: the projects of `GET /api/projects` and the folders conversations already use, a check on the current one, and "No project"),
+  Attach folder (the S42 item that takes a typed path, kept), Detach folder, Archive or Unarchive, Delete. `F2` renames and `Delete`
+  deletes the focused row. Pick Move to project and the keyboard needs no drag.
 - **Rename**: the row's title becomes a text field (Enter saves, Escape cancels, a blur saves); 1 to 120 characters.
   `PUT /api/sessions/:id/title {title}`; the title the owner chose is never replaced by the automatic one (the
-  automatic title only replaces the placeholder).
+  automatic title only replaces the placeholder; `renamed` in the meta keeps both the quick title and the model's, also one that was
+  already on its way).
 - **Move**: the existing `PUT /api/sessions/:id/project {path}`; "No project" is `{path: null}`. A conversation with
   history gets an info toast "The next turn works in <folder>". **Drag** a row onto a project heading (or "This
   machine" for none) moves it with the same call; the heading is highlighted while a row is over it. The keyboard
@@ -132,8 +142,8 @@ subagents; its images folder goes with it, `session.rs` `delete`). Extended, not
 - **Archive**: `archived: boolean` in the session's meta (`#[serde(default)]`, so old sessions are not archived);
   `PUT /api/sessions/:id/archive {archived}` answers the meta and sends `sessionMetaChanged`; 409 while a turn runs
   ("the conversation is running: stop it first"). An archived conversation leaves the list and stands in a collapsed
-  "Archived" group at the foot of the list (its rows have Unarchive and Delete). The search leaves archived ones out
-  unless its "Archived" filter button is pressed. An archived conversation can still be opened.
+  "Archived (n)" group at the foot of the list, in Projects and in Recent (its rows have Rename, Unarchive and Delete). The search
+  leaves archived ones out unless its "Archived" filter button is pressed. An archived conversation can still be opened.
 - **Delete with undo**: no confirm. The row is hidden at once and a toast says "Deleted <title>" with **Undo** for 10 s.
   When the toast ends (the 10 s, or the owner closing it) the page calls `DELETE /api/sessions/:id`; Undo cancels
   that and shows the row again. If the open conversation is deleted, the next one opens (a replace, section 2). The
@@ -144,6 +154,9 @@ subagents; its images folder goes with it, `session.rs` `delete`). Extended, not
   `DELETE`s at once with `fetch(..., {keepalive: true})`; the owner asked for the delete, and undo only exists in the
   window that showed the toast. If that request does not arrive (a crash), nothing was changed: the conversation is
   simply still there at the next start. Nothing is ever half deleted (the daemon deletes in one call).
+- The 10 s are `UNDO_MS` in `components/sidebar/convo.ts`; the setting `kagent.undo-ms` of the page shortens them (the suites of the other
+  behaviours do not wait 10 s; one suite check runs the real ten seconds). Holding the pointer or the focus on the toast holds its timer, and
+  so the delete (the toast's own rule, `notices.md` section 2).
 - Not built: multi-select with Ctrl and Shift, the `sessions` tool's `archive` and `move` actions, a trash folder on disk
   (the undo window is the toast; the plan's 30 day trash is dropped).
 
@@ -201,7 +214,11 @@ First run of `scripts/shell-matrix.py` (before any product change), dark and lig
 | 27 | widget | 2 | `native-select` 340x460 |
 | 28 | widget-sheet | 2 | `native-select` 340x460 |
 
-Causes, in the order they are fixed:
+**After H3** (`scripts/test-shell-web.py`, and `shell-matrix.py --out after`): **0 findings** in the 160 cells, at 1920x1080, 1200x820, 700x500
+and 340x460, dark and light (before: 276; 1920: 74 to 0, 1200: 74 to 0, 700: 124 to 0, 340: 4 to 0). The run is a test: any finding fails it.
+The screenshots of the second run are in `/tmp/kagent-v003-shell-shots/after/`.
+
+Causes, in the order they were fixed:
 
 1. **`main-width` on every settings page** (112): the page header (`.ui-section-head-inner`, a flex row with `margin: 0 auto`)
    shrinks to its content, so the title sits at a different left edge than the cards under it (General at 1920: title at
