@@ -5,16 +5,18 @@ import type { Message } from "../api";
 import Markdown from "./Markdown";
 import { AgentNote } from "./AgentsCard";
 import MessageImages from "./MessageImages";
+import { TOOL_RESULT_LABEL, toolResultKind } from "./toolResult";
 
 export function ToolCard({ m }: { m: Message }) {
   const [open, setOpen] = useState(false);
-  const isError = m.isError;
+  const kind = toolResultKind(m.content, m.isError);
+  const isError = kind === "error";
   return (
-    <div className={`tool-card ${isError ? "tool-error" : ""} ${open ? "open" : ""}`}>
+    <div className={`tool-card ${isError ? "tool-error" : ""} tool-${kind} ${open ? "open" : ""}`}>
       <button className="tool-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={`tool-mark ${isError ? "bad" : "ok"}`} aria-hidden="true" />
+        <span className={`tool-mark ${kind === "ok" ? "ok" : kind === "error" ? "bad" : kind === "shown" ? "info" : "warn"}`} aria-hidden="true" />
         <span className="tool-name">{m.toolName}</span>
-        <span className="tool-state">{isError ? "failed" : "done"}</span>
+        <span className="tool-state">{TOOL_RESULT_LABEL[kind]}</span>
         <span className="tool-toggle">{open ? "hide output" : "output"}</span>
       </button>
       {open && <pre className="tool-body">{m.content.slice(0, 4000)}</pre>}

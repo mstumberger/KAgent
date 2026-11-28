@@ -30,6 +30,24 @@ fn tail_str(s: &str, max: usize) -> &str {
 
 /// Keep head and tail of oversized tool output so the model sees both the command
 /// banner and the final error lines (ZCode result budget, strategy "truncate").
+/// The line that tells a result was cut (agent-loop.md B.2, question 4): how many of `total` items
+/// are not shown and how to get them; empty when everything is shown.
+pub fn more_note(total: usize, shown: usize, how: &str) -> String {
+    if total <= shown {
+        return String::new();
+    }
+    format!("... {} more not shown ({how})\n", total - shown)
+}
+
+/// `text` cut to `max` bytes with a closing note of how much was left out and how to get it.
+pub fn cut_with_note(text: &str, max: usize, how: &str) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let kept = truncate_str(text, max);
+    format!("{kept}\n[cut: {} of {} characters not shown ({how})]", text.chars().count() - kept.chars().count(), text.chars().count())
+}
+
 pub fn budget_output(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
@@ -328,6 +346,22 @@ fn sentence_end(chars: &[char]) -> Option<usize> {
 
 fn word_end(chars: &[char]) -> Option<usize> {
     (0..chars.len()).rev().find(|&i| chars[i].is_whitespace())
+}
+
+#[cfg(test)]
+mod cut_tests {
+    use super::*;
+
+    #[test]
+    fn a_cut_result_says_what_was_cut_and_how_to_get_the_rest() {
+        assert_eq!(more_note(10, 10, "x"), "");
+        assert_eq!(more_note(3, 10, "x"), "");
+        assert_eq!(more_note(12, 10, "raise limit"), "... 2 more not shown (raise limit)\n");
+        assert_eq!(cut_with_note("abc", 10, "x"), "abc");
+        assert_eq!(cut_with_note("abcdefghij", 4, "export it"), "abcd\n[cut: 6 of 10 characters not shown (export it)]");
+        // A cut in the middle of a character keeps the characters whole.
+        assert!(cut_with_note("ččččč", 5, "x").starts_with("čč\n[cut: 3 of 5 characters"), "{}", cut_with_note("ččččč", 5, "x"));
+    }
 }
 
 #[cfg(test)]

@@ -242,22 +242,58 @@ impl ToolContext {
     }
 }
 
+/// What kind of result a tool gave (agent-loop.md B.1): the loop and the UI tell them apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResultKind {
+    #[default]
+    Ok,
+    Error,
+    /// Nothing changed and the model must act differently (refused, queued, asked).
+    NotDone,
+    /// Only displayed to the owner; nothing was changed.
+    Shown,
+    /// Part of the job is done.
+    Partial,
+}
+
 #[derive(Debug, Clone)]
 pub struct ToolOutput {
     pub content: String,
     pub is_error: bool,
+    pub kind: ResultKind,
 }
 
 impl ToolOutput {
     pub fn ok(content: impl Into<String>) -> Self {
-        Self { content: content.into(), is_error: false }
+        Self { content: content.into(), is_error: false, kind: ResultKind::Ok }
     }
     pub fn error(content: impl Into<String>) -> Self {
-        Self { content: content.into(), is_error: true }
+        Self { content: content.into(), is_error: true, kind: ResultKind::Error }
     }
     pub fn json(value: &Value) -> Self {
         Self::ok(serde_json::to_string_pretty(value).unwrap_or_default())
     }
+    /// Nothing was done, and the model is told what to do instead: `not done: <what>. Next: <next>.`
+    pub fn not_done(what: &str, next: &str) -> Self {
+        Self { content: format!("not done: {}. Next: {}.", sentence(what), sentence(next)), is_error: true, kind: ResultKind::NotDone }
+    }
+    /// Only shown to the owner (a page, a window, a notification): `shown to the owner: <what>. Nothing was changed.`
+    pub fn shown(what: &str) -> Self {
+        Self { content: format!("shown to the owner: {}. Nothing was changed.", sentence(what)), is_error: false, kind: ResultKind::Shown }
+    }
+    /// Part of the job is done: `partly done: <done>. Missing: <missing>. Next: <next>.`
+    pub fn partial(done: &str, missing: &str, next: &str) -> Self {
+        Self {
+            content: format!("partly done: {}. Missing: {}. Next: {}.", sentence(done), sentence(missing), sentence(next)),
+            is_error: false,
+            kind: ResultKind::Partial,
+        }
+    }
+}
+
+/// `text` without surrounding space and without a trailing period (the helpers add one).
+fn sentence(text: &str) -> &str {
+    text.trim().trim_end_matches('.')
 }
 
 #[async_trait]
@@ -339,5 +375,26 @@ impl ToolRegistry {
                 }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_helpers_have_a_fixed_wording_and_a_kind() {
+        let n = ToolOutput::not_done("the setting", "ask the owner");
+        assert_eq!((n.content.as_str(), n.is_error, n.kind), ("not done: the setting. Next: ask the owner.", true, ResultKind::NotDone));
+        let s = ToolOutput::shown("the settings page");
+        assert_eq!((s.content.as_str(), s.is_error, s.kind), ("shown to the owner: the settings page. Nothing was changed.", false, ResultKind::Shown));
+        let p = ToolOutput::partial("3 of 5 files", "2 files are read-only", "ask the owner");
+        assert_eq!(
+            (p.content.as_str(), p.is_error, p.kind),
+            ("partly done: 3 of 5 files. Missing: 2 files are read-only. Next: ask the owner.", false, ResultKind::Partial)
+        );
+        // A trailing period is not doubled.
+        assert_eq!(ToolOutput::not_done("it failed.", "retry. ").content, "not done: it failed. Next: retry.");
+        assert_eq!((ToolOutput::ok("x").kind, ToolOutput::error("x").kind), (ResultKind::Ok, ResultKind::Error));
     }
 }
