@@ -5,6 +5,7 @@ mod api;
 mod cli;
 mod bots;
 mod calendar;
+mod local_models;
 mod background_api;
 mod compact_api;
 mod rounded;
@@ -86,6 +87,8 @@ pub struct AppState {
     pub bots: Arc<bots::Bots>,
     /// Google Calendar (calendar.md): the connection, the tools, the morning report.
     pub calendar: Arc<calendar::Calendar>,
+    /// Recommended local models and their downloads (local-models.md).
+    pub local_models: Arc<local_models::LocalModels>,
     pub skills: Arc<skills::SkillHub>,
     /// The memory store, behind the routes and the memory tools (memory.md).
     pub memory: Arc<memory::MemoryHub>,
@@ -239,6 +242,9 @@ async fn run() -> anyhow::Result<()> {
     for tool in calendar::tools::all(&calendar_cell) {
         registry.register(tool);
     }
+    // Recommended local models (local-models.md): the tool finds the module once it exists.
+    let local_models_cell: local_models::tool::LocalModelsCell = Default::default();
+    registry.register(Arc::new(local_models::tool::LocalModelsTool::new(local_models_cell.clone())));
     // Inline widgets (widgets.md): the fragments live under <data>/widgets.
     let widgets = Arc::new(widgets::Widgets::new(paths.data.clone()));
     registry.register(Arc::new(widgets::WidgetShow::new(widgets.clone())));
@@ -389,6 +395,8 @@ async fn run() -> anyhow::Result<()> {
     let calendar = calendar::Calendar::daemon(settings_arc.clone(), &paths, events.clone(), web.clone(), notifier.clone(), bots.clone(), task_store.clone()).await;
     let _ = calendar_cell.set(calendar.clone());
     calendar::change::register_undo(&calendar, &services);
+    let local_models = local_models::LocalModels::new(providers.clone(), settings_arc.clone(), events.clone());
+    let _ = local_models_cell.set(local_models.clone());
     let state = Arc::new(AppState {
         net,
         ui: ui_hub,
@@ -399,6 +407,7 @@ async fn run() -> anyhow::Result<()> {
         notifier,
         bots,
         calendar,
+        local_models,
         skills: skills.clone(),
         memory,
         skill_sources,

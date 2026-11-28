@@ -167,6 +167,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/telegram/pairing-code", post(crate::bots::http::pairing_code))
         .route("/telegram/pairing", delete(crate::bots::http::unpair))
         .route("/telegram/test", post(crate::bots::http::test_message))
+        .route("/local-models", get(crate::local_models::http::get))
         .route("/calendar", get(crate::calendar::http::get))
         .route("/calendar/client", put(crate::calendar::http::put_client))
         .route("/calendar/connect", post(crate::calendar::http::connect))

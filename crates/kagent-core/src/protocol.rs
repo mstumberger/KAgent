@@ -263,6 +263,9 @@ pub enum AgentEvent {
     /// The Google Calendar connection changed state (calendar.md section 7): `state` is
     /// `off`, `connecting`, `connected`, `reconnect` or `error`.
     CalendarChanged { state: String },
+    /// The downloads of local models changed (local-models.md section 3): `pulls` is the
+    /// list of `GET /api/local-models` (queued, pulling or failed rows), at most twice a second.
+    LocalModelsChanged { pulls: serde_json::Value },
     /// A subagent of `session_id` changed state (agents.md section 3): `child` is a
     /// `ChildView` (id, title, profile, startedAt) and `status` one of `queued`, `running`,
     /// `done`, `failed`, `cancelled`.
