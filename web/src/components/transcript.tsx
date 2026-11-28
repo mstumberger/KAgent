@@ -24,6 +24,21 @@ export function ToolCard({ m }: { m: Message }) {
   );
 }
 
+/** The first line of a stored note: the marker the daemon puts before the notes. */
+const NOTE_HEADER = /^\[note from the daemon[^\]]*\]\n?/;
+
+function DaemonNote({ m }: { m: Message }) {
+  const lines = m.content.replace(NOTE_HEADER, "").split("\n").map((l) => l.replace(/^- /, "")).filter(Boolean);
+  return (
+    <div className="bubble note" role="note">
+      <span className="via">daemon note</span>
+      {lines.map((l, i) => (
+        <div key={i} className="content">{l}</div>
+      ))}
+    </div>
+  );
+}
+
 export function Bubble({ m, streaming, thinking, sessionId }: { m: Message; streaming?: string; thinking?: string; sessionId?: string | null }) {
   if (m.role === "tool") return <ToolCard m={m} />;
   const isUser = m.role === "user";
@@ -32,6 +47,8 @@ export function Bubble({ m, streaming, thinking, sessionId }: { m: Message; stre
   // stored as a message of the user, shown as a report.
   // A report of a subagent or of a background task has a note of its own.
   if (isUser && via === "agent") return <AgentNote m={m} />;
+  // A note of the daemon into a running turn (agent-loop.md C.1): its own dimmed line, never the owner's bubble.
+  if (isUser && via === "note") return <DaemonNote m={m} />;
   const text = (streaming !== undefined ? streaming : m.content) || "";
   // A step that only calls tools has no words: its results show as tool chips.
   if (!isUser && !text && !thinking && m.toolCalls && m.toolCalls.length > 0) return null;

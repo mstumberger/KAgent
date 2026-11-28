@@ -62,7 +62,7 @@ impl Tool for ReadFile {
     fn contract(&self) -> &ToolContract {
         &self.contract
     }
-    async fn call(&self, input: Value, _ctx: ToolContext) -> anyhow::Result<ToolOutput> {
+    async fn call(&self, input: Value, ctx: ToolContext) -> anyhow::Result<ToolOutput> {
         let args: ReadArgs = parse(input)?;
         let Some(path) = args.path.as_deref().filter(|p| !p.is_empty()) else {
             return Ok(ToolOutput::error("path is required"));
@@ -85,6 +85,8 @@ impl Tool for ReadFile {
             }
             Err(e) => return Ok(ToolOutput::error(format!("{path}: {e}"))),
         };
+        // The session now knows this file as it is: a later change on disk is a note (agent-loop.md C.2).
+        super::seen::remember(&ctx.session_id, &path);
         let head: &[u8] = &bytes[..bytes.len().min(8192)];
         if head.contains(&0) {
             let kind = file_type(&path).await;

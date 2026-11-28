@@ -17,6 +17,7 @@ pub mod message;
 pub mod power_actions;
 pub mod privop;
 pub mod security;
+pub mod seen;
 pub mod services;
 pub mod sessions;
 pub mod shell;

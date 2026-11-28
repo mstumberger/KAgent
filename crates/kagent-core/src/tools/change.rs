@@ -298,6 +298,9 @@ impl Tool for WriteFile {
         let Some(path) = home_path(path_s) else {
             return Ok(ToolOutput::error(format!("{path_s} is not inside your home directory (or its folder does not exist). System files: use edit_file on an allowed kagent-* config path.")));
         };
+        if mode != "create" && super::seen::stale(&ctx.session_id, &path.display().to_string()) {
+            return Ok(changed_on_disk(&path.display().to_string()));
+        }
         let prev = tokio::fs::read_to_string(&path).await.ok();
         if mode == "create" && prev.is_some() {
             return Ok(ToolOutput::error(format!("{} already exists (mode create)", path.display())));
@@ -311,6 +314,7 @@ impl Tool for WriteFile {
             _ => content.to_string(),
         };
         tokio::fs::write(&path, &new_content).await?;
+        super::seen::remember(&ctx.session_id, &path.display().to_string());
         let undo = json!({"kind": "user", "action": "restore_file", "path": path, "backup": backup});
         record_user(&ctx, "write_file", &format!("{mode} {}", path.display()), json!({"kind": "user", "action": "write_file", "path": path, "bytes": new_content.len()}), true, Some(undo), prev.map(|p| format!("{} bytes", p.len())), Some(format!("{} bytes", new_content.len())), "")
     }
@@ -384,6 +388,9 @@ impl Tool for EditFile {
             Ok(c) => c,
             Err(e) => return Ok(ToolOutput::error(format!("{e:#}"))),
         };
+        if !root_editable(&path) && home_path(&path).is_some_and(|p| super::seen::stale(&ctx.session_id, &p.display().to_string())) {
+            return Ok(changed_on_disk(&path));
+        }
         let count = content.matches(old).count();
         if count != 1 {
             return Ok(ToolOutput::error(format!("`old` occurs {count} times in {path}; it must occur exactly once. Include more surrounding text.")));
@@ -398,9 +405,15 @@ impl Tool for EditFile {
         let p = home_path(&path).expect("checked by read_any");
         let backup = backup_file(&ctx, &content)?;
         tokio::fs::write(&p, &updated).await?;
+        super::seen::remember(&ctx.session_id, &p.display().to_string());
         let undo = json!({"kind": "user", "action": "restore_file", "path": p, "backup": backup});
         record_user(&ctx, "edit_file", &format!("edit {}", p.display()), json!({"kind": "user", "action": "edit_file", "path": p}), true, Some(undo), None, None, &diff)
     }
+}
+
+/// A file the session read has changed since: nothing is written (agent-loop.md C.2).
+fn changed_on_disk(path: &str) -> ToolOutput {
+    ToolOutput::not_done(&format!("{path} changed on disk since you read it, so nothing was written"), "read it again with read_file, then make the change")
 }
 
 /// What `package search` answers: a failed search is not "no packages found" (agent-loop.md B.2, question 1)
@@ -458,5 +471,30 @@ mod tests {
         assert!(home_path("~/x-kagent-test.txt").is_some());
         assert!(home_path(&format!("{home}/../../etc/passwd")).is_none());
         assert!(home_path("/etc/passwd").is_none());
+    }
+
+    /// agent-loop.md C.2: a file that changed on disk since the session read it is not written over.
+    #[tokio::test]
+    async fn a_file_changed_since_it_was_read_is_not_edited_or_overwritten() {
+        let dir = tempfile::tempdir_in(home()).unwrap();
+        let file = dir.path().join("config.txt");
+        std::fs::write(&file, "alpha beta").unwrap();
+        let path = file.display().to_string();
+        let mut ctx = ToolContext::standalone(std::time::Duration::from_secs(5), 10_000);
+        ctx.session_id = "change-test-stale".into();
+        super::super::seen::remember(&ctx.session_id, &path);
+        // Someone else changes it.
+        std::fs::write(&file, "alpha gamma").unwrap();
+        std::fs::File::options().write(true).open(&file).unwrap().set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(30)).unwrap();
+        let expected = format!("not done: {path} changed on disk since you read it, so nothing was written. Next: read it again with read_file, then make the change.");
+        let edit = EditFile::new().call(json!({"path": path, "old": "alpha", "new": "omega"}), ctx.clone()).await.unwrap();
+        assert_eq!((edit.kind, edit.content.as_str()), (crate::tool::ResultKind::NotDone, expected.as_str()));
+        let write = WriteFile::new().call(json!({"path": path, "content": "x"}), ctx.clone()).await.unwrap();
+        assert_eq!(write.content, expected);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "alpha gamma", "nothing was written");
+        // A file the session never read is not checked.
+        let other = dir.path().join("other.txt");
+        std::fs::write(&other, "x").unwrap();
+        assert!(!super::super::seen::stale(&ctx.session_id, &other.display().to_string()));
     }
 }

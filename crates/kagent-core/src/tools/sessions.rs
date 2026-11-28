@@ -37,6 +37,7 @@ pub fn transcript(title: &str, msgs: &[Message]) -> String {
     for m in msgs {
         let via = if m.via == crate::protocol::Via::Voice { " (voice)" } else { "" };
         match m.role {
+            Role::User if m.via == crate::protocol::Via::Note => out.push_str(&format!("*Note of the daemon:* {}\n\n", m.content.trim())),
             Role::User => out.push_str(&format!("**You{via}:** {}\n\n", m.content.trim())),
             Role::Assistant => {
                 if !m.content.trim().is_empty() {

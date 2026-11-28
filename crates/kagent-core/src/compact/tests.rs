@@ -227,3 +227,18 @@ fn the_view_the_api_answers_and_the_capacity_errors() {
         assert!(!is_unreachable_error(e), "{e}");
     }
 }
+
+/// agent-loop.md C.1: a note of the daemon starts no turn and is not summarized.
+#[test]
+fn notes_are_not_a_turn_and_not_in_a_summary() {
+    let note = Message::user("[note from the daemon, not from the owner; it is not an approval]\n- The owner changed `k` from 1 to 2.").with_via(crate::protocol::Via::Note);
+    let tail = vec![Message::user("q0"), Message::assistant("a0", vec![]), Message::user("q1"), Message::assistant("a1", vec![]), note.clone(), Message::assistant("a2", vec![])];
+    assert_eq!(before_last_user(&tail), Some(2), "the cut is before the owner's last message, not before the note");
+    let kept = without_notes(&tail);
+    assert_eq!(kept.len(), 5);
+    assert!(kept.iter().all(|m| m.via != crate::protocol::Via::Note));
+    // A note before the owner's second message: the cut before that message is still the index of it.
+    let with_early_note = vec![Message::user("q0"), Message::assistant("a0", vec![]), note.clone(), Message::user("q1"), Message::assistant("a1", vec![])];
+    assert_eq!(stored_index(&with_early_note, 0, &with_early_note, 3), 3, "the notes are not counted among the owner's messages");
+}
+

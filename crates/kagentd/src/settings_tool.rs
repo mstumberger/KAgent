@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 
 use crate::settings::Settings;
 
-mod keys;
+pub(crate) mod keys;
 use keys::{full_view, is_protected, is_secret, leaves, nearest, path_get, patch_of};
 
 const DESCRIPTION: &str = "Read or change KAgent's own settings, models and speaking voice. get: all settings (or one `key`, a dotted path such as voice.brain); secrets are masked. models: the providers, their enabled models with the job each holds (chatModel = the Brain, fastModel, fallbackModel, visionModel, liveModel) and the voices of the live model. set: {changes: {<dotted key>: <value>, ...}} changes 1 to 8 settings at once, all or none; the owner is asked first. Examples: {\"action\":\"set\",\"changes\":{\"chatModel\":\"nvidia::meta/llama-3.3-70b-instruct\"}}, {\"changes\":{\"liveVoice\":\"Puck\"}}, {\"changes\":{\"voice.volume\":60}}. Safety settings (permission mode, rules, tool groups, privilege, hooks, Telegram, secrets) are changed on the screen only. Say a setting changed only after the result says so.";

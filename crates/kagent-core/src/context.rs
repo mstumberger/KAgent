@@ -90,7 +90,7 @@ pub(crate) fn fit_keeping(messages: Vec<Message>, budget_tokens: usize, head: us
     if total <= budget_chars {
         return (messages, 0);
     }
-    let Some(mut last_user) = messages.iter().rposition(|m| m.role == Role::User) else {
+    let Some(mut last_user) = messages.iter().rposition(|m| m.is_user_turn()) else {
         return (messages, 0);
     };
     if last_user < head {
@@ -102,7 +102,7 @@ pub(crate) fn fit_keeping(messages: Vec<Message>, budget_tokens: usize, head: us
     let mut suffix = total;
     let mut cut = last_user;
     for (i, m) in messages.iter().enumerate().take(last_user + 1) {
-        if i >= head && m.role == Role::User && head_chars + suffix <= budget_chars {
+        if i >= head && m.is_user_turn() && head_chars + suffix <= budget_chars {
             cut = i;
             break;
         }
