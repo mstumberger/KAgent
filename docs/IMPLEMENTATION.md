@@ -903,6 +903,52 @@ Tests: `specs/work-windows.md` (its own list).
 Produces: `GET /api/sessions/:id/background`, the event `backgroundTask`, `WorkPanel.tsx`, `SidePane.tsx`.
 Check: the standard checks with `web/`; the headless pass at 1200x820 and in the widget; the live check by the owner.
 
+### Session 2026-11-28 (S47: recommended local models, v0.0.2 item 8)
+
+Built: `specs/local-models.md` sections 1 to 6, in five commits on `v0.0.2` (the graphics card probe,
+the list and the fit rules with the machine route and the tool, downloads with cancel and remove, the
+page, the docs). 886 workspace tests with `KAGENT_IT=1` (843 before; 9 for the probe, 34 for the
+module), `tsc` clean, `npm run lint` with only its four old warnings, `scripts/test-local-models-web.py`
+58/58 (dark and light, 1200x820 and 700x500); vision 109, work 201, sidebar 162, picker 103 and
+calendar 60 unchanged, all run on a build of the current tree (`KAGENT_DIST`). Nothing was pulled from
+the real Ollama: every test talks to a fake on loopback, so the shape of the real `/api/pull` stream
+(NDJSON; per-layer `digest`, `total`, `completed`; `success`; `{"error"}`) rests on the fake.
+Decisions the spec did not settle:
+- **The list.** Only ids that exist on the owner's machine or are widely known: `qwen2.5:7b-instruct`,
+  `qwen2.5:14b-instruct`, `llama3.1:8b`, `gemma3:4b`, `gemma3:12b`, `llama3.2-vision:11b`,
+  `nomic-embed-text`, `bge-m3`, and two speech entries (`whisper-large-v3-turbo`, `whisper-small`,
+  `engine: "whisper"`, no Download). `qwen2.5vl:7b` is left out (not checked). Sizes, `vramMb` and the
+  language lists are estimates from memory: compare with `ollama show <id>` before a release.
+- **Recommended.** Per job: among the entries that `fit` and can be downloaded, chat keeps only the ones
+  with tools (the pick is the Brain), then the ones that list `persona.language` when any does, then
+  the largest `sizeMb` (the first of the list on a tie). Speech to text has none. With no card nothing is
+  recommended (`slow` is not `fits`). On the owner's 12 GB card: Llama 3.1 8B (chat), Gemma 3 4B
+  (vision), BGE-M3 (embedding).
+- **Fit values** go out as `fits`, `tight`, `tooBig`, `slow`; a model with two jobs is one entry with
+  `recommendedFor` (the jobs it is the pick of) and is a row in each group.
+- **Ollama's address** is the Ollama provider's base URL without `/v1`, else `127.0.0.1:11434`; no new
+  setting. The first pull's success adds the provider from its template with that address.
+- **After a pull** a new row gets `enabled`, the roles of its jobs and, for a chat model,
+  `supportsToolCall` and `contextWindow` from the list (the `vramMb` figure assumes that context); a row
+  that already existed is only switched on. A model Ollama already has but Models does not list is
+  answered by adding its row (the page says "Add to Models").
+- **The disk check** runs `df -Pk` on `OLLAMA_MODELS`, else `~/.ollama/models`, else the service folder
+  (the daemon's environment may differ from Ollama's); it is skipped when Ollama is not on this
+  machine and when the free space cannot be read.
+- **Remove** also deletes the model's rows from the Ollama providers. A failed or waiting pull is
+  dismissed through the cancel route.
+- **The page** for no Ollama shows one card and nothing else (the machine card is hidden too). The
+  section id is `local-models`; the hash parser of `api.ts` took only `[a-z]`, now `[a-z-]`.
+- **`local_models`** has side effect none (it reads loopback and runs `nvidia-smi`); its group is `agent`.
+- **Web suite.** `picker_web_lib.py` gained the local models routes (`reset(local=view)`, `/__local`,
+  `Env.open(hash=...)`); `test-calendar-web.py` now honours `KAGENT_DIST` like the others.
+- Not verified: a real pull and its stream; AMD sysfs and two-card machines (documented formats only,
+  marked in the tests); `OLLAMA_MODELS` set differently for the Ollama service; the owner's check with
+  the real page and Ollama (section G).
+- Seen, not changed: `browser::http::tests::the_status_of_a_browser_that_is_off` fails when headless
+  Chrome of a web suite is running at the same time (port 9333): run the web suites and `cargo test`
+  one after the other.
+
 ### Session 2026-11-28 (S46: images in chat and "look at my screen", v0.0.2 item 7)
 
 Built: `specs/vision.md` sections 1 to 4, in six commits on `v0.0.2` (the store and routes, the
@@ -3135,6 +3181,7 @@ v0.0.2
 - [x] S44 settings by voice and the voice rules (`specs/voice-control.md`; section E, 2026-11-27 night)
 - [x] S45 Google Calendar and the morning report (`specs/calendar.md`; items 1 to 8 automatic against a fake Google, item 9 is the owner's with a real account; section E, 2026-11-27 night)
 - [x] S46 images in chat and "look at my screen" (`specs/vision.md`; the automatic items pass, `test-live.py` has the checks and was not run, the owner's checks are left; section E, 2026-11-28)
+- [x] S47 recommended local models (`specs/local-models.md`; items 1 to 5 automatic, item 6 is the owner's, with a real Ollama; section E, 2026-11-28)
 
 Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
@@ -3166,6 +3213,7 @@ Phase 6 (planned 2026-11-27; S40 and S41 done)
 | S35 | Claude Code installed and logged in as in a terminal (`claude --version` answers). Once: Settings -> Coding agents -> Test (it starts one short job and uses a little of the subscription). tmux is not needed |
 | S36 | install Codex (`codex` on PATH; KAgent never installs it) and log in; Settings -> Coding agents -> Test |
 | S37 | Konsole, for "Open in a terminal" |
+| S47 | after the release rebuild and restart, and `npm run build` in `web/`: Settings -> Local models; press Download on Gemma 3 4B (the model of screen watch; about 3 GB, Ollama must run), then "Use for vision". KAgent never installs Ollama. The sizes and memory numbers of `config/local-models.json` are estimates: compare them with `ollama show <id>` once |
 | S46 | after the release rebuild and restart, and `npm run build` in `web/`: paste a screenshot of an error into a chat and ask what it says (with a Brain that has "Reads images", or a vision model set in Settings -> Models); by voice in `live` or `auto`: "look at my screen, what is this dialog?" and say yes to the question; then `python3 scripts/test-live.py` once with the daemon stopped (it needs port 7878) |
 | S45 | console.cloud.google.com: a project; enable "Google Calendar API"; OAuth consent screen (External, your address as a test user, then "Publish app", else Google expires the token after 7 days); Credentials, OAuth client ID, Desktop app; paste the client id and secret into Settings -> Calendar, Save client, Connect |
 | S45 | for places and leave-by (optional): enable "Places API (New)" and "Routes API", create an API key restricted to those two, paste it into Settings -> Calendar (Places and travel), Test; billing must be on for the project (this use stays inside the free monthly allowance). Then restart the daemon (release rebuild) for the new tools and routes |

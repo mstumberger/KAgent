@@ -47,6 +47,7 @@ From S42 (`sidebar.md`) the navigation is the left sidebar, not a row of tabs.
 | Basics | `general` | General | Persona (name, address, language); startup (start with session, greeting); start as widget (`startWidget`); root helper status and privilege method | S19 |
 | Basics | `appearance` | Appearance | Theme: auto (follows the system's light or dark setting; the default when the browser has no choice stored), dark or light. The switch at the foot of the sidebar goes through light, dark and auto. The page carries the theme in use as `data-theme` and the choice as `data-theme-pref` (`web/src/theme.ts`; v0.0.2) | S19 |
 | Basics | `models` | Models | The Providers page as it is (provider list, catalog, models, roles) plus "Roles" (fallback, vision, fast) and "Advanced" (reasoning level, max output tokens, temperature, max iterations, approval timeout) | S19 |
+| Basics | `local-models` | Local models | `local-models.md` section 4: the machine, the recommended models per job, downloads through Ollama (after Models) | S47 |
 | Basics | `voice` | Voice | Live model, voice, pause media; brain and context from S26 | S19 |
 | Basics | `browser` | Browser | Backend, port, binary; attach controls from S27 | S19 |
 | Basics | `desktop` | Desktop and apps | Editor, project folders | S19 |
@@ -236,3 +237,31 @@ they differ). The number is 12, not 11: S41 took 11.
 - Verified by `scripts/test-sidebar-web.py` (with `scripts/picker_web_lib.py`): 162 checks in
   headless Chrome, dark and light at 1200x820, 700x500 and 340x460, screenshots in
   `/tmp/kagent-s42-shots/`.
+
+## 13. The Local models page (S47)
+
+Section `local-models`, group Basics, after Models (`sections/LocalModels.tsx`; one file per piece under
+`settings/local-models/`: `Machine`, `Group`, `Row`, `jobs.ts`, `api.ts`, `local-models.css`). The menu has 17 pages; the
+deep link is `#view=settings&section=local-models` (the link parser accepts a hyphen), and `ui show` takes the same id.
+`GET /api/local-models` is read on open and after each `localModelsChanged` that removed a pull; the event itself only
+replaces the pulls, so the bars move without a request.
+
+- Ollama not reachable: one card, "Ollama is not running", with `systemctl start ollama` / `ollama serve`, a line that KAgent
+  does not install Ollama, and Refresh. Nothing else is shown.
+- Machine card: the card's name, a bar (used by other programs, free) with "9.3 GB free of 12.0 GB", RAM, and Ollama's
+  state with its version. No card: "No graphics card found: models run on the processor and are slow."
+- Four groups (Chat, Vision, Embedding, Speech to text), each a list of rows, the Recommended row first. A model with two
+  jobs is a row in both groups with the same download and the same buttons. A row: name, badges (Recommended, Installed, and
+  what it is used for), the id in mono, size and "needs about N GB", the note, the fit chip (Fits green, Tight amber, Too
+  big grey, Slow amber), and one of: Download (disabled, with the reason in its title, when Ollama is down or the model is too
+  big), a bar with "x of y" and Cancel (a waiting one says so and has Cancel), Retry and Dismiss under the error of a failed
+  pull, or the installed actions: "Use for vision" (Vision), "Use as fallback" and, for a model with tool calls only, "Use as
+  Brain" (Chat), "Add to Models" when Ollama has it and Settings -> Models does not, and Remove (confirmed; disabled while a
+  setting names the model). A speech model shows "Not usable yet" and no button.
+- "Use for ..." is `PUT /api/settings` with `visionModel`, `fallbackModel` or `chatModel`; the daemon's role check applies and its
+  refusal goes to the header.
+- Last card: "Other installed models" (in Ollama, not on the list): ids and sizes, no buttons.
+- Verified by `scripts/test-local-models-web.py` (58 checks, a mocked API on `picker_web_lib.py`, `KAGENT_DIST` for a build of
+  the current tree): each chip, the badge and its order, the 4 GB and no-card and no-Ollama states, a download with progress,
+  Cancel, a queued and a failed row with Retry, "Use for vision" and "Use as fallback", Remove with its confirmation, dark and
+  light at 1200x820 and 700x500, no console error; screenshots in `/tmp/kagent-s47-shots/`.

@@ -51,3 +51,20 @@ scroll is not supported on Wayland.
 Parsers are tested on output captured 2026-11-24 from Fedora 45 (dnf5 5.4), Rocky 9
 (dnf4) and Arch; the daemon and helper were run end to end in Fedora and Arch
 containers (search, info, doctor, what_changed, install + undo).
+
+## 4. The graphics card (S47; `kagent_core::platform::gpu`)
+
+Local models are judged against the card's memory (`local-models.md` section 1). One probe, tried in
+this order; the parsers are pure and tested on recorded output.
+
+| Source | How | Gives |
+|---|---|---|
+| NVIDIA | `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits` (5 s limit); one line per card, `name, total MiB, used MiB`; a name may hold a comma, so the two numbers are read from the right | name, total, free = total - used |
+| AMD | `/sys/class/drm/card<N>/device/`: `vendor` (`0x1002`), `product_name` when present, `mem_info_vram_total` and `mem_info_vram_used` in bytes (`card0-DP-1` style connector entries are skipped) | the same, `source: "sysfs"` |
+| none | neither answers, or `KAGENT_GPU=none` | `None`: the fit is judged against RAM (`slow`) |
+
+- Several cards: the one with the most memory. A card that reports `N/A` or `[N/A]` for its memory
+  (some mobile and Jetson parts) is skipped. Intel and other vendors are not probed.
+- RAM is `MemTotal` of `/proc/meminfo`.
+- Tests: `nvidia-smi` output recorded on the owner's RTX 3060 (2026-11-28); the two-card, the `N/A` and
+  the AMD cases are written from the documented formats and say so in the test.

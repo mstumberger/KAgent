@@ -563,3 +563,11 @@ The permission rules are those of `voice-control.md` section 4: `add` and `updat
 `ask` and `trusted`, ask from voice in every mode, and pass without a card in chat under
 `full`; `delete` asks in every mode and by voice only "confirm" answers it.
 
+## 27. Local models (group `agent`; S47)
+
+| Tool | Assess | Input | What |
+|---|---|---|---|
+| `local_models` | RO | `{}` | text for the model: whether Ollama answers (and its version), the graphics card with its free memory (or "no graphics card"), RAM, and the shipped list of recommended local models per job with a fit verdict (`fits`, `tight`, `too big`, `slow`), which one is RECOMMENDED, which are installed, and which cannot be used yet (speech to text). It never downloads: it tells the model that the owner presses Download in Settings -> Local models (`local-models.md` section 5) |
+
+Registered by the daemon like `calendar_events` (it finds the module once it exists) and listed in
+`group_of` with `settings`.

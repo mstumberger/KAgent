@@ -369,3 +369,44 @@ no session. `notice` gained `key`, `sessionId` and `kind`, each left out when it
   with the key of the error when the model that failed answers again ("<model> answers again"),
   once, and never without a previous error.
 - `sessionId` is set when the notice belongs to a turn (a fallback, a refused choice of model).
+
+## 9. Local models (S47)
+
+Spec: `local-models.md`. Same transport, auth and error shape as section 3.
+
+| Method path | Request | Response |
+|---|---|---|
+| GET `/api/local-models` | | `{ollama: {reachable, version, baseUrl}, gpu: {name, vramTotalMb, vramFreeMb, source} \| null, ramTotalMb, installed: [{id, sizeMb, jobs, listed, ref, usedFor}], recommended: [Recommended], pulls: [Pull]}` |
+| POST `/api/local-models/pull` | `{id}` | 202 `{id, pulls}` once the download is queued (or, for a model Ollama already has but Settings -> Models does not list, once its row is added) |
+| DELETE `/api/local-models/pull/:id` | | 204: stops the running pull (Ollama keeps the partial layers, a later pull resumes), takes a queued one out of the queue, or dismisses a failed row |
+| DELETE `/api/local-models/:id` | | 204: removes an installed model of the list from Ollama and its row from the Ollama providers |
+
+`Recommended` is the entry of `config/local-models.json` (`id`, `name`, `jobs`, `sizeMb`, `vramMb`, `context`, `tools`,
+`languages`, `note`, `engine`) plus `downloadable` (false for speech to text), `fit` (`fits`, `tight`, `tooBig`, `slow`),
+`fitNote` (null, or "<n> MB are in use by other programs at the moment" when the model needs more than is free now),
+`recommendedFor` (the jobs it is the pick of: the largest that `fits`, preferring the owner's `persona.language`; for chat only
+models with `tools`), `installed`, `installedId` (Ollama's name, e.g. `nomic-embed-text:latest`), `ref` (`provider::id`, null while
+Settings -> Models has no row for it) and `usedFor` (the settings that name `ref`: `chatModel`, `fastModel`, `fallbackModel`,
+`visionModel`, `liveModel`). `Pull` is `{id, state: "queued"|"pulling"|"failed", doneMb, totalMb, error?}`; a finished pull is
+an installed model and a cancelled one is gone. The "Use for ..." buttons are `PUT /api/settings` with the existing keys.
+
+Refusals: POST pull is 400 for an id outside the shipped list or a speech model ("KAgent downloads only the recommended list"),
+409 when Ollama is not reachable, the model is installed, it is already queued or running, or the disk is short ("<n> MB are free
+where Ollama keeps its models and <m> MB are needed"; the check is skipped when Ollama is not on this machine, and when the free
+space cannot be read). One pull runs at a time; the others wait. DELETE pull is 404 when nothing is queued, running or failed
+under that id. DELETE model is 400 outside the list, 404 when not installed, 409 while a setting names it ("choose another model
+for that first") or Ollama is down, 502 when Ollama refuses. Ollama's own address is the Ollama provider's base URL (without
+`/v1`), else `http://127.0.0.1:11434`; where the models live is `OLLAMA_MODELS`, else `~/.ollama/models`, else
+`/usr/share/ollama/.ollama/models`.
+
+When a pull ends well the daemon runs Fetch models on the Ollama provider (added from its template at that point when the owner
+has none) and gives the new row `enabled: true`, the roles of its jobs (`chat` and `vision` are the `chat` role, `vision` with
+`supportsImage`; an embedding has none) and, for a chat model, `supportsToolCall` and `contextWindow` from the list. A row that
+already existed is only switched on. Nothing is made the Brain or anything else.
+
+```json
+{"type":"localModelsChanged","pulls":[{"id":"gemma3:4b","state":"pulling","doneMb":812,"totalMb":3300}]}
+```
+
+`localModelsChanged` carries the whole `pulls` list: at every change of state, and while a download runs at most twice a second.
+A window reads `GET /api/local-models` again when a pull leaves the list (the installed models changed).
