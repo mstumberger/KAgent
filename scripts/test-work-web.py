@@ -413,6 +413,32 @@ async def narrow_checks(env, results):
     results["700x500: a click on the scrim closes it too"] = await page.js("!document.querySelector('aside.side-pane')")
 
 
+async def widget_checks(env, results, theme):
+    page = env.page
+    t = f"widget {theme}"
+    await env.size(340, 460)
+    await env.open(theme, query="?overlay", **WORK)
+    await kids(page, ("c1", "Disk usage", "explore", "running"), ("c2", "Memory usage", "general", "queued"))
+    await page.until("!!document.querySelector('.work-capsule')", "the capsule of the widget")
+    cap = await page.js("(() => { const c = document.querySelector('.work-capsule'), r = c.getBoundingClientRect(), bar = document.querySelector('.widget-bar').getBoundingClientRect(); return {above: r.bottom <= bar.top, size: getComputedStyle(c).fontSize, todoChip: !!document.querySelector('.widget-todo'), items: [...c.querySelectorAll('.cap-item')].map(i => i.textContent.trim())}; })()")
+    results[f"{t}: the capsule (11 px) is above the bar, in the place of the todo chip, which goes"] = cap["above"] and cap["size"] == "11px" and not cap["todoChip"] and cap["items"] == ["2", "1", "plan", "3/7"]
+    await page.shot(f"work-widget-{theme}")
+    await page.click(".work-capsule")
+    await page.until("!!document.querySelector('.sheet')", "the sheet Work")
+    sh = await page.js("(() => { const d = document.querySelector('.sheet'); return {label: d.getAttribute('aria-label'), titles: [...d.querySelectorAll('.work-section-title')].map(e => e.textContent), disabled: [...d.querySelectorAll('button.work-line-main')].every(b => b.disabled), full: Math.round(d.getBoundingClientRect().width) >= 320}; })()")
+    results[f"{t}: a click opens the sheet Work with the four sections, full width"] = sh["label"] == "Work" and sh["titles"] == ["Agents", "Background", "Plan", "Progress"] and sh["full"]
+    results[f"{t}: the lines open nothing in the widget (no pane) and there is no side pane"] = sh["disabled"] and await page.js("!document.querySelector('aside.side-pane')")
+    await page.shot(f"work-sheet-{theme}")
+    await page.js("document.querySelector('.sheet .agent-row[data-child=c1] .work-stop').click()")
+    await asyncio.sleep(0.3)
+    results[f"{t}: Stop of a child works in the sheet"] = "POST /api/sessions/s1/subagents/c1/stop" in calls()
+    await page.js("document.querySelector('.sheet .task-row[data-task=bg_run] .work-stop').click()")
+    await asyncio.sleep(0.4)
+    results[f"{t}: Stop of a command works in the sheet"] = "POST /api/background/bg_run/stop" in calls() and await page.js("document.querySelector('.sheet .task-row[data-task=bg_run] .work-state').textContent") == "killed"
+    await page.key("Escape", "Escape", 27)
+    results[f"{t}: Escape closes the sheet"] = await page.js("!document.querySelector('.sheet')")
+
+
 async def main():
     results = {}
     async with Env("kagent-s43", "/tmp/kagent-s43-shots") as env:
@@ -423,6 +449,7 @@ async def main():
         for theme in ("dark", "light"):
             await work_checks(env, results, theme)
             await pane_checks(env, results, theme)
+            await widget_checks(env, results, theme)
         await narrow_checks(env, results)
         await voice_check(env, results)
         errors = [e for e in env.page.errors]

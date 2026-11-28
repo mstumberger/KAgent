@@ -10,6 +10,9 @@ import Icon from "../components/Icon";
 import { ModelBody } from "../components/ModelMenu";
 import { useChoice } from "../components/useChoice";
 import Sheet from "../components/Sheet";
+import { Capsule, WorkSections } from "../components/WorkPanel";
+import { hasWork, useCounts } from "../components/work/counts";
+import { loadTasks } from "../components/work/state";
 import { SidebarBody } from "../components/Sidebar";
 import { showFromSidebar } from "../components/sidebar/store";
 import { startDrag } from "../frame";
@@ -104,9 +107,11 @@ export default function Overlay({ onExpand, onHide }: Props) {
   const lastUser = [...v.lines].reverse().find((l) => l.who === "user");
   const lastAgent = [...v.lines].reverse().find((l) => l.who !== "user");
   const pct = Math.round(v.volume * 100);
-  // The todo list of the open session (plan-todo.md section 1): a chip "3/7" while it has items.
-  const todo = s.activeSession ? (s.todos[s.activeSession] ?? []) : [];
-  const todoDone = todo.filter((item) => item.status === "completed").length;
+  // What goes on in the open session (work-windows.md section 5.6): the capsule above the bar opens the sheet "Work".
+  const counts = useCounts(s.activeSession);
+  useEffect(() => {
+    if (s.activeSession) void loadTasks(s.activeSession);
+  }, [s.activeSession, s.sheet]);
 
   return (
     <div className={`widget st-${state}`}>
@@ -136,11 +141,6 @@ export default function Overlay({ onExpand, onHide }: Props) {
       <div className={`widget-status st-${state}`}>
         <span className="sdot" />
         {label}
-        {todo.length > 0 && (
-          <span className="widget-todo" title={`Todo: ${todoDone} of ${todo.length} done`} aria-label={`Todo: ${todoDone} of ${todo.length} done`}>
-            {todoDone}/{todo.length}
-          </span>
-        )}
         {s.activeSession && (
           <button type="button" className={`widget-model${choice.none ? " none" : ""}`} title="Model and effort (Ctrl+M)" aria-label={`Model and effort: ${choice.none ? "no model" : modelLabel(choice.answering)}`} onClick={openModels}>
             {choice.none ? "No model" : modelLabel(choice.chosen ?? choice.chatModel)}
@@ -161,6 +161,12 @@ export default function Overlay({ onExpand, onHide }: Props) {
               <b>{lastAgent.who === "tool" ? "tool" : name}</b> {lastAgent.text}
             </div>
           )}
+        </div>
+      )}
+
+      {s.activeSession && hasWork(counts) && (
+        <div className="widget-work">
+          <Capsule counts={counts} className="small" onClick={() => openSheet("work")} />
         </div>
       )}
 
@@ -198,6 +204,14 @@ export default function Overlay({ onExpand, onHide }: Props) {
       {s.sheet === "models" && (
         <Sheet title="Model and effort" onClose={closeSheet}>
           <ModelBody sessionId={s.activeSession} />
+        </Sheet>
+      )}
+
+      {s.sheet === "work" && s.activeSession && (
+        <Sheet title="Work" onClose={closeSheet}>
+          <div className="work-sheet">
+            <WorkSections sessionId={s.activeSession} pane={false} />
+          </div>
         </Sheet>
       )}
 

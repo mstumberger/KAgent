@@ -129,3 +129,17 @@ aside.side-pane { flex: 0 0 380px; width: 380px; border-left: 1px solid var(--ri
   .side-scrim { display: block; position: absolute; inset: 0; z-index: 11; background: rgba(0, 0, 0, 0.35); }
 }
 main { position: relative; }
+
+/* The widget: the capsule above the bar, and the sheet with the sections. */
+.widget-work { flex: 0 0 auto; display: flex; justify-content: center; padding: 0 0 6px; }
+.work-sheet {
+  --glass-2: #18223b;
+  --rim: rgba(140, 170, 255, 0.12);
+  --ink: #e6ebf7;
+  --dim: #8b95b2;
+  --ice: #7cc4ff;
+  overflow-y: auto;
+  min-height: 0;
+}
+/* The widget is narrow: a line keeps its title, the profile of an agent waits for the full window. */
+.work-sheet .agent-row .work-line-note:not(.work-time) { display: none; }
