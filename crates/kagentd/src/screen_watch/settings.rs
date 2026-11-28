@@ -47,3 +47,36 @@ impl Settings {
         self.section::<ScreenWatchSection>("screenWatch").unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn the_defaults_are_those_of_the_spec() {
+        let s = Settings::defaults();
+        assert_eq!(serde_json::to_value(s.screen_watch_config()).unwrap(), json!({"enabled": true, "cloudConfirm": false, "telegram": false, "defaultMinutes": 20, "everySec": 10}));
+        assert!(!s.screen_watch_config().cloud_confirm, "nothing leaves the machine until the owner says so");
+    }
+
+    #[test]
+    fn a_value_outside_its_range_or_a_typo_is_refused() {
+        let mut s = Settings::defaults();
+        for patch in [
+            json!({"screenWatch": {"defaultMinutes": 0}}),
+            json!({"screenWatch": {"defaultMinutes": 121}}),
+            json!({"screenWatch": {"everySec": 4}}),
+            json!({"screenWatch": {"everySec": 61}}),
+            json!({"screenWatch": {"cloudConfirmm": true}}),
+            json!({"screenWatch": {"enabled": "yes"}}),
+            json!({"screenWatch": 5}),
+        ] {
+            assert!(s.patch(patch.clone()).is_err(), "{patch}");
+        }
+        assert_eq!(s, Settings::defaults());
+        s.patch(json!({"screenWatch": {"defaultMinutes": 120, "everySec": 5, "enabled": false}})).unwrap();
+        let c = s.screen_watch_config();
+        assert_eq!((c.default_minutes, c.every_sec, c.enabled), (120, 5, false));
+    }
+}

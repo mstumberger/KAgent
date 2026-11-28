@@ -57,6 +57,17 @@ pub async fn active_window() -> Result<WindowInfo, String> {
     Ok(WindowInfo { id, title, own: class.to_ascii_lowercase().contains("kagent") })
 }
 
+/// The title of the active window, found now and in a blocking way (a call assessment is not async): the
+/// summary of a `start` names it. `None` when it cannot be found.
+pub fn active_title_blocking() -> Option<String> {
+    if let Ok(fake) = std::env::var("KAGENT_FAKE_WINDOW") {
+        return Some(fake.split_once(' ').map(|(_, t)| t).unwrap_or("").to_string());
+    }
+    kagent_core::tools::xdg::which("xdotool")?;
+    let out = std::process::Command::new("xdotool").args(["getactivewindow", "getwindowname"]).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string()).filter(|t| !t.is_empty())
+}
+
 /// The PNG of the target.
 pub async fn grab(target: Target, window_id: Option<&str>) -> Result<Vec<u8>, CaptureError> {
     if let Ok(fake) = std::env::var("KAGENT_FAKE_SCREENSHOT") {

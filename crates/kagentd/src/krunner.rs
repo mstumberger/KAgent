@@ -78,6 +78,7 @@ impl Runner {
         match cmd.as_str() {
             "stop" => {
                 let n = st.agent.stop_all().await;
+                st.screen_watch.stop();
                 notify("KAgent", &format!("Stopped {n} running task(s)."), "normal");
             }
             "open" => open_ui(&st, None),

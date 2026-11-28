@@ -22,6 +22,9 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "telegram",
     "calendar.enabled",
     "calendar.clientId",
+    // screen-watch.md section 4: it lets a frame leave the machine; telegram sends what the screen showed.
+    "screenWatch.cloudConfirm",
+    "screenWatch.telegram",
     "schemaVersion",
     "knownToolGroups",
     // Decided in S44 (the spec's list is the minimum): what reaches the network or the
@@ -80,6 +83,7 @@ pub fn full_view(s: &Settings) -> Value {
         ("search", section::<crate::web::settings::SearchSection>(s, "search")),
         ("telegram", section::<crate::bots::settings::TelegramSection>(s, "telegram")),
         ("calendar", section::<crate::calendar::settings::CalendarSection>(s, "calendar")),
+        ("screenWatch", section::<crate::screen_watch::ScreenWatchSection>(s, "screenWatch")),
         ("subagents", section::<crate::subagents::SubagentsSection>(s, "subagents")),
         ("hooks", section::<crate::hooks::config::HooksSection>(s, "hooks")),
     ];

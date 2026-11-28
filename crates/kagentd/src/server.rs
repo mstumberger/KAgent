@@ -171,6 +171,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/local-models/pull", post(crate::local_models::http::pull))
         .route("/local-models/pull/{id}", delete(crate::local_models::http::cancel))
         .route("/local-models/{id}", delete(crate::local_models::http::remove))
+        .route("/screen-watch", get(crate::screen_watch::http::get).delete(crate::screen_watch::http::delete))
+        .route("/screen-watch/model", get(crate::screen_watch::http::model))
         .route("/calendar", get(crate::calendar::http::get))
         .route("/calendar/client", put(crate::calendar::http::put_client))
         .route("/calendar/connect", post(crate::calendar::http::connect))

@@ -12,9 +12,9 @@ pub mod tool;
 pub mod vision;
 
 #[cfg(test)]
-mod fake;
+pub(crate) mod fake;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 #[cfg(test)]
 mod tests_pull;
 

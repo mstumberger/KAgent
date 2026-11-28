@@ -311,6 +311,7 @@ async fn run_action(st: &Arc<AppState>, a: Action) {
         }
         Action::StopAll => {
             let n = st.agent.stop_all().await;
+            st.screen_watch.stop();
             tracing::info!("tray: stop all ({n} cancelled)");
             st.ui.command("voice_stop", json!({}));
         }
