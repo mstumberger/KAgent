@@ -39,6 +39,10 @@ pub const PROTECTED_KEYS: &[&str] = &[
     "web",
     "tasks.onApproval",
     "startup.autostart",
+    // voice.md section 14: a microphone that turns itself on after login, and the greeting said into it.
+    "voice.listenOnStart",
+    "voice.listenOnStartIdleMinutes",
+    "startup.greeting.spoken",
     "watchers.enabled",
     "watchers.disabled",
     // workflows.md section 3.4: how many runs of agents that change files go on unattended.

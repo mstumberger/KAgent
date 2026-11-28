@@ -147,13 +147,36 @@ async fn every_protected_key_is_refused_with_the_reason() {
 /// The words of the owner for each key that may be changed by voice: a new key must be put
 /// in `PROTECTED_KEYS` or here, so a new safety setting is never open by accident.
 const FREE_KEYS: &[&str] = &[
-    "chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel", "liveVoice", "maxIterations", "options", "persona", "startWidget", "startup.greeting", "voice",
+    "chatModel", "fastModel", "fallbackModel", "visionModel", "liveModel", "liveVoice", "maxIterations", "options", "persona", "startWidget", "startup.greeting.enabled", "startup.greeting.text",
+    "voice.brain", "voice.toolGroups", "voice.context", "voice.vocabulary", "voice.pauseMedia", "voice.volume",
     "desktop", "watchers.quietHours", "watchers.spoken", "tasks.deliver", "tasks.timeoutMin", "tasks.maxConcurrent", "skills", "compaction", "memory", "search.engine", "subagents",
     "calendar.calendars", "calendar.defaultCalendar", "calendar.defaultDurationMin", "calendar.home", "calendar.travelMarginMin", "calendar.report",
     "screenWatch.enabled", "screenWatch.defaultMinutes", "screenWatch.everySec",
     // The limits the owner types per provider (usage.md section 3.3): a number KAgent counts against, nothing more.
     "usage.knownLimits",
 ];
+
+#[tokio::test]
+async fn a_microphone_that_turns_itself_on_is_changed_on_the_screen_only() {
+    let h = host();
+    let t = tool(&h);
+    for (key, value) in [("voice.listenOnStart", json!(true)), ("voice.listenOnStartIdleMinutes", json!(60)), ("startup.greeting.spoken", json!(true))] {
+        let out = run(&t, json!({"action": "set", "changes": {key: value}})).await;
+        assert!(out.is_error && out.content.contains("changed on the screen only"), "{key}: {}", out.content);
+        assert!(keys::is_protected(key), "{key}");
+    }
+    let s = h.settings();
+    assert!(!s.voice_config().listen_on_start && !s.startup.greeting.spoken && s.voice_config().listen_on_start_idle_minutes == 10);
+    // The neighbours stay free: the owner may ask for them by voice.
+    for key in ["voice.volume", "startup.greeting.text", "startup.greeting.enabled"] {
+        assert!(!keys::is_protected(key), "{key}");
+    }
+    // And they are in the view the tool shows, so a typo in the lists above would be caught by the key walk.
+    let view = keys::full_view(&s);
+    for key in ["voice.listenOnStart", "voice.listenOnStartIdleMinutes", "startup.greeting.spoken"] {
+        assert!(keys::path_get(&view, key).is_some(), "{key}");
+    }
+}
 
 #[test]
 fn every_key_is_protected_or_free() {

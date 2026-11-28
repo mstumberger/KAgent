@@ -16,6 +16,7 @@ pub(crate) mod instruction;
 pub mod protocol;
 pub use think_times::median_ms as think_median_ms;
 mod think_times;
+mod session;
 mod tool_call;
 mod voice_roll;
 
@@ -32,13 +33,12 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as UpMsg;
 use tokio_util::sync::CancellationToken;
 
-use kagent_core::protocol::{AgentEvent, Message, Via};
-
 use crate::sections::VoiceBrain;
 use crate::server::token_eq;
 use crate::voice_levels::Who;
 use crate::AppState;
 use protocol::{ServerEvent, SetupParams};
+use session::{flush_transcripts, send_up, status, BusyGuard};
 
 const MAX_ROLLS: u32 = 30;
 
@@ -78,35 +78,6 @@ fn resolve_target(st: &AppState) -> Result<Target, String> {
     Ok(Target { url: format!("{base}{sep}key={}", r.provider.api_key), model: r.model.id.clone() })
 }
 
-fn status(out: &mpsc::UnboundedSender<Value>, st: &AppState, session: &str, s: &str, detail: &str) {
-    let _ = out.send(json!({"type": "status", "status": s, "detail": detail}));
-    let _ = st.events.send(AgentEvent::LiveStatus { session_id: session.into(), status: s.into(), detail: detail.into() });
-}
-
-async fn flush_transcripts(st: &AppState, session: &str, user: &mut String, assistant: &mut String) {
-    let mut msgs = Vec::new();
-    if !user.trim().is_empty() {
-        msgs.push(Message::user(user.trim().to_string()).with_via(Via::Voice));
-    }
-    if !assistant.trim().is_empty() {
-        msgs.push(Message::assistant(assistant.trim().to_string(), vec![]).with_via(Via::Voice));
-    }
-    user.clear();
-    assistant.clear();
-    if !msgs.is_empty() {
-        if let Err(e) = st.agent.append_external(session, msgs).await {
-            tracing::warn!("could not store voice transcript: {e:#}");
-        }
-    }
-}
-
-struct BusyGuard(Arc<AppState>, String);
-impl Drop for BusyGuard {
-    fn drop(&mut self) {
-        self.0.live_sessions.lock().unwrap().remove(&self.1);
-    }
-}
-
 async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> anyhow::Result<()> {
     let (mut b_tx, mut b_rx) = socket.split();
     // Browser writer: everything for the browser goes through one channel.
@@ -130,6 +101,11 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
         return Ok(());
     }
     let _guard = BusyGuard(st.clone(), session.clone());
+    // The session started at login (voice.md section 14): it ends by itself after a time without speech of the owner.
+    let login = st.listen_start.claim(std::time::Instant::now());
+    let login_idle = login.as_ref().map(|l| l.plan.idle);
+    let mut last_speech = std::time::Instant::now();
+    let mut end_detail = String::new();
     let _ = out.send(json!({"type": "session", "sessionId": session}));
 
     let (tool_tx, mut tool_rx) = mpsc::unbounded_channel::<Value>();
@@ -226,6 +202,13 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
         loop {
             tokio::select! {
                 _ = ping.tick() => {
+                    if login_idle.is_some_and(|idle| crate::listen_start::idle_expired(last_speech.elapsed(), idle)) {
+                        let minutes = login_idle.map(|d| d.as_secs() / 60).unwrap_or_default();
+                        tracing::info!(session, "listen on start: no speech for {minutes} minutes, the session ends");
+                        end_detail = format!("no speech for {minutes} minutes");
+                        let _ = up_tx.send(UpMsg::Close(None)).await;
+                        break 'conn;
+                    }
                     if last_seen.elapsed() > Duration::from_secs(25) {
                         tracing::warn!(session, "live upstream silent for {:?}: reconnecting", last_seen.elapsed());
                         continue 'conn;
@@ -249,6 +232,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                 let text = v.get("text").and_then(Value::as_str).unwrap_or("");
                                 user_buf.push_str(text);
                                 heard.push(text);
+                                last_speech = std::time::Instant::now();
                                 kagent_core::tools::message::owner_turn(&session);
                                 if !send_up(&mut up_tx, UpMsg::Text(protocol::text_input(text).to_string().into())).await {
                                     continue 'conn;
@@ -341,6 +325,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                 user_buf.push_str(&t);
                                 heard.push(&t);
                                 if !t.trim().is_empty() {
+                                    last_speech = std::time::Instant::now();
                                     kagent_core::tools::message::owner_turn(&session);
                                 }
                                 st.calendar.hear(&t);
@@ -412,16 +397,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
         kagent_core::tools::media::resume(&media_ctx, &buses).await;
     }
     close_turn!();
-    status(&out, &st, &session, "idle", "");
+    status(&out, &st, &session, "idle", &end_detail);
     drop(out);
     let _ = writer.await;
     Ok(())
-}
-
-/// Send to Gemini with a deadline: a stuck write must not freeze the audio loop.
-async fn send_up<S>(up_tx: &mut S, msg: UpMsg) -> bool
-where
-    S: futures::Sink<UpMsg> + Unpin,
-{
-    matches!(tokio::time::timeout(Duration::from_secs(5), up_tx.send(msg)).await, Ok(Ok(())))
 }

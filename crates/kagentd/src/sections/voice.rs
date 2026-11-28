@@ -22,6 +22,10 @@ pub struct VoiceSection {
     pub pause_media: bool,
     /// 0..=100: the loudness of KAgent's speech (the page's playback gain), not the system volume.
     pub volume: u8,
+    /// After login the daemon opens its window and a live session starts by itself (voice.md section 14). Protected key.
+    pub listen_on_start: bool,
+    /// 1..=120: a session started that way ends after this long without speech of the owner. Protected key.
+    pub listen_on_start_idle_minutes: u32,
 }
 
 impl Default for VoiceSection {
@@ -33,6 +37,8 @@ impl Default for VoiceSection {
             vocabulary: true,
             pause_media: true,
             volume: 100,
+            listen_on_start: false,
+            listen_on_start_idle_minutes: 10,
         }
     }
 }
@@ -43,6 +49,9 @@ impl VoiceSection {
     pub fn validate(&self) -> Result<(), SectionError> {
         if self.volume > 100 {
             return Err(SectionError::Invalid { key: "voice".into(), message: format!("volume must be between 0 and 100, not {}", self.volume) });
+        }
+        if !(1..=120).contains(&self.listen_on_start_idle_minutes) {
+            return Err(SectionError::Invalid { key: "voice".into(), message: format!("listenOnStartIdleMinutes must be between 1 and 120, not {}", self.listen_on_start_idle_minutes) });
         }
         match self.tool_groups.iter().find(|g| !known_groups().contains(&g.as_str())) {
             Some(group) => Err(SectionError::Invalid { key: "voice".into(), message: format!("toolGroups must name tool groups: unknown tool group '{group}'") }),
@@ -105,7 +114,7 @@ mod tests {
         s.patch(json!({"voice": {"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false}})).unwrap();
         let v = s.voice_config();
         assert_eq!((v.brain, v.tool_groups.clone(), v.context, v.vocabulary, v.pause_media), (VoiceBrain::Auto, vec!["tasks".to_string()], false, false, true));
-        assert_eq!(serde_json::to_value(&v).unwrap(), json!({"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false, "pauseMedia": true, "volume": 100}), "the names of config.md section 11");
+        assert_eq!(serde_json::to_value(&v).unwrap(), json!({"brain": "auto", "toolGroups": ["tasks"], "context": false, "vocabulary": false, "pauseMedia": true, "volume": 100, "listenOnStart": false, "listenOnStartIdleMinutes": 10}), "the names of config.md section 11");
     }
 
     #[test]
@@ -118,6 +127,24 @@ mod tests {
         assert!(s.patch(json!({"voice": {"volume": 101}})).unwrap_err().contains("volume must be between 0 and 100"));
         assert!(s.patch(json!({"voice": {"volume": -5}})).is_err());
         assert_eq!(s.voice_config().volume, 60, "a refused patch changes nothing");
+    }
+
+    #[test]
+    fn listen_on_start_is_off_and_its_idle_time_is_one_to_one_hundred_twenty_minutes() {
+        let mut s = Settings::defaults();
+        assert!(!s.voice_config().listen_on_start, "the microphone never turns itself on by default");
+        assert_eq!(s.voice_config().listen_on_start_idle_minutes, 10);
+        s.patch(json!({"voice": {"listenOnStart": true, "listenOnStartIdleMinutes": 120}})).unwrap();
+        assert!(s.voice_config().listen_on_start && s.voice_config().listen_on_start_idle_minutes == 120);
+        for bad in [0, 121, 5000] {
+            let err = s.patch(json!({"voice": {"listenOnStartIdleMinutes": bad}})).unwrap_err();
+            assert!(err.contains("listenOnStartIdleMinutes must be between 1 and 120"), "{bad}: {err}");
+        }
+        assert!(s.patch(json!({"voice": {"listenOnStartIdleMinutes": -1}})).is_err());
+        assert_eq!(s.voice_config().listen_on_start_idle_minutes, 120, "a refused patch changes nothing");
+        s.patch(json!({"voice": {"listenOnStartIdleMinutes": 1}})).unwrap();
+        s.patch(json!({"voice": {"listenOnStart": false}})).unwrap();
+        assert!(!s.voice_config().listen_on_start);
     }
 
     #[test]

@@ -25,6 +25,7 @@ mod browser;
 mod hooks;
 mod image_readers;
 mod krunner;
+mod listen_start;
 mod live;
 mod machine;
 mod mcp;
@@ -81,6 +82,8 @@ pub struct AppState {
     pub services: Arc<kagent_core::tool::ToolServices>,
     /// Sessions with an open live voice socket (one per session).
     pub live_sessions: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// The one-time marker and the session started at login (voice.md section 14).
+    pub listen_start: Arc<listen_start::ListenStart>,
     pub alerts: Arc<watch::AlertManager>,
     pub sentinel: Arc<sentinel::Sentinel>,
     pub net: Arc<net::Net>,
@@ -473,6 +476,7 @@ async fn run() -> anyhow::Result<()> {
         hooks,
         widgets,
         live_sessions: Default::default(),
+        listen_start: Default::default(),
         services,
         levels,
         agent,
@@ -501,11 +505,19 @@ async fn run() -> anyhow::Result<()> {
     }
     let tray_ok = tray::start(state.clone()).await;
     // KAgent lives in the tray and starts as the small widget (settings.startWidget,
-    // default on). A window left open by a previous daemon is reused.
-    if tray_ok && state.settings.read().unwrap().start_widget() {
+    // default on). A window left open by a previous daemon is reused. With Listen on start
+    // (voice.md section 14) the window of a start after login is opened with the one-time marker instead.
+    let listens = state.settings.read().unwrap().voice_config().listen_on_start;
+    if listens || (tray_ok && state.settings.read().unwrap().start_widget()) {
         let st = state.clone();
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if listens && listen_start::start::at_daemon_start(st.clone()).await {
+                return;
+            }
+            if !(tray_ok && st.settings.read().unwrap().start_widget()) {
+                return;
+            }
             // A window left open by the previous daemon keeps its layout (forcing the widget
             // here once squeezed the full window's content into widget mode at full size).
             if !st.windows.adopt_existing().await {
