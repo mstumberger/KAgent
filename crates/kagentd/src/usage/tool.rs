@@ -4,7 +4,7 @@
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local};
 use kagent_core::tool::{CallAssessment, Tool, ToolContext, ToolContract, ToolOutput};
 use serde_json::{json, Value};
 
@@ -136,5 +136,5 @@ impl Tool for UsageTool {
 /// Only for the tests: a time as the tool writes it.
 #[cfg(test)]
 pub(crate) fn at_utc(s: &str) -> DateTime<Local> {
-    DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc).with_timezone(&Local)
+    DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&chrono::Utc).with_timezone(&Local)
 }
