@@ -3200,6 +3200,46 @@ with `KAGENT_IT=1`), `tsc` clean, `npm run lint` with its four old warnings, `sc
   badge: the owner has not decided on one.
 - `AGENTS.md`: only the opening paragraph changed (stages through S48, what is next).
 
+### Session 2026-11-28 (v0.0.3: the follow-ups of the v0.0.2 reviews, and calls from an outside agent)
+
+One commit per item on branch `v0.0.3`. Decisions:
+
+- **A1 Activity.** The log is in `components/toasts.ts` (not persisted), one entry per notice, merged
+  with the previous entry of the same `key`, kind and session ("x2"), 20 per conversation. The
+  page's own notices (no `sessionId`) are listed in every conversation. The section is drawn only
+  when it has an entry, so the four sections of the panel and their checks are unchanged; the
+  capsule gets a `bell` item with the count and the panel opens even when nothing else runs.
+- **A2 down.** `ErrorClass::Down` also covers 502/504, timeouts and DNS words; 503 stays `busy`.
+  `is_unreachable_error` leaves out an error that mentions reading the body or the stream (a
+  break in the middle of an answer is not "cannot be reached"). No compaction before the fallback
+  (the summary would go to the same provider). `other` has no fallback, as before.
+- **A3** `approve_plan` sends `sessionMetaChanged` after the meta is saved. Not done: the same event
+  when the todo list ends and drops the approved plan (`state.rs`, the plan is dropped there too).
+- **A4** (a) the check is in `check_model_roles`, so `PUT /api/settings` and the `settings` tool
+  share it; the toggle in the model's dialog is called "Accepts images", the message says so.
+  (b) RETRIES now says "look again with screen". (c) `look::open_cards(waiting, session)`.
+  (d) `imagesNoticeShown` in the meta, set by the new `PUT /api/sessions/:id/images-notice`
+  when a message is sent while the line shows. (e) `crates/kagentd/src/seams.rs`: the three
+  variables are read through it, ignored in a release build with one warning. Every script that
+  uses them (`test-live.py`) runs `target/debug/kagentd`; the unit tests are debug builds.
+- **A5** the tag needs `pos > 0` (the level is in the answering model's list); the widget chip too.
+- **A6** `.win-controls` is the last child of `.app` before the resize grip, drawn at the right
+  end of the 36 px title bar (`position: absolute`, `pointer-events` only on the buttons, so the
+  strip between them still drags). The header holds toggle, name, Stop all and voice chip.
+- **A7** `Calendar::check_default` runs in `settings_apply::apply` (async: it asks the account).
+  Not connected, Google not answering or an unknown calendar: not refused (the check of `add` stays).
+- **B** `Origin::Agent` is decided in `evaluate_from` right after read-only mode, plan mode and
+  `destructive`, before `full`, overrides and rules. `Agent::execute_agent_call` is the entry; its
+  card has `can_remember: false` and the prefix `AGENT_SUMMARY_PREFIX`. The audit record of every
+  tool call now has `origin` (`chat`, `voice` or `agent`). `call_tool` ignores the body's
+  `sessionId`. The only other callers of the route with another id were the page's Security report
+  and "Open" of a skill file (`sessionId: "ui"`): they moved to `POST /api/ui/tools/:name/call`
+  (session `ui`, origin `chat`, no group filter). Scripts and docs had none.
+- `scripts/test-live.py` had a stale check (it left `voice.toolGroups` at `tasks` from the look
+  checks, so the auto check failed since S46); it resets the groups first. LIVE OK 42/42.
+- Counts: `cargo test --workspace` 962 -> 974 (3 ignored, as before); with `KAGENT_IT=1` the same.
+  Web: screen-watch 62, local-models 58, vision 117, work 233, sidebar 168, picker 107, calendar 60.
+
 ## F. Progress
 
 - [x] S0 compile drafts
