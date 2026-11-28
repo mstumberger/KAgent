@@ -2,10 +2,12 @@
 //! marker and the page starts a live voice session by itself. The marker is what makes the start the
 //! daemon's own decision: an address that merely holds a flag never starts the microphone.
 
+mod greeting;
 mod http;
 pub mod login;
 pub mod start;
 
+pub use greeting::{greeting_now, spoken_turn};
 pub use http::listen_start as route;
 
 use std::sync::{Arc, Mutex};
