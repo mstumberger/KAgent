@@ -10,13 +10,13 @@ into the next milestone.
 Small changes to how the agent itself works, from the sessions of 2026-11-27. The
 first three are done first.
 
-- [ ] Enforce, do not instruct: every "never" and "always" about an action in the
+- [x] Enforce, do not instruct: every "never" and "always" about an action in the
   system prompt and the voice instructions becomes a check in the daemon; the prompt
   only explains what the check does.
-- [ ] Tool results as messages to the model: each tool's results say what happened,
+- [x] Tool results as messages to the model: each tool's results say what happened,
   what did not, and what to do next; an error is never worded as an empty result, and
   a result never reads as success before the effect exists.
-- [ ] Notes from the daemon into a running turn: the owner changed a setting or the
+- [x] Notes from the daemon into a running turn: the owner changed a setting or the
   Brain, a newer owner message replaces the current task, a file changed since it was
   read, the todo list has open items.
 - [ ] Fewer tools in front of the model: a small core set always declared, the rest
