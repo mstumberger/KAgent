@@ -76,17 +76,16 @@ instruction is not a check.
 - `live/noise.rs`, `pub fn not_sl_en(text) -> bool`: true only when the text is surely
   neither Slovenian nor English. Conservative: when unsure it is false, so normal speech is
   never blocked. Rules, in order:
-  1. Under 2 letters: false (nothing to judge; the fragment rules of section 12 apply).
-  2. More than half of the letters are outside Latin (Devanagari, CJK, Cyrillic, Arabic,
-     Hebrew, Thai, Greek...): true.
-  3. A Latin text with a letter that is in neither language (`ñ ß ä ö ø å ã õ ç à è ì ò ù
-     â ê î ô û œ æ ¿ ¡`; Slovenian `č š ž` and English have none of them) : true.
-  4. Otherwise a text of 3 or more words with 2 or more "foreign" words from a short list
-     (German, Spanish, French, Italian common words, such as `sie das und ist ich nicht
-     que es ya el la los una por para est les des il non che`), and no word of the list of
-     Slovenian and English common words (`the is and you to a of in it that je in da se
-     na ne ki za tudi ali`): true. A word list never decides alone.
-  5. Everything else: false.
+  1. Under 2 letters, or under 2 words: false (nothing to judge).
+  2. More than half of the letters outside Latin script (Devanagari, CJK, Cyrillic, Arabic,
+     Greek...): true.
+  3. Otherwise count the "foreign" words: a word of a short list of common German, Spanish,
+     French, Italian and Portuguese words, or a word with a letter that is in neither
+     language (`ñ ß ä ö ü ø å ç é ...`; Slovenian `č š ž` and English have none of them), and
+     the "known" words of a short list of common Slovenian and English words. True only when
+     the foreign words are at least half of the words and more than the known ones. A word
+     list never decides alone.
+  4. Everything else: false.
   The test table has the four fragments of 2026-11-27 (all true) and normal Slovenian and
   English sentences (all false), among them sentences with a name or a foreign word.
 - `live/mod.rs` keeps the owner's words of the current turn (what `user_buf` holds,
