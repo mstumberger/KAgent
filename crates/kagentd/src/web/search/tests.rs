@@ -17,14 +17,15 @@ use serde_json::{json, Value};
 use super::*;
 use crate::settings::Settings;
 use crate::web::fake::{Fake, MemoryKeys, Reply};
+use crate::web::chain::{Chain, FakeClock};
 use crate::web::{Engines, SettingsCell, Web};
 
-const RESULTS: &str = include_str!("../fixtures/duckduckgo-results.html");
-const CHALLENGE_PAGE: &str = include_str!("../fixtures/duckduckgo-challenge.html");
+pub(super) const RESULTS: &str = include_str!("../fixtures/duckduckgo-results.html");
+pub(super) const CHALLENGE_PAGE: &str = include_str!("../fixtures/duckduckgo-challenge.html");
 const BRAVE: &str = include_str!("../fixtures/brave-search.json");
 const SEARXNG: &str = include_str!("../fixtures/searxng-search.json");
 
-const KEY: &str = "BSAtest-key_that_is_long_enough";
+pub(super) const KEY: &str = "BSAtest-key_that_is_long_enough";
 
 fn hit(title: &str, url: &str, snippet: &str) -> Hit {
     Hit { title: title.into(), url: url.into(), snippet: snippet.into() }
@@ -32,21 +33,33 @@ fn hit(title: &str, url: &str, snippet: &str) -> Hit {
 
 /// The tool over the fake: the settings of `patch`, a key (or none), and the paths the
 /// two fixed engines are asked on (DuckDuckGo, Brave).
-fn build(fake: &Fake, patch: Value, key: Option<&str>, paths: (&str, &str)) -> Web {
+pub(super) fn build(fake: &Fake, patch: Value, key: Option<&str>, paths: (&str, &str)) -> Web {
+    build_clocked(fake, patch, key, paths).0
+}
+
+pub(super) fn build_clocked(fake: &Fake, patch: Value, key: Option<&str>, paths: (&str, &str)) -> (Web, Arc<FakeClock>) {
     let mut settings = Settings::defaults();
     settings.patch(patch).unwrap();
     let cell: SettingsCell = Arc::new(OnceLock::new());
     cell.set(Arc::new(RwLock::new(settings))).unwrap();
     let keys = Arc::new(MemoryKeys::default());
     *keys.0.lock().unwrap() = key.map(str::to_string);
-    Web::with(cell, keys, fake.egress(), Engines { duckduckgo: fake.url(paths.0), brave: fake.url(paths.1) })
+    let mut web = Web::with(cell, keys, fake.egress(), Engines { duckduckgo: fake.url(paths.0), brave: fake.url(paths.1), reader: fake.url("/html/") });
+    let clock = Arc::new(FakeClock::default());
+    web.chain = Chain::with_clock(clock.clone());
+    (web, clock)
 }
 
-async fn call(web: &Arc<Web>, input: Value) -> ToolOutput {
+pub(super) async fn call(web: &Arc<Web>, input: Value) -> ToolOutput {
     web.search_tool().call(input, ToolContext::standalone(Duration::from_secs(20), 10_000)).await.unwrap()
 }
 
-async fn fake() -> Fake {
+/// A search that every engine of the chain failed: `not done`, with what the engine said.
+pub(super) fn failed_with(out: &ToolOutput, want: &str) -> bool {
+    out.is_error && out.content.starts_with("not done: web search failed (") && out.content.contains(want) && out.content.contains("Next: do not search again now")
+}
+
+pub(super) async fn fake() -> Fake {
     Fake::start(&[
         ("/html/", Reply::ok("text/html; charset=UTF-8", RESULTS.as_bytes())),
         ("/challenge", Reply::with(202, vec![("content-type", "text/html; charset=UTF-8".into())], CHALLENGE_PAGE.as_bytes())),
@@ -66,7 +79,7 @@ async fn fake() -> Fake {
     .await
 }
 
-const BOTH: (&str, &str) = ("/html/", "/brave");
+pub(super) const BOTH: (&str, &str) = ("/html/", "/brave");
 
 /// Scenario S30 item 2: the saved results page gives results.
 #[test]
@@ -143,10 +156,11 @@ fn brave_and_searxng_json_give_results() {
 #[tokio::test]
 async fn duckduckgo_is_asked_with_a_form_post_and_the_results_are_listed() {
     let fake = fake().await;
-    let web = Arc::new(build(&fake, json!({}), None, BOTH));
+    let (web, clock) = build_clocked(&fake, json!({}), None, BOTH);
+    let web = Arc::new(web);
     let tool = web.search_tool();
     assert_eq!(tool.contract().name, "web_search");
-    assert_eq!((tool.contract().read_only, tool.contract().side_effect, tool.contract().default_timeout_ms), (true, SideEffect::Network, 15_000));
+    assert_eq!((tool.contract().read_only, tool.contract().side_effect, tool.contract().default_timeout_ms), (true, SideEffect::Network, 45_000));
     assert_eq!(tool.assess(&json!({"query": "linux kernel"})).summary, "web_search linux kernel");
 
     let out = call(&web, json!({"query": "latest stable linux kernel", "limit": 2})).await;
@@ -169,8 +183,9 @@ async fn duckduckgo_is_asked_with_a_form_post_and_the_results_are_listed() {
     assert!(out.content.contains("\n[4] Linux kernel version history - Wikipedia - ") && !out.content.contains("[5] "), "the limit is 10 at most, the page has four");
     let out = call(&web, json!({"query": "latest stable linux kernel", "limit": 0})).await;
     assert!(out.content.contains("\n[1] ") && !out.content.contains("[2] "), "the limit is 1 at least");
+    clock.advance(10_000);
     call(&web, json!({"query": "a & b = c+ d"})).await;
-    assert_eq!(fake.seen("/html/")[3].body, b"q=a+%26+b+%3D+c%2B+d", "the query is encoded as a form field");
+    assert_eq!(fake.seen("/html/")[1].body, b"q=a+%26+b+%3D+c%2B+d", "the query is encoded as a form field");
 }
 
 /// Scenario S30 item 2 (the challenge page) and item 4: every failure names its cause.
@@ -185,37 +200,41 @@ async fn a_challenge_page_an_empty_page_and_a_failure_are_named() {
         ("/limited", "DuckDuckGo answered 429 Too Many Requests (rate limit: try again later)"),
         ("/not-served", "DuckDuckGo answered 404 Not Found"),
     ] {
-        let web = Arc::new(build(&fake, json!({}), None, (path, "/brave")));
+        let web = Arc::new(build(&fake, json!({"search": {"engines": ["duckduckgo"]}}), None, (path, "/brave")));
         let out = call(&web, json!({"query": "linux kernel"})).await;
-        assert!(out.is_error && out.content == want, "{path}: {}\nwant: {want}", out.content);
+        if want.starts_with("no results") {
+            assert!(out.is_error && out.content == want, "{path}: {}", out.content);
+        } else {
+            assert!(failed_with(&out, &format!("DuckDuckGo: {want}")), "{path}: {}\nwant: {want}", out.content);
+        }
     }
     // A status of 200 with the words of a challenge is one too.
     let fake = Fake::start(&[("/", Reply::ok("text/html", CHALLENGE_PAGE.as_bytes()))]).await;
-    let web = Arc::new(build(&fake, json!({}), None, ("/", "/brave")));
-    assert!(call(&web, json!({"query": "x"})).await.content.starts_with("DuckDuckGo asked for a human check"));
+    let web = Arc::new(build(&fake, json!({"search": {"engines": ["duckduckgo"]}}), None, ("/", "/brave")));
+    assert!(failed_with(&call(&web, json!({"query": "x"})).await, "DuckDuckGo: DuckDuckGo asked for a human check"));
 }
 
 /// An engine that does not answer is given up on.
 #[tokio::test]
 async fn an_engine_that_does_not_answer_is_given_up() {
     let fake = fake().await;
-    let mut web = build(&fake, json!({}), None, ("/slow", "/slow"));
+    let mut web = build(&fake, json!({"search": {"engines": ["duckduckgo"]}}), None, ("/slow", "/slow"));
     web.transport.timeout = Duration::from_millis(300);
     let web = Arc::new(web);
     let out = call(&web, json!({"query": "x"})).await;
-    assert!(out.is_error && out.content == "DuckDuckGo could not be asked: 127.0.0.1 did not answer in time", "{}", out.content);
-    let mut web = build(&fake, json!({"search": {"engine": "brave"}}), Some(KEY), ("/slow", "/slow"));
+    assert!(failed_with(&out, "DuckDuckGo: DuckDuckGo could not be asked: 127.0.0.1 did not answer in time"), "{}", out.content);
+    let mut web = build(&fake, json!({"search": {"engines": ["brave"]}}), Some(KEY), ("/slow", "/slow"));
     web.transport.timeout = Duration::from_millis(300);
     let out = call(&Arc::new(web), json!({"query": "x"})).await;
-    assert!(out.is_error && out.content == "Brave could not be asked: 127.0.0.1 did not answer in time", "{}", out.content);
+    assert!(failed_with(&out, "Brave: Brave could not be asked: 127.0.0.1 did not answer in time"), "{}", out.content);
 }
 
 #[tokio::test]
 async fn brave_needs_a_key_and_sends_it_as_a_header() {
     let fake = fake().await;
-    let on = json!({"search": {"engine": "brave"}});
+    let on = json!({"search": {"engines": ["brave"]}});
     let web = Arc::new(build(&fake, on.clone(), None, BOTH));
-    assert_eq!(call(&web, json!({"query": "linux kernel"})).await.content, "no Brave Search key is stored: set one in Settings -> Web");
+    assert!(failed_with(&call(&web, json!({"query": "linux kernel"})).await, "Brave: no Brave Search key is stored: set one in Settings -> Web"));
     assert!(fake.requests().is_empty(), "nothing is asked without a key");
 
     let web = Arc::new(build(&fake, on.clone(), Some(KEY), BOTH));
@@ -230,13 +249,13 @@ async fn brave_needs_a_key_and_sends_it_as_a_header() {
     );
     assert!(!out.content.contains(KEY), "the key is never in an answer");
     let seen = &fake.seen("/brave")[0];
-    assert_eq!((seen.method.as_str(), seen.target.as_str()), ("GET", "/brave?q=linux+kernel&count=5"));
+    assert_eq!((seen.method.as_str(), seen.target.as_str()), ("GET", "/brave?q=linux+kernel&count=10"));
     assert_eq!(seen.header("x-subscription-token"), KEY, "web.md section 3");
     assert!(seen.body.is_empty());
 
     let out = call(&web, json!({"query": "linux kernel", "limit": 1})).await;
     assert!(out.content.contains("\n[1] Example One") && !out.content.contains("[2] "), "{}", out.content);
-    assert_eq!(fake.seen("/brave")[1].target, "/brave?q=linux+kernel&count=1");
+    assert!(out.content.contains("(from the cache)") && fake.seen("/brave").len() == 1, "the second search is the cache's: {}", out.content);
 
     for (path, want) in [
         ("/brave-bad-key", "Brave did not accept the key (401): set another one in Settings -> Web"),
@@ -246,20 +265,24 @@ async fn brave_needs_a_key_and_sends_it_as_a_header() {
     ] {
         let web = Arc::new(build(&fake, on.clone(), Some(KEY), ("/html/", path)));
         let out = call(&web, json!({"query": "linux kernel"})).await;
-        assert!(out.is_error && out.content == want, "{path}: {}", out.content);
+        if want.starts_with("no results") {
+            assert!(out.is_error && out.content == want, "{path}: {}", out.content);
+        } else {
+            assert!(failed_with(&out, &format!("Brave: {want}")), "{path}: {}", out.content);
+        }
     }
 }
 
 #[tokio::test]
 async fn searxng_asks_the_instance_of_the_settings() {
     let fake = fake().await;
-    let web = Arc::new(build(&fake, json!({"search": {"engine": "searxng"}}), None, BOTH));
-    assert_eq!(call(&web, json!({"query": "linux kernel"})).await.content, "no SearXNG instance is set: enter its address in Settings -> Web");
+    let web = Arc::new(build(&fake, json!({"search": {"engines": ["searxng"]}}), None, BOTH));
+    assert!(failed_with(&call(&web, json!({"query": "linux kernel"})).await, "SearXNG: no SearXNG instance is set: enter its address in Settings -> Web"));
     assert!(fake.requests().is_empty());
 
     // The instance is the owner's setting: here it is on this machine, which the guard would refuse.
     let instance = fake.url("/searx/");
-    let web = Arc::new(build(&fake, json!({"search": {"engine": "searxng", "searxUrl": instance}}), None, BOTH));
+    let web = Arc::new(build(&fake, json!({"search": {"engines": ["searxng"], "searxUrl": instance}}), None, BOTH));
     let out = call(&web, json!({"query": "linux kernel"})).await;
     assert!(!out.is_error, "{}", out.content);
     assert!(
@@ -276,9 +299,9 @@ async fn searxng_asks_the_instance_of_the_settings() {
         ("/searx-refused", "SearXNG answered 403 Forbidden (the engine refuses this client)"),
         ("/not-served", "SearXNG answered 404 Not Found"),
     ] {
-        let web = Arc::new(build(&fake, json!({"search": {"engine": "searxng", "searxUrl": fake.url(path)}}), None, BOTH));
+        let web = Arc::new(build(&fake, json!({"search": {"engines": ["searxng"], "searxUrl": fake.url(path)}}), None, BOTH));
         let out = call(&web, json!({"query": "linux kernel"})).await;
-        assert!(out.is_error && out.content == want, "{path}: {}", out.content);
+        assert!(failed_with(&out, &format!("SearXNG: {want}")), "{path}: {}", out.content);
     }
 }
 
@@ -297,9 +320,13 @@ async fn the_engine_off_and_a_query_that_is_not_one() {
         let out = call(&web, input.clone()).await;
         assert!(out.is_error && out.content == want, "{input}");
     }
+    let web = Arc::new(build(&fake, json!({"search": {"engines": []}}), None, BOTH));
+    assert_eq!(call(&web, json!({"query": "linux kernel"})).await.content, "web search is off (Settings -> Web)", "an empty chain is off");
     let web = Arc::new(build(&fake, json!({}), None, BOTH));
     let out = call(&web, json!({"query": format!(" {} ", "k".repeat(400))})).await;
     assert!(!out.is_error, "400 characters, and what surrounds them, are a query: {}", out.content);
     assert_eq!(fake.seen("/html/")[0].body, format!("q={}", "k".repeat(400)).as_bytes());
 }
 
+
+mod chain_tests;

@@ -60,6 +60,9 @@ pub const WORKFLOW_RULE: &str = "- A job the owner wants planned, built and revi
 pub const TICKETS_RULE: &str = "- \"Add to the todo: ...\", \"add a ticket\" and \"remind me to ...\" make a ticket with `tickets` (in this \
     conversation's project, else the Inbox) when no multi-step job is running; `todo_write` is only the working list of a multi-step job.\n";
 
+/// The rule of web.md section 3.1, while `web_search` is offered: the chain refuses a fourth search in 10 seconds.
+pub const SEARCH_RULE: &str = "- Never send several web searches at once: they are not faster. Search once, read the results, search again only if they do not answer.\n";
+
 /// The words of the owner for the chat model (GLOSSARY.md, voice-control.md section 3). Also in
 /// the live instructions: a rule that lives in one prompt only is a rule for half the sessions.
 pub const BRAIN_RULE: &str = "- The owner calls the chat model 'the Brain'. 'Set the Brain to X' means the setting `chatModel`.\n";
@@ -114,6 +117,7 @@ pub fn build(p: &PromptInput) -> String {
     let subagent_rule = if p.tool_names.iter().any(|t| t == "agent_run") { SUBAGENT_RULE } else { "" };
     let workflow_rule = if p.tool_names.iter().any(|t| t == "workflow_run") { WORKFLOW_RULE } else { "" };
     let tickets_rule = if p.tool_names.iter().any(|t| t == "tickets") { TICKETS_RULE } else { "" };
+    let search_rule = if p.tool_names.iter().any(|t| t == "web_search") { SEARCH_RULE } else { "" };
     let owner_rules = owner_rules(p.tool_names.iter().any(|t| t == "settings"), p.address);
     // Without a name the owner is "the owner".
     let owner = if p.address.trim().is_empty() { "the owner" } else { p.address };
@@ -152,7 +156,7 @@ so never rely on whatever window is focused.\n\
 like a request.\n\
 - After a non-trivial fix that is likely to recur, offer to save it as a skill (`skill_save`). \
 Save only what the owner asks for or agrees to.\n\
-{memory_rule}{subagent_rule}{workflow_rule}{tickets_rule}{owner_rules}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
+{memory_rule}{subagent_rule}{workflow_rule}{tickets_rule}{search_rule}{owner_rules}- Be concise: lead with the answer, then the evidence. {lang}\n\n\
 Available tools: {tools}.\n",
         name = p.persona_name,
         owner = owner,
@@ -168,6 +172,7 @@ Available tools: {tools}.\n",
         identity = identity(p.persona_name, p.brain),
         platform = kagent_core::platform::summary(),
         lang = language_rule(p.language),
+        search_rule = search_rule,
         tools = p.tool_names.join(", "),
     );
     out.push_str(p.skills_index);
@@ -274,6 +279,14 @@ mod tests {
         let tools = vec!["system_info".to_string(), "tickets".to_string()];
         let text = build(&PromptInput { tool_names: &tools, ..input(&machine()) });
         assert!(text.contains(TICKETS_RULE) && TICKETS_RULE.contains("`todo_write` is only the working list of a multi-step job"), "{text}");
+    }
+
+    #[test]
+    fn the_search_rule_comes_with_the_web_search_tool() {
+        assert!(!prompt("", false, "").contains("web searches at once"), "no rule without the tool");
+        let tools = vec!["system_info".to_string(), "web_search".to_string()];
+        let text = build(&PromptInput { tool_names: &tools, ..input(&machine()) });
+        assert!(text.contains(SEARCH_RULE), "{text}");
     }
 
     #[test]

@@ -14,6 +14,7 @@ use super::html;
 use super::{clamp, Fail, Request, Transport, Web, MAX_BODY};
 use super::guard::Unchecked;
 use super::settings::Engine;
+use run::Failure;
 
 /// `query`: at most this many characters (tools.md section 20).
 pub const MAX_QUERY: usize = 400;
@@ -40,14 +41,14 @@ impl WebSearch {
     pub fn new(web: Arc<Web>) -> Self {
         let mut contract = ToolContract::read_only(
             "web_search",
-            "Search the web with the engine set in Settings -> Web (DuckDuckGo, Brave Search or SearXNG) and list titles, addresses and snippets. Use it when the address of a page is unknown, before web_fetch.",
+            "Search the web with the engines set in Settings -> Web (DuckDuckGo, Brave Search, SearXNG, a browser as the last fallback) and list titles, addresses and snippets; the result names the engine that answered. Use it when the address of a page is unknown, before web_fetch. Search once and read the results: several searches at once are not faster, and a fourth within 10 seconds is refused.",
             json!({"type":"object","properties":{
                 "query":{"type":"string","description":"what to search for: a few words, at most 400 characters"},
                 "limit":{"type":"integer","description":"how many results, 1 to 10 (default 5)"}
             },"required":["query"]}),
         );
         contract.side_effect = SideEffect::Network;
-        Self { contract: contract.timeout(15_000, 30_000), web }
+        Self { contract: contract.timeout(45_000, 90_000), web }
     }
 }
 
@@ -62,7 +63,7 @@ impl Tool for WebSearch {
         CallAssessment::from_contract(&self.contract, format!("web_search {}", html::cut(&html::collapse(query), 80)), "web_search".to_string())
     }
 
-    async fn call(&self, input: Value, _ctx: ToolContext) -> anyhow::Result<ToolOutput> {
+    async fn call(&self, input: Value, ctx: ToolContext) -> anyhow::Result<ToolOutput> {
         let Some(query) = input.get("query").and_then(Value::as_str).map(str::trim).filter(|q| !q.is_empty()) else {
             return Ok(ToolOutput::error("query required: what to search for"));
         };
@@ -71,29 +72,15 @@ impl Tool for WebSearch {
             return Ok(ToolOutput::error(format!("query is {length} characters; the limit is {MAX_QUERY}")));
         }
         let limit = clamp(input.get("limit").and_then(Value::as_u64), 1, 10, DEFAULT_LIMIT as u64) as usize;
-        Ok(match self.web.search_hits(query, limit).await {
-            Ok((_, hits)) if hits.is_empty() => ToolOutput::error(format!("no results for \"{query}\"")),
-            Ok((engine, hits)) => ToolOutput::ok(render(engine, query, &hits)),
-            Err(why) => ToolOutput::error(why),
+        if !self.web.chain.allow_search(&ctx.session_id) {
+            return Ok(ToolOutput::not_done("a fourth search within 10 seconds was not run", "read the results you already have first; several searches at once are not faster"));
+        }
+        Ok(match self.web.search_found(query).await {
+            Ok(found) if found.hits.is_empty() => ToolOutput::error(format!("no results for \"{query}\"")),
+            Ok(found) => ToolOutput::ok(render(found.engine, query, &found.hits[..found.hits.len().min(limit)], found.cached)),
+            Err(Failure::Off) => ToolOutput::error(Failure::Off.to_string()),
+            Err(failed @ Failure::Failed(_)) => ToolOutput::not_done(&format!("{failed}"), "do not search again now; use web_fetch on an address you know, or tell the owner to look at the engines in Settings -> Web (an engine is tried again after its cooldown)"),
         })
-    }
-}
-
-impl Web {
-    /// The results of the engine of settings.search, for the tool and for the module that
-    /// looks a place up (calendar.md section 5). The error is in words for the model.
-    pub(crate) async fn search_hits(&self, query: &str, limit: usize) -> Result<(Engine, Vec<Hit>), String> {
-        let section = self.search_config();
-        let answer = match section.engine {
-            Engine::None => return Err("web search is off (Settings -> Web)".into()),
-            Engine::DuckDuckGo => duckduckgo(&self.transport, &self.engines.duckduckgo, query, limit).await,
-            Engine::Brave => {
-                let key = self.brave_key().await.map_err(|e| format!("the Brave Search key could not be read: {e:#}"))?;
-                brave(&self.transport, &self.engines.brave, key, query, limit).await
-            }
-            Engine::Searxng => searxng(&self.transport, &section.searx_url, query, limit).await,
-        };
-        answer.map(|hits| (section.engine, hits)).map_err(|e| e.to_string())
     }
 }
 
@@ -113,8 +100,8 @@ impl Hit {
 }
 
 /// The results for the model (tools.md section 20): `[n] title - url` and the snippet.
-fn render(engine: Engine, query: &str, hits: &[Hit]) -> String {
-    let mut out = format!("{UNTRUSTED}\nResults of {} for \"{query}\":\n", engine.name());
+fn render(engine: Engine, query: &str, hits: &[Hit], cached: bool) -> String {
+    let mut out = format!("{UNTRUSTED}\nResults of {} for \"{query}\"{}:\n", engine.name(), if cached { " (from the cache)" } else { "" });
     for (n, hit) in hits.iter().enumerate() {
         out.push_str(&format!("\n[{}] {} - {}\n", n + 1, hit.title, hit.url));
         if !hit.snippet.is_empty() {
@@ -140,6 +127,19 @@ pub enum EngineError {
     Unreadable(&'static str),
     /// The request did not go through.
     Unreachable { engine: &'static str, fail: Fail },
+    /// The key could not be read from its store.
+    Key(String),
+    /// The reader could not give the page (web.md section 8).
+    Reader(String),
+    /// This engine cannot be asked now (the reader is off): the chain goes on, no cooldown.
+    Skip(&'static str),
+}
+
+impl EngineError {
+    /// Nothing is wrong with the engine: it is not set up. No cooldown.
+    pub fn is_unset(&self) -> bool {
+        matches!(self, Self::NoKey | Self::NoInstance | Self::Skip(_))
+    }
 }
 
 impl std::fmt::Display for EngineError {
@@ -151,6 +151,9 @@ impl std::fmt::Display for EngineError {
             Self::BadKey(code) => write!(f, "Brave did not accept the key ({code}): set another one in Settings -> Web"),
             Self::Status { engine, code } => write!(f, "{engine} answered {code}{}{}", super::reason(*code), hint(*code)),
             Self::NotJson { engine, code, media } => write!(f, "{engine} answered {code} with {media}, not the JSON it is asked for{}", if *engine == "SearXNG" { " (the instance may not allow the JSON format)" } else { "" }),
+            Self::Key(what) => write!(f, "the Brave Search key could not be read: {what}"),
+            Self::Reader(what) => write!(f, "{what}"),
+            Self::Skip(why) => write!(f, "{why}"),
             Self::Unreadable(engine) => write!(f, "{engine} answered a page this tool cannot read (its markup may have changed)"),
             Self::Unreachable { engine, fail } => match fail {
                 Fail::Network(what) => write!(f, "{engine} could not be asked: {what}"),
@@ -175,13 +178,17 @@ fn hint(code: u16) -> &'static str {
 // ------------------------------------------------------------------ DuckDuckGo
 
 /// DuckDuckGo's HTML endpoint: a form POST, no key.
-async fn duckduckgo(transport: &Transport, base: &str, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
+pub(super) async fn duckduckgo(transport: &Transport, base: &str, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
     let asked = |fail| EngineError::Unreachable { engine: "DuckDuckGo", fail };
     let answer = transport.send(Request::post_form(base, vec![("q", query)])).await.map_err(asked)?;
     let status = answer.status;
     let body = answer.body(MAX_ANSWER).await.map_err(asked)?;
-    let page = String::from_utf8_lossy(&body);
-    let hits: Vec<Hit> = parse_duckduckgo(&page).into_iter().take(limit).collect();
+    read_duckduckgo(status, &String::from_utf8_lossy(&body), limit)
+}
+
+/// What a DuckDuckGo page says, fetched or rendered: results, a challenge, no results, or a page this tool cannot read.
+pub(super) fn read_duckduckgo(status: u16, page: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
+    let hits: Vec<Hit> = parse_duckduckgo(page).into_iter().take(limit).collect();
     if !hits.is_empty() {
         return Ok(hits);
     }
@@ -266,7 +273,7 @@ fn ddg_target(href: &str) -> Option<String> {
 // ------------------------------------------------------------------ Brave
 
 /// Brave's Search API: the key in `X-Subscription-Token`.
-async fn brave(transport: &Transport, base: &str, key: Option<String>, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
+pub(super) async fn brave(transport: &Transport, base: &str, key: Option<String>, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
     let Some(key) = key.filter(|key| !key.trim().is_empty()) else { return Err(EngineError::NoKey) };
     let count = limit.to_string();
     let mut request = Request::get(base);
@@ -308,7 +315,7 @@ pub fn parse_brave(json: &Value) -> Vec<Hit> {
 /// A SearXNG instance: `<searxUrl>/search?q=<query>&format=json`. The instance is the
 /// owner's setting and may be on this machine, so no address rule; the request follows
 /// no redirect, so nothing else is reached.
-async fn searxng(transport: &Transport, base: &str, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
+pub(super) async fn searxng(transport: &Transport, base: &str, query: &str, limit: usize) -> Result<Vec<Hit>, EngineError> {
     let base = base.trim().trim_end_matches('/');
     if base.is_empty() {
         return Err(EngineError::NoInstance);
@@ -345,5 +352,6 @@ pub fn parse_searxng(json: &Value) -> Vec<Hit> {
         .unwrap_or_default()
 }
 
+mod run;
 #[cfg(test)]
 mod tests;

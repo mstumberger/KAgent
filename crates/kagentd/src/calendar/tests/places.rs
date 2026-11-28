@@ -31,7 +31,7 @@ async fn web_with(page: &str) -> (Arc<Web>, WebFake) {
     let fake = WebFake::start(&[("/html/", Reply::ok("text/html; charset=UTF-8", page.as_bytes()))]).await;
     let cell: SettingsCell = Arc::new(OnceLock::new());
     cell.set(Arc::new(RwLock::new(crate::settings::Settings::defaults()))).unwrap();
-    let web = Web::with(cell, Arc::new(MemoryKeys::default()), fake.egress(), Engines { duckduckgo: fake.url("/html/"), brave: fake.url("/brave") });
+    let web = Web::with(cell, Arc::new(MemoryKeys::default()), fake.egress(), Engines { duckduckgo: fake.url("/html/"), brave: fake.url("/brave"), reader: fake.url("/html/") });
     (Arc::new(web), fake)
 }
 
