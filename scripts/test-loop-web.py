@@ -5,7 +5,8 @@ The mock and the page driver are picker_web_lib.py. A session of stored messages
 (ok, error, `not done`, `shown`, `partly done`) and a note message (`via: "note"`); the checks read the card labels and
 their marks, and that the note is its own dimmed line, in dark and light at 1200x820 and 340x460. Screenshots go to
 /tmp/kagent-loop-shots/. Run from the repo root after a build of web/ (KAGENT_DIST=<dir> names a build elsewhere)."""
-import asyncio, sys
+import asyncio
+import json, sys
 import picker_web_lib as lib
 from picker_web_lib import Env, report
 
@@ -38,6 +39,31 @@ async def checks(env, results, theme, label):
     results[f"{t}: a note of the daemon is its own dimmed line, not the owner's bubble"] = bool(note) and note["opacity"] < 0.8 and not note["user"] and "persona.address" in note["text"] and "daemon" in note["text"]
     results[f"{t}: the owner's bubbles are only the owner's words"] = await page.js("[...document.querySelectorAll('.bubble.user')].map(b => b.textContent.trim())") == ["show me the settings"]
     await page.shot(f"results-{t.replace(' ', '-')}")
+    await streaming(page, results, t)
+
+
+EMIT = "window.__emit(%s)"
+USER = "[...document.querySelectorAll('.bubble.user')].map(b => b.textContent.trim())"
+ANSWERS = "[...document.querySelectorAll('.bubble.assistant')].map(b => b.textContent.trim())"
+
+
+async def streaming(page, results, t):
+    """An answer being written is its own bubble. It once went into the last stored message: the owner's question went blank
+    and the answer filled into it, then showed again as the answer when the turn ended."""
+    def emit(ev):
+        return page.js(EMIT % json.dumps(dict(ev, sessionId="s1")))
+    await emit({"type": "turnStarted", "turnId": "t9"})
+    await emit({"type": "messageAppended", "message": {"role": "user", "content": "what is in the table?"}})
+    await page.until(f"{USER}.length === 2", "the new question")
+    results[f"{t}: the question stays readable before the first piece of the answer"] = (await page.js(USER))[-1] == "what is in the table?"
+    await emit({"type": "textDelta", "turnId": "t9", "text": "Here it is:\n\n| Budget | GP"})
+    await page.until(f"{ANSWERS}.some(a => a.includes('Here it is'))", "the streamed piece")
+    results[f"{t}: the answer streams into its own bubble, not the question's"] = (await page.js(USER))[-1] == "what is in the table?" and (await page.js(ANSWERS))[-1].startswith("Here it is")
+    results[f"{t}: a table row cut mid-stream shows as a row"] = await page.js("[...document.querySelectorAll('.bubble.assistant:last-of-type .md-table td, .md-table td')].map(c => c.textContent).slice(-2)") == ["Budget", "GP"]
+    await emit({"type": "messageAppended", "message": {"role": "tool", "toolCallId": "c9", "toolName": "hardware", "content": "ok"}})
+    await emit({"type": "textDelta", "turnId": "t9", "text": "after the tool"})
+    await page.until(f"{ANSWERS}.some(a => a === 'after the tool')", "a piece streamed after a tool result")
+    results[f"{t}: text after a tool result streams too"] = (await page.js(ANSWERS))[-1] == "after the tool"
 
 
 async def main():

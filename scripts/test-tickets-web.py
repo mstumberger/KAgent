@@ -44,7 +44,7 @@ async def checks(env, results, theme):
     await page.until("!!document.querySelector('.tickets')", "the tickets view")
     # --- the sidebar entry
     entries = await page.js("[...document.querySelectorAll('.sb-nav-item')].map(b => b.textContent.trim())")
-    results[f"{t}: the sidebar has the entry Tickets between Tasks and Alerts"] = entries[entries.index("Tasks") + 1: entries.index("Tasks") + 3] == ["Tickets", "Alerts"]
+    results[f"{t}: the sidebar has the entry Tickets after Tasks (and before Runs)"] = entries[entries.index("Tasks") + 1: entries.index("Tasks") + 3] == ["Tickets", "Runs"]
     results[f"{t}: the entry is the current page and the view says Tickets"] = await page.js("document.querySelector('.sb-nav-item[aria-current=page]').textContent.trim()") == "Tickets" and await page.js("document.querySelector('.tk-head h2').textContent") == "Tickets"
     # --- the list
     await page.until("document.querySelectorAll('.tk-item').length >= 6", "the rows")

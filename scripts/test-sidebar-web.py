@@ -33,7 +33,7 @@ MODE = lambda: json.loads(daemon("GET", "/api/state")[1])["settings"]["permissio
 THINGS = "(() => [...document.querySelector('header').children].map(c => c.id === 'sidebar-toggle' ? 'toggle' : c.classList.contains('logo') ? 'logo:' + c.textContent.trim() : c.classList.contains('spacer') ? 'spacer' : c.classList.contains('notice') ? 'notice' : c.classList.contains('voice-chip') ? 'voice' : c.classList.contains('win-controls') ? 'window' : c.textContent.trim()))()"
 DESCRIBE = "(() => { const a = document.activeElement; return a.id === 'sidebar-toggle' ? 'toggle' : a.closest('.voice-chip') ? 'voice:' + a.textContent.trim() : a.closest('.win-controls') ? 'window:' + a.getAttribute('aria-label') : a.classList.contains('sb-new') ? 'new' : a.textContent.trim() || a.getAttribute('aria-label'); })()"
 
-VIEWS = ["Voice", "Tasks", "Tickets", "Alerts", "Changes", "Security", "System", "Settings"]
+VIEWS = ["Voice", "Tasks", "Tickets", "Runs", "Alerts", "Changes", "Security", "System", "Settings"]
 HEADINGS = "[...document.querySelectorAll('.sb-list .sb-section .sb-section-name')].map(e => e.textContent)"
 LABELS = "[...document.querySelectorAll('.sb-list .sb-head')].map(h => h.querySelector('.sb-section-name').textContent)"
 ROWS = "[...document.querySelectorAll('.sb-list .sb-item .sb-title')].map(e => e.textContent)"
@@ -88,7 +88,7 @@ async def main():
             results[f"{t}: the header has no tab row"] = await page.js("(() => { const h = document.querySelector('header'); return !h.querySelector('nav') && ![...h.querySelectorAll('button')].some(b => ['chat','voice','tasks','alerts','changes','security','system','settings'].includes(b.textContent.trim().toLowerCase())); })()")
             results[f"{t}: the sidebar is 240 px wide, under the header, beside main"] = await page.js("(() => { const a = document.querySelector('aside.sidebar'), r = a.getBoundingClientRect(), h = document.querySelector('header').getBoundingClientRect(), m = document.querySelector('main').getBoundingClientRect(); return a.id === 'sidebar' && Math.round(r.width) === 240 && Math.round(r.top) === Math.round(h.bottom) && Math.round(m.left) === Math.round(r.right); })()")
             names = await page.js("[...document.querySelectorAll('.sb-nav .sb-nav-item')].map(b => b.textContent.replace(/\\d+$/, '').trim())")
-            results[f"{t}: the eight views are listed (Tickets joined in v0.0.3) in order"] = names == VIEWS
+            results[f"{t}: the nine views are listed (Tickets and Runs joined in v0.0.3) in order"] = names == VIEWS
             results[f"{t}: the badge of Alerts says 3"] = await page.js("document.querySelector('.sb-nav .sb-badge').textContent === '3' && document.querySelector('.sb-nav .sb-badge').closest('button').textContent.startsWith('Alerts')")
             results[f"{t}: the sessions are in sections: Pinned, a folder each, This machine"] = await page.js(LABELS) == ["Pinned", "KAgent", "other", "This machine"]
             results[f"{t}: a pinned session is not repeated under its folder"] = await page.js(section_of("Fix the Wi-Fi driver")) == "Pinned" and await page.js(f"{ROWS}.filter(x => x === 'Fix the Wi-Fi driver').length") == 1
@@ -113,7 +113,7 @@ async def main():
             await page.click(".sb-switch button:nth-child(2)")
             await page.click("#sidebar-toggle")
             results[f"{t}: the toggle gives the rail (48 px, icons alone)"] = await page.js("(() => { const a = document.querySelector('aside.sidebar'); return a.classList.contains('rail') && Math.round(a.getBoundingClientRect().width) === 48 && !document.querySelector('.sb-list') && !document.querySelector('.sb-search') && document.querySelector('#sidebar-toggle').getAttribute('aria-expanded') === 'false'; })()")
-            results[f"{t}: in the rail every control has a label, the views by title"] = await page.js("[...document.querySelectorAll('aside.sidebar button')].every(b => b.getAttribute('aria-label') || b.title)") and await page.js("[...document.querySelectorAll('.sb-nav-item')].map(b => b.title).join() === 'Voice,Tasks,Tickets,Alerts,Changes,Security,System,Settings'")
+            results[f"{t}: in the rail every control has a label, the views by title"] = await page.js("[...document.querySelectorAll('aside.sidebar button')].every(b => b.getAttribute('aria-label') || b.title)") and await page.js("[...document.querySelectorAll('.sb-nav-item')].map(b => b.title).join() === 'Voice,Tasks,Tickets,Runs,Alerts,Changes,Security,System,Settings'")
             await page.shot(f"rail-{theme}")
             stored = json.loads(await page.js("localStorage.getItem('kagent.sidebar')"))
             results[f"{t}: the state is stored under kagent.sidebar"] = stored == {"view": "recent", "collapsed": True, "closed": [KA]}
@@ -414,7 +414,7 @@ async def main():
             await page.shot(f"widget-{theme}")
             await page.js("document.querySelector('.widget-top [aria-label=Sessions]').click()")
             await page.until("!!document.querySelector('.sheet')", "the sessions sheet")
-            results[f"{t}: the sheet Sessions has New session, the search, the switch, the list and the eight views"] = await page.js("(() => { const d = document.querySelector('.sheet'); return d.getAttribute('aria-label') === 'Sessions' && !!d.querySelector('.sb-new') && !!d.querySelector('input[type=search]') && d.querySelectorAll('.sb-switch button').length === 2 && d.querySelectorAll('.sb-item').length >= 6 && d.querySelectorAll('.sb-nav-item').length === 8; })()")
+            results[f"{t}: the sheet Sessions has New session, the search, the switch, the list and the nine views"] = await page.js("(() => { const d = document.querySelector('.sheet'); return d.getAttribute('aria-label') === 'Sessions' && !!d.querySelector('.sb-new') && !!d.querySelector('input[type=search]') && d.querySelectorAll('.sb-switch button').length === 2 && d.querySelectorAll('.sb-item').length >= 6 && d.querySelectorAll('.sb-nav-item').length === 9; })()")
             await asyncio.sleep(0.3)
             await page.shot(f"widget-sheet-{theme}")
             await open_menu("Why is the fan loud")

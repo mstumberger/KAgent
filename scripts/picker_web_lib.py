@@ -1,4 +1,4 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43), test-vision-web.py (S46), test-local-models-web.py (S47) and test-screen-watch-web.py (S48)."""
+"""The mock API, the CDP page driver and the helpers of test-runs-web.py (workflow runs), test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43), test-vision-web.py (S46), test-local-models-web.py (S47) and test-screen-watch-web.py (S48)."""
 import asyncio, base64, json, os, re, urllib.parse, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
@@ -30,6 +30,10 @@ DIRS = set()
 PROJECTS = []
 # The tickets of the mock (tickets.md): {"projects": [...], "tickets": [...]}; `reset(tickets=..., ticket_projects=...)` fills them.
 TICKETS = {"projects": [], "tickets": []}
+# The workflow runs of the mock (workflows.md): {id: run}, the workflows GET /api/workflows lists, and the children of a session
+# (`GET /api/sessions/:id/subagents`); `reset(runs=[...], workflows=[...], run_children={...}, run_diffs={"<run>/<task>": diff})` fill them.
+RUNS = {}
+WORKFLOWS = []
 OPENED = []  # the sessions the window read (`GET /api/sessions/:id`), in order
 # The work panel (S43; set with `reset`): the background tasks per session, the output of a task, the messages per session,
 # the pending approvals, and the reads of an output (`GET /api/background/:id/output`) as (task, tail).
@@ -90,6 +94,9 @@ def reset(**kw):
     DIRS.clear()
     DIRS.update(kw.get("dirs", ()))
     PROJECTS[:] = kw.get("projects", [])
+    RUNS.clear()
+    RUNS.update({r["id"]: json.loads(json.dumps(r)) for r in kw.get("runs", [])})
+    WORKFLOWS[:] = json.loads(json.dumps(kw.get("workflows", [])))
     TICKETS["projects"] = json.loads(json.dumps(kw.get("ticket_projects", [])))
     TICKETS["tickets"] = json.loads(json.dumps(kw.get("tickets", [])))
     SESSIONS["s1"] = meta("s1", kw.get("session", {}))
@@ -140,6 +147,74 @@ def local_settings(body):
             CALLS.append(f"PUT /api/settings {json.dumps(body)}")
             for m in LOCAL["recommended"]:
                 m["usedFor"] = [u for u in m["usedFor"] if u != key] + ([key] if m.get("ref") and m["ref"] == body[key] else [])
+
+
+def run_row(r):
+    """The row of GET /api/runs for a run."""
+    needs = r["state"] == "awaiting_approval" or any(t["state"] == "needs_owner" for t in r["tasks"]) or any(q["state"] == "escalated" for q in r.get("questions", []))
+    return {"id": r["id"], "title": r["title"], "workflow": r["workflow"], "project": r["project"], "state": r["state"], "reason": r.get("reason", ""),
+            "done": sum(t["state"] == "done" for t in r["tasks"]), "total": len(r["tasks"]), "needsOwner": needs, "ticket": r.get("ticket"), "createdAt": r["createdAt"], "updatedAt": r["updatedAt"]}
+
+
+def runs_route(method, path, body):
+    """The runs routes of the mock (workflows.md section 6): None when the path is not one, else (status, body). Calls are in CALLS."""
+    err = lambda status, code, message: (status, {"error": {"code": code, "message": message}})
+    if path == "/api/workflows" and method == "GET":
+        return 200, {"workflows": WORKFLOWS, "invalid": []}
+    if path == "/api/runs" and method == "GET":
+        return 200, {"runs": [run_row(r) for r in RUNS.values()]}
+    if path == "/api/runs" and method == "POST":
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        if CFG.get("run_error"):
+            return err(409, "conflict", CFG["run_error"])
+        n = len(RUNS) + 1
+        goal = body["goal"]
+        r = {"id": f"run_new{n}", "title": goal.splitlines()[0][:80], "workflow": body["workflow"], "project": body["project"], "state": "planning", "reason": "", "ticket": body.get("ticket"), "goal": goal,
+             "definition": next(({"name": w["name"], "description": w["description"], "steps": w["steps"]} for w in WORKFLOWS if w["name"] == body["workflow"]), {"name": body["workflow"], "description": "", "steps": []}),
+             "originSession": None, "runSession": f"rs_new{n}", "planSummary": "", "tasks": [], "questions": [], "messages": [], "plannerSession": None, "rejections": 0, "report": "",
+             "createdAt": "2026-11-28T11:00:00Z", "updatedAt": "2026-11-28T11:00:00Z"}
+        RUNS[r["id"]] = r
+        return 201, r
+    m = re.fullmatch(r"/api/runs/([^/]+)(?:/(stop|pause|continue|plan)|/tasks/([^/]+)/(decision|diff)|/questions/([^/]+)/answer)?", path)
+    if m:
+        r = RUNS.get(m.group(1))
+        if not r:
+            return err(404, "not_found", f"no run '{m.group(1)}'")
+        if not m.group(2) and not m.group(3) and not m.group(5):
+            return 200, r
+        if m.group(3) and m.group(4) == "diff":
+            CALLS.append(f"GET {path}")
+            d = CFG.get("run_diffs", {}).get(f"{m.group(1)}/{m.group(3)}")
+            return (200, d) if d else err(409, "conflict", "not a git repository")
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        if CFG.get("run_refuse"):
+            return err(409, "conflict", CFG["run_refuse"])
+        what = m.group(2)
+        if what == "stop":
+            r["state"] = "stopped"
+        elif what == "pause":
+            r["state"] = "paused"
+        elif what == "continue":
+            r["state"] = "working"
+        elif what == "plan":
+            if body.get("action") == "approve":
+                if body.get("tasks"):
+                    keep = {t["id"]: t for t in r["tasks"]}
+                    r["tasks"] = [dict(keep[t["id"]], title=t.get("title") or keep[t["id"]]["title"]) for t in body["tasks"]]
+                r["state"] = "working"
+            else:
+                r["state"] = "planning"
+        elif m.group(4) == "decision":
+            t = next(x for x in r["tasks"] if x["id"] == m.group(3))
+            t["state"] = {"more_round": "changes", "accept": "done", "drop": "dropped"}[body["choice"]]
+        elif m.group(5):
+            q = next(x for x in r["questions"] if x["id"] == m.group(5))
+            q.update(state="answered", answer=body["text"], answeredBy="owner")
+        return 200, r
+    m = re.fullmatch(r"/api/sessions/([^/]+)/subagents", path)
+    if m and method == "GET" and (m.group(1) in CFG.get("run_children", {}) or any(r["runSession"] == m.group(1) for r in RUNS.values())):
+        return 200, {"children": CFG.get("run_children", {}).get(m.group(1), [])}
+    return None
 
 
 def ticket(key, title, state="todo", project="/home/me/code/kagent", **extra):
@@ -222,6 +297,11 @@ def diff_route(method, path, body):
         CALLS.append(f"POST {path} {json.dumps(body)}")
         return 200, {"status": "ok", "output": "opened", "durationMs": 1}
     return None
+
+
+def set_run(id, fields=None, tasks=None):
+    """Change a run of the mock while the page runs: its own fields and fields of some tasks ({task id: {...}})."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__run", data=json.dumps({"id": id, "fields": fields or {}, "tasks": tasks or {}}).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
 
 
 def set_detail(child, **fields):
@@ -412,6 +492,18 @@ class Mock(BaseHTTPRequestHandler):
             out = diff_route(method, path, body)
             if out:
                 return self.send(out[0], out[1], "application/json")
+        if path.startswith(("/api/workflows", "/api/runs")) or (RUNS and path.endswith("/subagents")):
+            out = runs_route(method, path, body)
+            if out:
+                return self.send(out[0], out[1], "application/json")
+        if path == "/__run":
+            # A run changes while the page runs (a task moved on): merged into it, then the page is told `runUpdated`.
+            r = RUNS[body["id"]]
+            for k, v in body.get("fields", {}).items():
+                r[k] = v
+            for tid, fields in body.get("tasks", {}).items():
+                next(t for t in r["tasks"] if t["id"] == tid).update(fields)
+            return self.send(200, {"ok": True})
         if path.startswith("/api/tickets"):
             out = tickets_route(method, path, body)
             if out:
