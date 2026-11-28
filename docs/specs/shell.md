@@ -165,7 +165,64 @@ subagents; its images folder goes with it, `session.rs` `delete`). Extended, not
 
 ## 8. What breaks where
 
-Filled by `scripts/shell-matrix.py` (the first run, before the changes of H3). See below.
+First run of `scripts/shell-matrix.py` (before any product change), dark and light, 28 cells per theme and size:
+**276 findings**: 1920x1080 74, 1200x820 74, 700x500 124, 340x460 (the widget) 4. By kind: `native-select` 102,
+`main-width` 112, `wide-child` 30, `cut-off` 26, `nested-scroll` 6, `h-overflow` 0. The table is ordered by findings
+(both themes counted): this is the order H3 fixes the pages in; the shared causes come first because they clear most rows.
+
+| # | Page | Findings | What and where |
+|---|---|---|---|
+| 1 | voice | 42 | `cut-off` 700x500; `main-width` 1920x1080; `native-select` 1920x1080, 1200x820, 700x500; `wide-child` 1920x1080, 1200x820, 700x500 |
+| 2 | settings-general | 20 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 3 | chat | 18 | `nested-scroll` 1920x1080, 1200x820, 700x500; `wide-child` 1920x1080, 1200x820, 700x500 |
+| 4 | settings-models | 16 | `main-width` 1200x820, 700x500; `native-select` 700x500; `wide-child` 1200x820 |
+| 5 | tasks | 14 | `main-width` 1920x1080; `native-select` 1920x1080, 1200x820, 700x500 |
+| 6 | settings-voice | 14 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 7 | settings-desktop | 14 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 8 | settings-tasks | 14 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 9 | settings-skills | 12 | `main-width` 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 10 | settings-memory | 12 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 1920x1080, 1200x820, 700x500 |
+| 11 | tickets | 8 | `main-width` 1920x1080; `native-select` 1920x1080, 1200x820, 700x500 |
+| 12 | settings-appearance | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 13 | settings-local-models | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 14 | settings-browser | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 15 | settings-watchers | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 16 | settings-web | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 17 | settings-tools | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 18 | settings-agents | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 19 | settings-calendar | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 20 | settings-telegram | 8 | `main-width` 1920x1080, 1200x820, 700x500; `native-select` 700x500 |
+| 21 | settings-hooks | 6 | `main-width` 1200x820, 700x500; `native-select` 700x500 |
+| 22 | runs | 2 | `main-width` 1920x1080 |
+| 23 | alerts | 2 | `main-width` 1920x1080 |
+| 24 | changes | 2 | `main-width` 1920x1080 |
+| 25 | security | 2 | `main-width` 1920x1080 |
+| 26 | system | 2 | `main-width` 1920x1080 |
+| 27 | widget | 2 | `native-select` 340x460 |
+| 28 | widget-sheet | 2 | `native-select` 340x460 |
+
+Causes, in the order they are fixed:
+
+1. **`main-width` on every settings page** (112): the page header (`.ui-section-head-inner`, a flex row with `margin: 0 auto`)
+   shrinks to its content, so the title sits at a different left edge than the cards under it (General at 1920: title at
+   985 px, cards at 760 px), and at 1920 the 900 px column is not what the rows below use. Views without a frame (Alerts,
+   Changes, Runs, Security, System, Tasks) lay their content out from the left edge: 340 to 460 px of a 1680 px area, or a
+   column that is not centered (Changes: 320 px left, 663 px right; Runs: 10 left, 312 right).
+2. **`native-select`** (102): 15 selects on General, Voice, Desktop, Memory, Skills, Tasks, Tickets, Voice (view) and the
+   settings jump at the top of every page below 900 px; the widget has two (its model and its voice).
+3. **Voice view** (42): the live transcript lets a long unbroken word spill out of its box at every size, and at 700 px the
+   `.voice-stage` is 2006 px wide and clipped by `main`.
+4. **Chat** (18): a user message with a long unbroken string spills out of its bubble (2071 px of text in a 638 px box); the
+   code block of a reply is a horizontal scroller inside the scrolling transcript (`nested-scroll`).
+5. **Models** (16): at 1200 px the provider detail's section is 765 px in a 740 px box; the two panes do not use the wide cap.
+6. **Tickets** (8): at 1920 the content is 1640 px, over the 1600 px cap.
+7. The screenshots of each cell are in `/tmp/kagent-v003-shell-shots/before/` and the raw findings in
+   `/tmp/kagent-v003-shell-before.json` (not kept in the repo).
+
+The widget cell is the widget itself (`Overlay.tsx`) plus its sessions sheet; the pages are measured in the full layout (the
+drawer sidebar below 900 px). Data is the mock of `picker_web_lib.py` with a few conversations, tickets, runs and changes
+(`shell_matrix_lib.py data()`), so a page that needs the daemon's own data (Security, System) is measured with the
+daemon stand-in's empty answers.
 
 ## 9. Tests
 
