@@ -249,6 +249,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                 let text = v.get("text").and_then(Value::as_str).unwrap_or("");
                                 user_buf.push_str(text);
                                 heard.push(text);
+                                kagent_core::tools::message::owner_turn(&session);
                                 if !send_up(&mut up_tx, UpMsg::Text(protocol::text_input(text).to_string().into())).await {
                                     continue 'conn;
                                 }
@@ -339,6 +340,9 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             ServerEvent::UserTranscript(t) => {
                                 user_buf.push_str(&t);
                                 heard.push(&t);
+                                if !t.trim().is_empty() {
+                                    kagent_core::tools::message::owner_turn(&session);
+                                }
                                 st.calendar.hear(&t);
                                 // "Stop watching" ends the screen watch without a model call (voice-control.md section 4).
                                 if st.screen_watch.hear(&t) {

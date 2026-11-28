@@ -167,6 +167,10 @@ impl Agent {
 
     async fn start(self: Arc<Self>, session_id: &str, input: TurnInput) -> anyhow::Result<SendOutcome> {
         let state = self.state(session_id).await?;
+        // The owner spoke or wrote: a message typed earlier may now be sent (tools/message.rs).
+        if matches!(input.via, Via::Text | Via::Voice | Via::Telegram) {
+            crate::tools::message::owner_turn(session_id);
+        }
         // Images nobody can read refuse the turn before it starts (vision.md section 2).
         self.check_images(session_id, &state, &input.images).await?;
         match state.take(&input) {
