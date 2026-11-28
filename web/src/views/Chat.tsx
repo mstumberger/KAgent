@@ -14,6 +14,7 @@ import { tellProviderLine, imageFiles, ACCEPT } from "../images";
 import { notify } from "../components/toasts";
 import { cancelSession, getStore, openSession, rememberImagesNotice, sendMessage, setPlan, setView, takeComposerDraft, useStore } from "../store";
 import Icon from "../components/Icon";
+import UsageLine from "../components/UsageLine";
 import { useVoice } from "../voice/useVoice";
 import { voice } from "../voice/controller";
 
@@ -162,6 +163,8 @@ export default function Chat() {
             )}
           </div>
         ) : (
+        <>
+        <UsageLine sessionId={s.activeSession} />
         <form
           className="composer"
           onSubmit={(e) => {
@@ -240,6 +243,7 @@ export default function Chat() {
             </div>
           </div>
         </form>
+        </>
         )}
       </section>
     </div>

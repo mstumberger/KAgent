@@ -274,9 +274,15 @@ class Mock(BaseHTTPRequestHandler):
             if "text" in body:
                 OUTPUT[body["id"]] = body["text"]
             return self.send(200, {"ok": True})
+        if path == "/__usage":
+            # The limits change while the page runs (usage.md): the view of GET /api/usage the mock answers.
+            CFG["usage"] = body
+            return self.send(200, {"ok": True})
+        if path == "/api/usage" and method == "GET":
+            return self.send(200, CFG.get("usage") or {"providers": []})
         if path == "/__settingputs":
             return self.send(200, {"puts": SETTING_PUTS})
-        if path == "/api/settings" and method == "PUT" and any(k in (body or {}) for k in ("chatModel", "fallbackModel", "fastModel", "visionModel")):
+        if path == "/api/settings" and method == "PUT" and any(k in (body or {}) for k in ("chatModel", "fallbackModel", "fastModel", "visionModel", "usage")):
             SETTING_PUTS.append(json.dumps(body))
         if path == "/__uploads":
             return self.send(200, {"uploads": UPLOADS})
@@ -374,7 +380,9 @@ class Mock(BaseHTTPRequestHandler):
                 base = "http://127.0.0.1:11434/v1" if pid in CFG.get("localProviders", ()) else CFG.get("baseUrls", {}).get(pid, "https://x.example/v1")
                 rows = [row(m) for m in MODELS if m["providerId"] == pid] + ([row(gone, False)] if pid == "anthropic" else [])
                 providers.append({"id": pid, "name": pname, "templateId": pid, "enabled": True, "api": {"type": "openai-chat-completions", "baseUrl": base, "headers": {}},
-                                  "apiKeyMasked": "sk-...abcd", "hasKey": True, "models": rows, "modelsFetchedAt": None, "lastError": ""})
+                                  "apiKeyMasked": "sk-...abcd", "hasKey": True, "models": rows, "modelsFetchedAt": None, "lastError": "",
+                                  "local": pid in CFG.get("localProviders", ()),
+                                  "tightestLimit": next((u.get("tightest") for u in (CFG.get("usage") or {}).get("providers", []) if u["id"] == pid), None)})
             return self.send(200, {"providers": providers})
         if path == "/api/projects" and method == "GET":
             return self.send(200, {"roots": ["/home/me/code"], "projects": PROJECTS})
@@ -531,6 +539,11 @@ def local(**body):
 def watch(**body):
     """Change the screen watch of the mock while the page runs (S48); no arguments: it ended."""
     urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__watch", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
+def usage_set(view):
+    """Change the view of GET /api/usage the mock answers, while the page runs."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__usage", data=json.dumps(view).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
 
 
 def setting_puts():

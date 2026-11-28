@@ -151,6 +151,8 @@ export interface ProviderView {
   enabled: boolean;
   /** The provider is on this machine or network: the daemon decides (chooser.md section 2). */
   local?: boolean;
+  /** The tightest limit of the provider, or null (usage.md section 5). */
+  tightestLimit?: import("./usage").Limit | null;
   api: { type: string; baseUrl: string; headers: Record<string, string> };
   apiKeyMasked: string;
   hasKey: boolean;

@@ -7,6 +7,7 @@ import { Badge, Confirm, Toggle, type BadgeTone } from "../../ui";
 import Dropdown from "../../Dropdown";
 import { Logo } from "./Catalog";
 import ModelList from "./ModelList";
+import UsageBlock from "./UsageBlock";
 import { apiFormatOptions, type Run } from "./present";
 import { statusOf, STATUS_LABEL, type Status } from "./shared";
 
@@ -164,6 +165,8 @@ export default function ProviderCard({
           {note.text}
         </div>
       )}
+
+      <UsageBlock p={p} />
 
       <ModelList p={p} template={template} settings={settings} busy={busy} run={run} reload={reload} />
 
