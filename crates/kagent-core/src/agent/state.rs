@@ -263,6 +263,8 @@ impl Agent {
             meta.approved_plan = before;
             return Err(e);
         }
+        // The page learns of the approval at once, not at the end of the turn (the Plan section).
+        let _ = self.events.send(AgentEvent::SessionMetaChanged { session_id: session_id.into(), meta: meta.clone() });
         Ok(plan)
     }
 
@@ -343,6 +345,7 @@ mod tests {
                 reasoning_level: None,
                 project: None,
                 pinned: false,
+                images_notice_shown: false,
             },
             vec![],
         )

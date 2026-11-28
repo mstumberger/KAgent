@@ -199,6 +199,15 @@ async fn a_planning_turn_refuses_what_is_not_research_and_the_approved_plan_is_i
     let saved = meta.approved_plan.expect("approved");
     assert_eq!((saved.path, saved.text), (path.display().to_string(), text));
     assert!(saved.approved_at.is_some_and(|t| (chrono::Utc::now() - t).num_seconds() < 60), "stamped at the approval");
+
+    // v0.0.3 A3: the approval sends the meta with the plan, in the turn, before it ends.
+    let metas: Vec<&AgentEvent> = emitted.iter().filter(|e| matches!(e, AgentEvent::SessionMetaChanged { .. })).collect();
+    assert_eq!(metas.len(), 1, "one sessionMetaChanged for the approval");
+    let AgentEvent::SessionMetaChanged { session_id, meta } = metas[0] else { unreachable!() };
+    assert_eq!(session_id, &r.session);
+    assert!(meta.approved_plan.is_some() && !meta.planning, "the meta carries the plan and the flag off");
+    let at = |f: &dyn Fn(&AgentEvent) -> bool| emitted.iter().position(f).unwrap();
+    assert!(at(&|e| matches!(e, AgentEvent::SessionMetaChanged { .. })) < at(&|e| matches!(e, AgentEvent::TurnFinished { .. })), "before the turn ends");
 }
 
 #[tokio::test]

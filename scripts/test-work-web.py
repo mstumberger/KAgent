@@ -319,6 +319,19 @@ async def work_checks(env, results, theme):
     await page.click(".work-capsule")
 
 
+async def plan_event_check(env, results, theme):
+    """v0.0.3 A3: an approval sends sessionMetaChanged; the Plan section changes without a turn end."""
+    page = env.page
+    t = f"1200x820 {theme}"
+    await env.size(1200, 820)
+    await env.open(theme, **{**WORK, "sessions": {**WORK["sessions"], "s1": {"title": "Free the disk", "updatedAt": "2026-11-27T09:00:00Z", "todo": TODO}}})
+    await page.click(".work-capsule")
+    results[f"{t}: before an approval there is no approved plan and no plan item in the capsule"] = await page.js("!(" + section("plan") + ").querySelector('.plan-approved') && !document.querySelector('.work-capsule .cap-plan')")
+    meta = {"id": "s1", "title": "Free the disk", "updatedAt": NOW, "approvedPlan": {"path": "/p", "text": PLAN}}
+    await emit(page, {"type": "sessionMetaChanged", "sessionId": "s1", "meta": meta})
+    results[f"{t}: sessionMetaChanged with the approved plan changes the Plan section and the capsule at once"] = await page.js("(() => { const s = " + section("plan") + "; return !!s.querySelector('.plan-approved') && s.querySelector('.plan-approved .work-line-title').textContent === 'Free the disk' && !!document.querySelector('.work-capsule .cap-plan'); })()")
+
+
 async def pane_checks(env, results, theme):
     page = env.page
     t = f"1200x820 {theme}"
@@ -484,6 +497,7 @@ async def main():
                 await activity_checks(env, results, theme, label, compact)
         for theme in ("dark", "light"):
             await work_checks(env, results, theme)
+            await plan_event_check(env, results, theme)
             await pane_checks(env, results, theme)
             await widget_checks(env, results, theme)
         await narrow_checks(env, results)
