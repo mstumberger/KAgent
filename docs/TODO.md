@@ -130,3 +130,9 @@ first three are done first.
   upload pictures; screen watch checks text goals with OCR instead of the vision
   model; the click tool can find a label on the screen; scanned documents become text
   with their tables.
+- [ ] Every completions API, and OpenCode as one provider: a Gemini `generateContent`
+  adapter next to chat completions, responses and messages; an embeddings client for
+  any provider; one "OpenCode" provider with one key whose models are fetched and each
+  routed by the API its list names (replacing the six split entries); the cost each
+  answer reports counted on the Usage card. Its free models answer only inside
+  OpenCode's own client and are shown as such, not worked around.
