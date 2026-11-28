@@ -114,13 +114,13 @@ reasons), `PUT /api/agents/:name` (201 when it creates, 200 when it changes; a f
 left out keeps its value; 400 for an invalid name, a missing description, an unknown
 tool group, `maxIterations` outside 1..80 or a model the providers do not know),
 `DELETE /api/agents/:name`, `POST /api/sessions/:id/subagents/:child/stop`,
-`GET /api/sessions?parent=<id>`.
+`GET /api/sessions?parent=<id>`. S43 adds the routes of the background shell tasks (`work-windows.md` section 3, `api.md` section 8): the list of a session, the tail of an output and the stop.
 
 ## 6. UI
 
 - Chat: an "Agents" card in the transcript (from `subagentUpdated` and the results of
   `agent_run`): profile, state, elapsed time, an output preview (1500 chars), Stop. A
-  click opens the child session read-only, with a link back to the main session. After
+  click opens the child in the side pane of the chat (S43, `work-windows.md`), read-only; the read-only header with a link back to the main session stays for a subagent opened directly (a `#session=` link, `ui show`). The Agents and Background sections of the work panel list the children and the commands. After
   a reload the cards are rebuilt from the transcript; the whole output of a report is
   behind a toggle that starts closed.
 - The end of a turn reloads the open chat only (before, the end of any session's turn

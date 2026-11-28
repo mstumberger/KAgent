@@ -903,6 +903,48 @@ Tests: `specs/work-windows.md` (its own list).
 Produces: `GET /api/sessions/:id/background`, the event `backgroundTask`, `WorkPanel.tsx`, `SidePane.tsx`.
 Check: the standard checks with `web/`; the headless pass at 1200x820 and in the widget; the live check by the owner.
 
+### Session 2026-11-28 (S43: work windows and notices as toasts, v0.0.2 item 6)
+
+Built: `specs/notices.md` and `specs/work-windows.md`, in five commits (notices in the daemon,
+the toast stack, the work panel with the side pane and the background routes, the widget, the
+docs). Decisions the specs did not settle:
+- **Notice classes.** `agent/notice.rs`: quota (429, quota, rate limit, resource exhausted), then
+  key (a key or an authentication word), then busy (503, overloaded, high demand, unavailable),
+  then down (a refused or reset connection, a timeout), else other; the text of a notice per
+  class is the old one for quota, key and busy ("is out of quota", "rejected the API key
+  (Providers)", "is busy"). Only the errors of `is_capacity_error` reach the fallback and its
+  notice, so `down` and `other` exist as classes and keys but are not sent until the fallback
+  is widened. A turn that fails with no fallback sends no provider notice: the page shows its
+  own "Turn failed" toast (a local error with the session).
+- **Recovery** is remembered per model reference (the model that failed), its key per provider
+  id: a fallback of the same provider answering is not a recovery of the chat model.
+- Other notices got keys: `hook:<hook id>`, `calendar:reconnect`, `calendar:report`. A notice of a
+  refused choice (picker.rs) carries its session id and no key.
+- **Toasts.** The page's own results (project attached or detached, a compaction, the read-only
+  note of a subagent) are `info` and go after 6 s; its failures are `error` and stay. A merge needs
+  the same key and the same kind; a recovery shows itself also when its error toast was closed.
+  Hover and focus hold the timer; a new count or text starts the 6 s again. "Dismiss all" is the
+  first control of the stack, the fold button ("1 more", then "Show fewer") the last. Escape closes
+  a toast only with the focus in it. `voice.say` puts an error of a live session into the status
+  line for 6 s, once per key until a recovery of that key.
+- **The Activity tab** (the last 20 notices of the session) is named by `notices.md` but
+  `work-windows.md` has no such tab: it is not built. Closed toasts are not kept.
+- **Background tasks.** `BackgroundTaskView.seconds` stops at the end of the task (the older
+  `TaskInfo.seconds` is unchanged); a task stopped by hand and not yet queued by its supervisor
+  is listed first among the ended ones. `HttpError` got `Debug` (the new tests unwrap it).
+- **The panel.** The capsule shows an item only for a kind that has something and the whole
+  panel goes when nothing is left (the open state is kept for the next time). The Plan tab shows
+  the plan that waits before the approved one (the spec says the approved first: a second plan
+  would otherwise hide behind the first). The title "To do" of `TodoPanel` is hidden inside the
+  Progress section (its header says it); a section the owner opens while empty is open until a
+  reload. The pane is an overlay below 900 px by the same media query as the sidebar drawer.
+  `main` holds a `.view` wrapper in every view, not only in the chat.
+- **Test environment.** The owner's daemon was running on port 7878 during this stage, so no test
+  started or stopped one: `scripts/picker_web_lib.py` answers `/api/state`, `/api/settings` and a
+  few list routes from an in-memory stand-in when the port is taken (the three older web suites
+  use it the same way). The real-daemon run of the four web suites and of `test-live.py` is the
+  owner's to confirm with his daemon stopped.
+
 ---
 
 ## E. Decisions log (append during implementation)
@@ -3023,7 +3065,7 @@ Phase 6 (planned 2026-11-27; S40 and S41 done)
 - [x] S40 models and providers (items 1 to 9 checked; item 10 is the owner's, on the real Gemini provider; section E)
 - [x] S41 model picker in the composer (`specs/picker.md`; items 1 to 7 checked, item 8 is the owner's, live; section E)
 - [x] S42 left sidebar and projects (`specs/sidebar.md`, with the amendment: the header is a title bar; items 1 to 9 checked, item 10 is the owner's, live; section E)
-- [ ] S43 work windows: agents, plan, progress
+- [x] S43 work windows: agents, plan, progress, and notices as toasts (`specs/work-windows.md`, `specs/notices.md`; items 1 to 7, 9 and 10 checked, items 8 and 11 are the owner's, live; section E)
 
 ## G. Owner actions (things KAgent prints, you run)
 

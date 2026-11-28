@@ -287,6 +287,9 @@ their rows. Spec of S41: `picker.md`.
 | GET `/api/sessions?project=<path>` | (S42) | the top-level sessions of that folder, newest first, as the plain list |
 | GET `/api/projects` | (S42) | `{roots: string[], projects: [{path, name, agentsMd: boolean}]}` |
 | GET `/api/models` | | as `models.md` section 4; each model of every list also has `providerId` and `providerName` |
+| GET `/api/sessions/:id/background` | (S43) | `{tasks: BackgroundTaskView[]}`: the background shell tasks of that session, running first in the order they started, then ended ones, the one that ended last first; at most 50 |
+| GET `/api/background/:taskId/output?tail=4000` | (S43) | `{task: BackgroundTaskView, output: string}`: the last `tail` characters, through the redactor of the token guard |
+| POST `/api/background/:taskId/stop` | (S43) | `BackgroundTaskView` (the task as it is after the stop, `killed`) |
 
 The two writes are checked by one function, before anything is written:
 
@@ -336,3 +339,31 @@ The folder and the pin (S42, `sidebar.md` section 3):
 
 The whole meta after the file was written, so a window applies it without reading anything
 (S42 reuses it for the folder and the pin).
+
+### S43: background tasks and notices
+
+`BackgroundTaskView` is `{id, sessionId, command, status: "running"|"done"|"failed"|"killed", exitCode: number|null, startedAt, seconds, outputFile}`; `seconds` stops counting when the task ends.
+
+- `tail` is absent (4000) or a whole number from 100 to 20000; anything else is 400
+  `invalid_input` "tail must be a whole number from 100 to 20000".
+- 404 `not_found`: "session <id> not found" for the list; "no background task '<taskId>'" for the
+  other two (unknown, or ended long ago and forgotten: the registry keeps the latest 200).
+- 409 `conflict` on stop: "the task already ended (<status>)".
+
+```json
+{"type":"backgroundTask","taskId":"bg_1a2b3c4d","sessionId":"...","status":"running|done|failed|killed"}
+{"type":"notice","level":"info|warn|error","text":"...","key":"provider:gemini:quota","sessionId":"...","kind":"error|recovery|info"}
+```
+
+`backgroundTask` goes out at the start (`running`), on a stop (`killed`) and at the end (`done`,
+`failed`), before the notification of the task reaches its session; a killed task still tells
+no session. `notice` gained `key`, `sessionId` and `kind`, each left out when it has no value
+(an old client ignores them; `notices.md`):
+
+- `key` is what makes two notices the same one: `provider:<id>:<class>` with class `quota`,
+  `key`, `busy`, `down` or `other` (the class of the error that sent the turn to `fallbackModel`),
+  `hook:<name>`, `calendar:reconnect`, `calendar:report`. A notice with no key is never merged.
+- `kind` is `error` (a `warn` or `error` level), `info`, or `recovery`: the loop sends `recovery`
+  with the key of the error when the model that failed answers again ("<model> answers again"),
+  once, and never without a previous error.
+- `sessionId` is set when the notice belongs to a turn (a fallback, a refused choice of model).
