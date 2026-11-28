@@ -147,3 +147,10 @@ first three are done first.
   with its URL, as the start of a conversation, or as a memory to review. It pairs
   with its own narrow key (it can only capture), talks to this machine only, and what
   it captures is page content for the model, never an instruction.
+- [ ] A snappy web UI: a long answer is rendered incrementally (only the block that
+  changes while it streams, not the whole conversation on every piece); long
+  conversations show only what is on screen; streamed pieces are applied once per
+  frame; list and settings views do not re-render on unrelated events; measured with
+  a recorded long session in headless Chrome against fixed budgets (time per streamed
+  piece, memory, frames dropped), so a regression fails a test. Every text renderer is
+  tested on every prefix of its input.
