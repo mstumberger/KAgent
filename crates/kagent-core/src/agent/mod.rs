@@ -29,6 +29,7 @@ mod picker;
 pub mod project;
 mod spawn;
 mod turn;
+pub mod vision;
 
 pub use crate::context::sanitize_history;
 use crate::compact::Step;
@@ -70,6 +71,10 @@ pub struct Agent {
     pub(crate) hooks: hooks::HookState,
     /// Providers that failed and have not answered since (`notice.rs`).
     pub(crate) failing: notice::Failing,
+    /// Who reads images for a Brain (`vision.rs`).
+    vision: Mutex<Option<vision::VisionSource>>,
+    /// Descriptions made for an image that was not stored with one, by `<session>:<image>`.
+    described: Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl Agent {
@@ -92,6 +97,8 @@ impl Agent {
             children: Default::default(),
             hooks: hooks::HookState::new(deps.hooks),
             failing: Default::default(),
+            vision: Mutex::new(None),
+            described: Mutex::new(std::collections::HashMap::new()),
         })
     }
 
@@ -160,6 +167,8 @@ impl Agent {
 
     async fn start(self: Arc<Self>, session_id: &str, input: TurnInput) -> anyhow::Result<SendOutcome> {
         let state = self.state(session_id).await?;
+        // Images nobody can read refuse the turn before it starts (vision.md section 2).
+        self.check_images(session_id, &state, &input.images).await?;
         match state.take(&input) {
             Taken::Turn(cancel) => {
                 let turn_id = uuid::Uuid::new_v4().to_string();
@@ -202,7 +211,8 @@ impl Agent {
         // user message in the next model request: at most `hook_budget` characters a turn.
         self.turn_hooks(session_id, state, &input.text, input.via).await;
         let mut hook_budget = hooks::CONTEXT_CHARS_PER_TURN;
-        self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via).with_images(input.images)]).await?;
+        let images = self.describe_for_brain(session_id, &config.model_ref, input.images, cancel).await?;
+        self.push_messages(session_id, state, vec![Message::user(input.text).with_via(input.via).with_images(images)]).await?;
         let mut iteration = 0usize;
         loop {
             if cancel.is_cancelled() {
@@ -215,7 +225,8 @@ impl Agent {
             for queued in queued {
                 // A queued message that names a skill adds its block from this request on.
                 late.push_str(queued.system_suffix.as_deref().unwrap_or_default());
-                steering.push(Message::user(queued.text).with_via(queued.via).with_images(queued.images));
+                let images = self.describe_for_brain(session_id, &config.model_ref, queued.images, cancel).await?;
+                steering.push(Message::user(queued.text).with_via(queued.via).with_images(images));
             }
             self.push_messages(session_id, state, steering).await?;
             config.system_prompt.push_str(&late);
@@ -254,7 +265,9 @@ impl Agent {
                 tools_chars,
             );
             // Summarized or trimmed first (compaction.md sections 1 and 4).
-            let (messages, _dropped) = self.request_history(session_id, state, &config, budget, cancel).await?;
+            let (mut messages, _dropped) = self.request_history(session_id, state, &config, budget, cancel).await?;
+            // The images of the last 6 messages as pixels, the rest as their descriptions (vision.md section 2).
+            self.images_for_request(session_id, &mut messages, &config.model_ref, cancel).await;
             let request = ModelRequest {
                 model_ref: config.model_ref.clone(),
                 system,

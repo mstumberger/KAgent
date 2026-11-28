@@ -31,7 +31,17 @@ pub fn build_body(p: &BodyParams) -> Value {
     let mut msgs: Vec<Value> = Vec::new();
     for m in p.messages {
         match m.role {
-            Role::User => msgs.push(json!({"role": "user", "content": [{"type": "text", "text": m.content}]})),
+            Role::User => {
+                // Images before the text, as Anthropic advises; no empty text block (it is refused).
+                let mut blocks: Vec<Value> = super::image_payloads(m)
+                    .into_iter()
+                    .map(|(mime, data)| json!({"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}))
+                    .collect();
+                if !m.content.is_empty() || blocks.is_empty() {
+                    blocks.push(json!({"type": "text", "text": m.content}));
+                }
+                msgs.push(json!({"role": "user", "content": blocks}));
+            }
             Role::Assistant => {
                 let mut blocks: Vec<Value> = Vec::new();
                 // Replay provider thinking blocks (with signatures) verbatim.
@@ -330,5 +340,24 @@ mod tests {
         let f = fx();
         let body = build_body(&params(&f, &messages));
         assert_eq!(body["messages"][0]["content"][0]["type"], "thinking");
+    }
+
+    #[test]
+    fn an_image_is_a_base64_block_before_the_text() {
+        let f = fx();
+        let messages = vec![super::super::message_with_image("what does it say"), super::super::message_with_image(""), Message::user("")];
+        let body = build_body(&params(&f, &messages));
+        assert_eq!(
+            body["messages"],
+            json!([
+                {"role": "user", "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AQIDBA=="}},
+                    {"type": "text", "text": "what does it say"}
+                ]},
+                {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AQIDBA=="}}]},
+                {"role": "user", "content": [{"type": "text", "text": ""}]}
+            ]),
+            "no empty text block next to an image"
+        );
     }
 }

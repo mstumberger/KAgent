@@ -28,7 +28,20 @@ pub fn build_body(p: &BodyParams) -> Value {
     }
     for m in p.messages {
         match m.role {
-            Role::User => msgs.push(json!({"role": "user", "content": m.content})),
+            Role::User => {
+                let images = super::image_payloads(m);
+                if images.is_empty() {
+                    msgs.push(json!({"role": "user", "content": m.content}));
+                } else {
+                    // Parts: the text (when there is some), then each image as a data URL.
+                    let mut parts: Vec<Value> = Vec::new();
+                    if !m.content.is_empty() {
+                        parts.push(json!({"type": "text", "text": m.content}));
+                    }
+                    parts.extend(images.into_iter().map(|(mime, data)| json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{data}")}})));
+                    msgs.push(json!({"role": "user", "content": parts}));
+                }
+            }
             Role::Assistant => {
                 let content = if m.content.is_empty() { Value::Null } else { json!(m.content) };
                 let calls: Vec<Value> = m
@@ -294,5 +307,28 @@ mod tests {
         }
         let out = r.finish();
         assert_eq!(out.tool_calls[0].input, json!({"_raw": "not-json"}));
+    }
+
+    #[test]
+    fn an_image_is_a_data_url_part() {
+        let f = fx();
+        let messages = vec![super::super::message_with_image("what does it say"), super::super::message_with_image(""), Message::user("plain")];
+        let body = build_body(&params(&f, &messages));
+        assert_eq!(
+            body["messages"],
+            json!([
+                {"role": "system", "content": "be brief"},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "what does it say"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,AQIDBA=="}}
+                ]},
+                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AQIDBA=="}}]},
+                {"role": "user", "content": "plain"}
+            ])
+        );
+        // An image without pixels (older than the last 6 messages) is not sent.
+        let mut old = super::super::message_with_image("old");
+        old.images[0].data = None;
+        assert_eq!(build_body(&params(&f, &[old]))["messages"][1], json!({"role": "user", "content": "old"}));
     }
 }

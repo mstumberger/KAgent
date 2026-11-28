@@ -34,7 +34,14 @@ pub fn build_body(p: &BodyParams) -> Value {
     }
     for m in p.messages {
         match m.role {
-            Role::User => msgs.push(json!({"role": "user", "content": m.content})),
+            Role::User => {
+                let mut v = json!({"role": "user", "content": m.content});
+                let images: Vec<String> = super::image_payloads(m).into_iter().map(|(_, data)| data).collect();
+                if !images.is_empty() {
+                    v["images"] = json!(images);
+                }
+                msgs.push(v);
+            }
             Role::Assistant => {
                 let calls: Vec<Value> = m.tool_calls.iter().map(|c| json!({"function": {"name": c.name, "arguments": c.input}})).collect();
                 let mut v = json!({"role": "assistant", "content": m.content});
@@ -187,5 +194,14 @@ mod tests {
         let mut bad = Reducer::new();
         bad.feed(&SseEvent { event: None, data: "{\"error\":\"model not found\"}".into() }, &tx);
         assert!(bad.finish().is_err());
+    }
+
+    #[test]
+    fn an_image_is_in_the_images_list() {
+        let cfg = ModelConfig::default();
+        let msgs = vec![super::super::message_with_image("what does it say"), Message::user("plain")];
+        let b = build_body(&BodyParams { model_id: "llava", system: "sys", messages: &msgs, tools: &[], options: &ModelOptions::default(), config: &cfg });
+        assert_eq!(b["messages"][1], json!({"role": "user", "content": "what does it say", "images": ["AQIDBA=="]}));
+        assert_eq!(b["messages"][2], json!({"role": "user", "content": "plain"}));
     }
 }

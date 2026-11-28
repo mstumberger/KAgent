@@ -17,6 +17,7 @@ mod turn_config;
 mod ui;
 mod browser;
 mod hooks;
+mod image_readers;
 mod krunner;
 mod live;
 mod machine;
@@ -352,6 +353,9 @@ async fn run() -> anyhow::Result<()> {
             fast_model_ref: if providers_for_compaction.usable(&s.fast_model).is_some() { s.fast_model.clone() } else { String::new() },
         }
     }));
+
+    // Who reads the images of a message (vision.md section 2).
+    agent.set_vision_source(image_readers::source(settings_arc.clone(), providers.clone()));
 
     // Voice levels: activity follows the agent's event stream.
     let levels = Arc::new(voice_levels::LevelHub::new());
