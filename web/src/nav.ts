@@ -1,7 +1,7 @@
 // Main navigation (ui-settings.md section 1): the tabs of the header, in order. The
 // daemon's allow-list (`crates/kagentd/src/ui.rs`, `VIEWS`) holds the same ids.
 
-export const VIEWS = ["chat", "voice", "tasks", "alerts", "changes", "security", "system", "settings"] as const;
+export const VIEWS = ["chat", "voice", "tasks", "tickets", "alerts", "changes", "security", "system", "settings"] as const;
 export type View = (typeof VIEWS)[number];
 
 /** Tabs that are settings pages since S19: `providers` is Models, `tools` is Tools and permissions. */

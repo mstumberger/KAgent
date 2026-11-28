@@ -14,7 +14,7 @@ import "./sidebar.css";
 import "./sidebar-foot.css";
 
 /** The views under the list, with their icons (`chat` is the list itself). */
-const ICONS: Record<Exclude<View, "chat">, string> = { voice: "mic", tasks: "sliders", alerts: "bell", changes: "box", security: "shield", system: "monitor", settings: "gear" };
+const ICONS: Record<Exclude<View, "chat">, string> = { voice: "mic", tasks: "sliders", tickets: "list", alerts: "bell", changes: "box", security: "shield", system: "monitor", settings: "gear" };
 const LABEL = (view: string) => view[0].toUpperCase() + view.slice(1);
 
 interface BodyProps {

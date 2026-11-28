@@ -28,6 +28,8 @@ SESSIONS = {}
 # The folders of the mock file system and the projects `GET /api/projects` lists (S42; set with `reset`).
 DIRS = set()
 PROJECTS = []
+# The tickets of the mock (tickets.md): {"projects": [...], "tickets": [...]}; `reset(tickets=..., ticket_projects=...)` fills them.
+TICKETS = {"projects": [], "tickets": []}
 OPENED = []  # the sessions the window read (`GET /api/sessions/:id`), in order
 # The work panel (S43; set with `reset`): the background tasks per session, the output of a task, the messages per session,
 # the pending approvals, and the reads of an output (`GET /api/background/:id/output`) as (task, tail).
@@ -88,6 +90,8 @@ def reset(**kw):
     DIRS.clear()
     DIRS.update(kw.get("dirs", ()))
     PROJECTS[:] = kw.get("projects", [])
+    TICKETS["projects"] = json.loads(json.dumps(kw.get("ticket_projects", [])))
+    TICKETS["tickets"] = json.loads(json.dumps(kw.get("tickets", [])))
     SESSIONS["s1"] = meta("s1", kw.get("session", {}))
     for sid, extra in (kw.get("sessions") or {}).items():
         SESSIONS[sid] = meta(sid, extra)
@@ -136,6 +140,62 @@ def local_settings(body):
             CALLS.append(f"PUT /api/settings {json.dumps(body)}")
             for m in LOCAL["recommended"]:
                 m["usedFor"] = [u for u in m["usedFor"] if u != key] + ([key] if m.get("ref") and m["ref"] == body[key] else [])
+
+
+def ticket(key, title, state="todo", project="/home/me/code/kagent", **extra):
+    """A ticket as GET /api/tickets lists it (tickets.md section 2)."""
+    t = {"key": key, "project": project, "title": title, "description": "", "state": state, "priority": "none", "labels": [], "parent": None, "links": [], "assignee": None,
+         "doneWhen": [], "notes": [], "history": [{"at": "2026-11-28T09:00:00Z", "by": "owner", "what": "created"}], "createdAt": "2026-11-28T09:00:00Z", "updatedAt": "2026-11-28T09:00:00Z"}
+    t.update(extra)
+    return t
+
+
+def tickets_route(method, path, body):
+    """The tickets routes of the mock: None when the path is not one, else (status, body). Every change is in CALLS."""
+    err = lambda status, message: (status, {"error": {"code": "invalid_input" if status == 400 else "not_found", "message": message}})
+    if path == "/api/tickets" and method == "GET":
+        return 200, TICKETS
+    if path == "/api/tickets" and method == "POST":
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        title = (body.get("title") or "").strip()
+        if not title or len(title) > 200:
+            return err(400, f"title: 1 to 200 characters (it has {len(title)})")
+        project = body.get("project")
+        info = next((p for p in TICKETS["projects"] if p["path"] == project), None)
+        if project and not info and project not in DIRS and not any(x["path"] == project for x in PROJECTS):
+            return err(400, f"not a directory: {project}")
+        if not info:
+            info = {"id": "p%d" % len(TICKETS["projects"]), "path": project, "name": project.rsplit("/", 1)[-1] if project else "Inbox", "prefix": "IN" if not project else "NW", "count": 0}
+            TICKETS["projects"].append(info)
+        n = max([int(t["key"].rsplit("-", 1)[1]) for t in TICKETS["tickets"] if t["key"].startswith(info["prefix"] + "-")] + [0]) + 1
+        info["count"] += 1
+        t = ticket(f"{info['prefix']}-{n}", title, body.get("state", "todo"), project, **{k: v for k, v in body.items() if k in ("description", "priority", "labels", "doneWhen")})
+        TICKETS["tickets"].append(t)
+        return 201, t
+    m = re.fullmatch(r"/api/tickets/([A-Za-z0-9]+-\d+)", path)
+    if m:
+        t = next((x for x in TICKETS["tickets"] if x["key"] == m.group(1)), None)
+        if not t:
+            return err(404, f"no ticket {m.group(1)}")
+        if method == "DELETE":
+            CALLS.append(f"DELETE {path}")
+            TICKETS["tickets"].remove(t)
+            return 204, b""
+        if method == "PUT":
+            CALLS.append(f"PUT {path} {json.dumps(body)}")
+            if "title" in body and not (1 <= len(body["title"].strip()) <= 200):
+                return err(400, f"title: 1 to 200 characters (it has {len(body['title'].strip())})")
+            said = []
+            for field in ("title", "description", "state", "priority", "labels", "parent", "links", "assignee", "doneWhen"):
+                if field in body and body[field] != t[field]:
+                    t[field] = body[field]
+                    said.append(f"{field}: {body[field]}" if field in ("state", "priority") else field)
+            if body.get("note"):
+                t["notes"].append({"at": "2026-11-28T10:00:00Z", "by": "owner", "text": body["note"]})
+                said.append("note added")
+            t["history"] += [{"at": "2026-11-28T10:00:00Z", "by": "owner", "what": w} for w in said]
+            return 200, t
+    return None
 
 
 def folder_refusal(path):
@@ -314,6 +374,10 @@ class Mock(BaseHTTPRequestHandler):
                 return self.send(out[0], out[1], "application/json")
         if LOCAL and path == "/api/settings" and method == "PUT":
             local_settings(body)
+        if path.startswith("/api/tickets"):
+            out = tickets_route(method, path, body)
+            if out:
+                return self.send(out[0], out[1], "application/json")
         if path == "/api/state":
             status, data, _ = daemon("GET", "/api/state")
             state = json.loads(data)
