@@ -68,8 +68,8 @@ export default function Voice() {
       <div className="voice-stage">
         <Orb mic={v.micAnalyser} play={v.playAnalyser} state={v.muted && active ? "muted" : status} theme={theme} />
         <div className={`voice-status st-${status}`}>
-          {(status === "live" && v.thinking ? "Thinking" : ({ idle: "Ready", connecting: "Connecting", live: v.muted ? "Mic muted" : "Listening", rolling: "Reconnecting", error: "Voice error" } as Record<string, string>)[status] ?? status)}
-          {detail && `: ${detail}`}
+          {v.said || (status === "live" && v.thinking ? "Thinking" : ({ idle: "Ready", connecting: "Connecting", live: v.muted ? "Mic muted" : "Listening", rolling: "Reconnecting", error: "Voice error" } as Record<string, string>)[status] ?? status)}
+          {!v.said && detail && `: ${detail}`}
         </div>
         <button className={active ? "danger big" : "primary big"} onClick={toggle} disabled={!liveModel && !active}>
           {active ? "Stop talking" : "Talk"}

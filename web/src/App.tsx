@@ -10,6 +10,7 @@ import { startDrag, startResize, toggleMaximize } from "./frame";
 import Icon from "./components/Icon";
 import ResizeEdges from "./components/ResizeEdges";
 import ErrorBoundary from "./components/ErrorBoundary";
+import Toasts from "./components/Toasts";
 import { voice } from "./voice/controller";
 import { useVoice } from "./voice/useVoice";
 import { isPref, readPref, storePref, subscribeSystemTheme, systemTheme, themeOf, type ThemePref } from "./theme";
@@ -114,6 +115,7 @@ export default function App() {
     return (
       <ErrorBoundary name="widget">
         <ResizeEdges />
+        <Toasts compact />
         <Overlay onExpand={() => switchLayout("full")} onHide={() => void api.post("/api/ui/window", { mode: "hidden" })} />
       </ErrorBoundary>
     );
@@ -143,7 +145,6 @@ export default function App() {
           <Icon name="sidebar" size={15} />
         </button>
         <span className="logo">KAgent</span>
-        {s.notice && <span className="notice">{s.notice}</span>}
         <span className="spacer" />
         {(s.state?.running?.length ?? 0) > 0 && (
           <button className="tab danger" title="Kill switch: cancel every running turn and tool" onClick={() => void api.post("/api/stop-all", {})}>
@@ -181,6 +182,7 @@ export default function App() {
       </main>
       </div>
       <ResizeEdges />
+      <Toasts />
       {isApp && (
         <div className="resize-grip" title="Drag to resize" onPointerDown={(e) => startResize(e, "se")}>
           <Icon name="grip" size={14} />

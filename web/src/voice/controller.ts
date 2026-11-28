@@ -11,6 +11,8 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let client: LiveClient | null = null;
 let sessionHook: ((id: string) => void) | null = null;
+let saidTimer: ReturnType<typeof setTimeout> | null = null;
+const SAID_MS = 6000;
 
 function readNum(key: string, dflt: number): number {
   const v = Number(localStorage.getItem(key));
@@ -32,6 +34,8 @@ export const voice = {
   version: 0,
   /** A brain turn runs for what was just said (the `think` call of the live model); the status line says so. */
   thinking: false,
+  /** A notice said by the status line for a few seconds (notices.md section 2); empty when none. */
+  said: "",
 
   get active(): boolean {
     return client?.active ?? false;
@@ -76,6 +80,16 @@ export const voice = {
   },
   sendText(text: string) {
     client?.sendText(text);
+  },
+  /** The status line says `text` for a few seconds (an error notice in a live session). */
+  say(text: string) {
+    voice.said = text;
+    changed();
+    if (saidTimer) clearTimeout(saidTimer);
+    saidTimer = setTimeout(() => {
+      voice.said = "";
+      changed();
+    }, SAID_MS);
   },
   setMuted(m: boolean) {
     voice.muted = m;

@@ -99,7 +99,7 @@ export default function Overlay({ onExpand, onHide }: Props) {
 
   const active = v.status !== "idle" && v.status !== "error";
   const state = v.muted && active ? "muted" : v.status;
-  const label = v.status === "idle" ? "Tap the orb to talk" : v.status === "error" ? v.detail || "Voice error" : v.muted && active ? "Mic muted" : v.status === "live" ? "Listening" : v.status === "connecting" ? "Connecting" : v.status;
+  const label = v.said ? v.said : v.status === "idle" ? "Tap the orb to talk" : v.status === "error" ? v.detail || "Voice error" : v.muted && active ? "Mic muted" : v.status === "live" ? "Listening" : v.status === "connecting" ? "Connecting" : v.status;
   // The last thing each side said, newest last.
   const lastUser = [...v.lines].reverse().find((l) => l.who === "user");
   const lastAgent = [...v.lines].reverse().find((l) => l.who !== "user");

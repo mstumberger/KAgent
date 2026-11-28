@@ -12,7 +12,7 @@ export type AgentEvent =
   | { type: "turnFinished"; sessionId: string; turnId: string; status: string; error?: string; usage: { inputTokens: number; outputTokens: number } }
   | { type: "sessionUpdated"; sessionId: string; title: string }
   | { type: "settingsChanged"; settings: unknown }
-  | { type: "notice"; level: string; text: string }
+  | { type: "notice"; level: string; text: string; key?: string; sessionId?: string; kind?: "error" | "recovery" | "info" }
   | { type: "hello"; version: string }
   | { type: "alertRaised"; alert: unknown }
   | { type: "alertUpdated"; alert: unknown }

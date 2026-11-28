@@ -8,7 +8,7 @@ Dark and light at 1200x820, then 700x500 (the drawer) and 340x460 (the widget); 
 import asyncio, json, sys
 from datetime import datetime, timedelta, timezone
 import picker_web_lib as lib
-from picker_web_lib import Env, calls, daemon, opened, report, reset
+from picker_web_lib import FAKE_LIVE, Env, calls, daemon, opened, report, reset
 
 NOW = datetime.now(timezone.utc)
 ago = lambda **kw: (NOW - timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -29,8 +29,6 @@ SESSIONS = {
 CFG = dict(sessions=SESSIONS, dirs=[KA, OT, EX], alerts=3, running=["s2"],
            projects=[{"path": KA, "name": "KAgent", "agentsMd": True}, {"path": OT, "name": "other", "agentsMd": False}])
 
-# The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
-FAKE_LIVE = """(() => { const Real = window.WebSocket; window.WebSocket = function (url, ...rest) { if (String(url).includes('/live?')) { const fake = { readyState: 1, send() {}, close() {}, onopen: null }; setTimeout(() => { fake.onopen && fake.onopen(); fake.onmessage && fake.onmessage({ data: JSON.stringify({ type: 'status', status: 'connecting' }) }); }, 20); return fake; } return new Real(url, ...rest); }; window.WebSocket.OPEN = 1; window.WebSocket.CONNECTING = 0; window.WebSocket.CLOSED = 3; window.WebSocket.CLOSING = 2; })();"""
 MODE = lambda: json.loads(daemon("GET", "/api/state")[1])["settings"]["permissionMode"]
 THINGS = "(() => [...document.querySelector('header').children].map(c => c.id === 'sidebar-toggle' ? 'toggle' : c.classList.contains('logo') ? 'logo:' + c.textContent.trim() : c.classList.contains('spacer') ? 'spacer' : c.classList.contains('notice') ? 'notice' : c.classList.contains('voice-chip') ? 'voice' : c.classList.contains('win-controls') ? 'window' : c.textContent.trim()))()"
 DESCRIBE = "(() => { const a = document.activeElement; return a.id === 'sidebar-toggle' ? 'toggle' : a.closest('.voice-chip') ? 'voice:' + a.textContent.trim() : a.closest('.win-controls') ? 'window:' + a.getAttribute('aria-label') : a.classList.contains('sb-new') ? 'new' : a.textContent.trim() || a.getAttribute('aria-label'); })()"
@@ -247,19 +245,19 @@ async def main():
         await type_text("/project " + EX)
         await page.key("Enter", "Enter", 13, 0, "\r")
         await page.until(f"{section_of('Free the disk')} === 'extra'", "/project <path>")
-        results["/project <path>: one PUT, the session moves, the notice says the folder"] = calls()[-1] == f'PUT /api/sessions/s1/project {{"path": "{EX}"}}' and await page.js("document.querySelector('header .notice').textContent") == f"Project: {EX}"
+        results["/project <path>: one PUT, the session moves, the notice says the folder"] = calls()[-1] == f'PUT /api/sessions/s1/project {{"path": "{EX}"}}' and await page.js("document.querySelector('.toasts .toast .toast-text').textContent") == f"Project: {EX}"
         await page.js("document.querySelector('.composer textarea, .composer input').focus()")
         await type_text("/project")
         # The slash list is open: the first Enter takes the command into the field, the second sends it.
         await page.key("Enter", "Enter", 13, 0, "\r")
         await page.key("Enter", "Enter", 13, 0, "\r")
         await page.until(f"{section_of('Free the disk')} === 'This machine'", "/project alone")
-        results["/project alone: detaches and the notice says so"] = calls()[-1] == 'PUT /api/sessions/s1/project {"path": null}' and await page.js("document.querySelector('header .notice').textContent") == "Project detached"
+        results["/project alone: detaches and the notice says so"] = calls()[-1] == 'PUT /api/sessions/s1/project {"path": null}' and await page.js("document.querySelector('.toasts .toast .toast-text').textContent") == "Project detached"
         await page.js("document.querySelector('.composer textarea, .composer input').focus()")
         await type_text("/project relative/dir")
         await page.key("Enter", "Enter", 13, 0, "\r")
-        await page.until("document.querySelector('header .notice').textContent.startsWith('path must be')", "a refusal as a notice")
-        results["/project: a refusal is a notice with the daemon's message"] = await page.js("document.querySelector('header .notice').textContent") == "path must be absolute, or start with ~/"
+        await page.until("document.querySelector('.toasts .toast .toast-text').textContent.startsWith('path must be')", "a refusal as a notice")
+        results["/project: a refusal is a notice with the daemon's message"] = await page.js("document.querySelector('.toasts .toast .toast-text').textContent") == "path must be absolute, or start with ~/"
         results["/project is in the list of the slash commands"] = True
         await page.js("document.querySelector('.composer textarea, .composer input').focus()")
         await type_text("/proj")

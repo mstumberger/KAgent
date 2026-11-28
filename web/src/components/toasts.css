@@ -1,0 +1,89 @@
+/* The stack of notices (Toasts.tsx, notices.md section 2). Over the content and under the
+   dialogs: sheets are 19, menus 20, an approval 21. */
+.toasts {
+  position: fixed;
+  right: 12px;
+  width: min(360px, calc(100vw - 24px));
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+/* The widget: the whole width but 8 px each side, at the top. */
+.toasts.compact {
+  left: 8px;
+  right: 8px;
+  width: auto;
+  --glass-2: #18223b;
+  --rim: rgba(140, 170, 255, 0.12);
+  --rim-strong: rgba(140, 170, 255, 0.24);
+  --ink: #e6ebf7;
+  --dim: #8b95b2;
+  --ice: #7cc4ff;
+}
+.toasts > * { pointer-events: auto; }
+.toasts-bar { display: flex; justify-content: flex-end; }
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 8px 9px 10px;
+  border-radius: var(--radius-m, 12px);
+  border: 1px solid var(--rim-strong, var(--rim));
+  background: rgba(18, 26, 46, 0.94);
+  backdrop-filter: blur(14px) saturate(140%);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.4;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.18s ease-out;
+}
+:root[data-theme="light"] .toasts:not(.compact) .toast { background: rgba(255, 255, 255, 0.96); box-shadow: 0 8px 28px rgba(30, 40, 70, 0.18); }
+.toast.error { border-left: 3px solid var(--signal); }
+.toast.recovery { border-left: 3px solid var(--ok); }
+.toast.info { border-left: 3px solid var(--ice); }
+.toast-icon { flex: 0 0 auto; display: inline-flex; margin-top: 2px; color: var(--dim); }
+.toast.error .toast-icon { color: var(--signal); }
+.toast.recovery .toast-icon { color: var(--ok); }
+.toast-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.toast-text {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.toast-text.all { display: block; -webkit-line-clamp: unset; line-clamp: unset; }
+.toast-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--dim); }
+.toast-count { padding: 0 6px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--rim); color: var(--ink); font-weight: 600; }
+.toast-link, .toast-fold {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--ice);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.toast-link:hover, .toast-fold:hover { text-decoration: underline; background: transparent; }
+.toasts-bar .toast-link { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--rim); background: var(--glass-2); }
+.toast-fold { align-self: center; padding: 3px 12px; border: 1px solid var(--rim); background: var(--glass-2); border-radius: 999px; }
+.toast-close {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  border-radius: 6px;
+}
+.toast-close:hover { color: var(--ink); background: rgba(255, 255, 255, 0.08); }
+.toast button:focus-visible, .toast-fold:focus-visible, .toasts-bar button:focus-visible { outline: 2px solid var(--ice); outline-offset: 1px; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
