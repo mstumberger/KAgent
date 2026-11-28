@@ -2,6 +2,7 @@
 name = "kagentd"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 kagent-core = { path = "../kagent-core" }
