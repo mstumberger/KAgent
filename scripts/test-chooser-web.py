@@ -186,6 +186,12 @@ async def gone(env, results, theme, w, h):
     await env.open(theme, ready=".mm-trigger", **dict(CFG, session={"model": "anthropic::gone-model", "reasoningLevel": None}))
     await page.js("document.querySelector('.mm-trigger').click()")
     await page.until("!!document.querySelector('.mc')", "the chooser")
+    # The reason arrives with the providers, a moment after the chooser opens: wait for
+    # it instead of reading at once (the check failed about one run in four).
+    try:
+        await page.until("(document.querySelector('.mc-kept')?.textContent || '').includes('model switched off')", "the reason on the kept row")
+    except RuntimeError:
+        pass  # the check below reports it
     results[f"{t}: a chosen model that is gone shows as a disabled current row with the reason"] = await page.js("(() => { const k = document.querySelector('.mc-kept'); return !!k && k.classList.contains('off') && k.textContent.includes('gone-model') && k.textContent.includes('model switched off') && !document.querySelector('.mc-none .pop-check'); })()")
     await page.shot(f"chooser-gone-{theme}-{w}x{h}")
 
