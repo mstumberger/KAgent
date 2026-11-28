@@ -99,6 +99,7 @@ first three are done first.
   buttons); every page checked and fixed at five sizes up to 2560 px, with one set of
   layout rules and parts; conversations can be renamed, moved to a project, archived
   and deleted with undo.
+  Built: addresses for every view, settings page, conversation, ticket and run, Back and Forward (buttons, Alt+arrows, the side buttons; an open menu closes first), one page frame and one header with the 960 and 1600 px columns, the themed dropdown in place of every select, a matrix script that finds nothing at 1920, 1200, 700 and 340 px, and the conversation menu (rename, move, drag, archive, delete with 10 s undo). Not built: 2560 px in the matrix, multi-select, the `sessions` tool's archive and move.
 - [ ] Tickets: a project's list and board in the sidebar (one list with the tickets a
   run creates); side-by-side diffs per ticket with comments that go back to the
   worker; seeing, correcting and interrupting a running worker; a change to a ticket

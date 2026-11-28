@@ -131,6 +131,9 @@ until now UI work needed a production build and a reload for every change.
 - It uses `SectionPage`, `Toggle`, `Badge` and `useSettingPatch`; a page whose rows
   carry a switch (Skills, Hooks) draws its own rows instead of `ListDetail`.
 - It adds its id to `registry.ts` and to `ui.rs` `SECTIONS`.
+- It is a place of the router (`/settings/<id>`, `shell.md` section 2) without anything to add: the registry is the table.
+- It takes its layout from the shell (section 16): `SectionPage` is the frame, `wide` only for a page with a real second pane, `Select`
+  (the themed `Dropdown`) where a select would be, no fixed pixel width, no scroller of its own inside the frame.
 - It is verified in headless Chrome, dark and light, at 1200x820 and 700x500.
 
 ## 9. Verification (no test runner exists in `web/`)
@@ -289,3 +292,16 @@ the time the last limit was seen, and the known-limit fields (a total, a unit an
 limits: one `PUT /api/settings {"usage": ...}`). A local provider shows "no limits" and its counters only. Verified by
 `scripts/test-chooser-web.py` (112 checks) and `scripts/test-usage-web.py` (105 checks); screenshots in
 `/tmp/kagent-v003-chooser-shots/`.
+
+## 16. The shell: the address and the layout rules (v0.0.3)
+
+Spec: `shell.md`. What this document says about the screen changes in three places:
+
+- **Pages are addresses.** The open settings page is the path `/settings/<id>` (a plain `/settings` is the page used last, remembered in
+  `localStorage` `kagent.settings.section`, and is filled in); the old `#view=settings&section=<id>` link is read and replaced. Back
+  and Forward move between pages like between any two places.
+- **One frame.** `SectionPage` is the frame of a page: a header (title, a line, the actions, the save result) over the one scrolling body
+  (`data-scroll-root="page"`). Both sit in the same column, `min(100%, 960px)` (`--page-w`), or `min(100%, 1600px)` (`--page-w-wide`) with
+  the `wide` prop for a page with a list and a detail (Models, Skills, Memory). Below 900 px the menu is the `Dropdown` `.settings-jump`.
+- **No native select.** `settings/Select.tsx` takes the `<option>` children of a select and draws a `Dropdown`; the trigger carries `value`
+  and the options `data-value`, which is what the headless suites read and click.

@@ -13,6 +13,11 @@ in `config.md` (settings, providers) and `crates/kagent-core/src/protocol.rs`
 - No CORS headers (same-origin only). The web app is served from `/` (static
   `web/dist`, SPA fallback to `index.html`) without auth; it reads the token from
   `location.hash` (`#token=...`) once, stores it in localStorage, clears the hash.
+  Every path that is not a file of `web/dist` (`/settings/models`, `/tickets/KA-1`,
+  `/chat/<id>`: the addresses of the router, `shell.md` section 2) answers **200** with
+  `index.html` and `Cache-Control: no-cache` (it was 404 with the page before v0.0.3). A path
+  under `/api/` that matches no route answers 404 `{"error": {"code": "not_found", ...}}`
+  (401 first when the token is missing), never the page.
 - Errors: HTTP status + `{"error": {"code": "not_found|invalid_input|conflict|unauthorized|provider_error|internal", "message": "..."}}`.
 - Request body limit 2 MiB.
 
@@ -53,7 +58,7 @@ type AuditRecord = /* config.md section 6 */;
 | GET `/api/sessions` | | `SessionMeta[]` newest first |
 | POST `/api/sessions` | `{title?, model?, reasoningLevel?}` (the last two from S41, section 8) | `SessionMeta` (201) |
 | GET `/api/sessions/:id` | | `{meta: SessionMeta, messages: Message[]}` |
-| DELETE `/api/sessions/:id` | | 204 (cancels if running) |
+| DELETE `/api/sessions/:id` | | 204, and its subagents' sessions and its images folder go with it; 404 for an unknown session; 409 `conflict` ("the conversation is running: stop it first") while it or one of its subagents has a turn running (v0.0.3, `shell.md` section 5; it cancelled the turn before) |
 | POST `/api/sessions/:id/messages` | `{text, via?: "text"\|"voice", images?: [imageId]}` | `{status: "started", turnId}` or `{status: "queued"}`; 409 for the session of a subagent (read-only); `text` may be empty when `images` is not (S46); 400 over 4 images, 404 for an image the session does not have; 409 `refused` (with a notice) when nobody can read the images (`vision.md` section 2) |
 | POST `/api/sessions/:id/images` | multipart, the file in the field `file` | `ImageRef` `{id, mime: "image/png"\|"image/jpeg", width, height, bytes}` (S46, `vision.md` section 1): re-encoded, longest side 1568, EXIF dropped; 413 over 8 MB, 415 for a type that is not PNG, JPEG or WebP, 400 for a file that does not decode, 404 unknown session |
 | GET `/api/sessions/:id/images/:imageId` | | the stored image (`Cache-Control: private`, bearer token); 404 |
@@ -302,6 +307,8 @@ their rows. Spec of S41: `picker.md`.
 | POST `/api/sessions` | `{title?, model?, reasoningLevel?, project?}` (`project` from S42) | `SessionMeta` (201) |
 | PUT `/api/sessions/:id/project` | `{path: string\|null}` (S42) | `SessionMeta` |
 | PUT `/api/sessions/:id/pin` | `{pinned: boolean}` (S42) | `SessionMeta` |
+| PUT `/api/sessions/:id/title` | `{title: string}` (v0.0.3, `shell.md` section 5): the words on one line, 1 to 120 characters | `SessionMeta` with the title and `renamed: true` (the automatic titles never replace it); 400 `invalid_input` for an empty or a long title or another body, 404, 409 for the session of a subagent; `sessionMetaChanged` on a change only |
+| PUT `/api/sessions/:id/archive` | `{archived: boolean}` (v0.0.3) | `SessionMeta` with `archived`; 400, 404, 409 for the session of a subagent and, when archiving, for a conversation that runs (as the delete); `sessionMetaChanged` on a change only. `GET /api/sessions` lists archived sessions too, with `archived: true` |
 | PUT `/api/sessions/:id/images-notice` | (no body; v0.0.3, `vision.md` section 2) | `SessionMeta` with `imagesNoticeShown: true`; 404 for an unknown session; `sessionMetaChanged` on the first call only |
 | GET `/api/sessions?project=<path>` | (S42) | the top-level sessions of that folder, newest first, as the plain list |
 | GET `/api/projects` | (S42) | `{roots: string[], projects: [{path, name, agentsMd: boolean}]}` |

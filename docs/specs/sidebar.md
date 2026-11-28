@@ -545,3 +545,19 @@ toggle, KAgent, Stop all and the voice chip. Check: `scripts/test-sidebar-web.py
 The views under the list are now nine: Voice, Tasks, Tickets, **Runs**, Alerts, Changes, Security, System, Settings (`nav.ts` `VIEWS`, the
 daemon's `ui.rs` allow-list, the icon `bot`). The view is the board of `workflows.md` section 8. It is called **Runs**, not Work: "Work" is
 the work panel and the widget's sheet of `work-windows.md`. `scripts/test-sidebar-web.py` expects the nine.
+
+### Amendment 2026-11-28 (v0.0.3): the shell (`shell.md`)
+
+- **Back and Forward** are two icon buttons in the title bar after the sidebar toggle (`aria-label` Back and Forward, disabled with
+  nowhere to go). The header holds the toggle, the two buttons, KAgent, Stop all and the voice chip, so the keyboard order is the toggle,
+  Back and Forward (when enabled), Stop all, the voice chip, then the sidebar.
+- **The row menu** (section 5.3) is now: Rename (F2), Pin, Move to project..., Attach folder... (or Change folder...), Detach folder,
+  Archive (Unarchive in the Archived group), Delete (Del). It opens on the `...` button, on a right click, on the menu key and on
+  Shift+F10. The first four of S42 are unchanged; "Move to project..." opens a second menu of the known projects (the projects of
+  `GET /api/projects` and the folders the sessions use) with a check on the current one and "No project", and "Attach folder..." stays the
+  way to type a path. The menu takes `useOverlay`: Back closes it.
+- **Rename** edits the title in the row (Enter or a blur saves, Escape cancels); **drag** a row onto a project's section (or "This machine")
+  in the Projects view to move it (the section is lit while the row is over it); **archive** puts the row in a collapsed "Archived (n)" group
+  at the foot of the list (Projects and Recent alike); the search leaves archived rows out unless its "Archived" filter button is pressed;
+  **delete** hides the row, shows an Undo toast for 10 s, and the daemon deletes when the toast ends (`shell.md` section 5).
+- The widget's sessions sheet draws the same list, so it has the same menu.

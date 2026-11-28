@@ -3401,6 +3401,55 @@ its own profile and never his, search through the reader is DuckDuckGo. Decision
   `/api/sentinel`, `/api/doctor`, `/api/net`, `/api/system` and `/api/local-models`: a 404 is a console error, and it failed the chooser, screen-watch and
   calendar suites while the owner's daemon held port 7878.
 
+### Session 2026-11-28 (v0.0.3: the shell, H1 to H4; `specs/shell.md`)
+
+Stages H1 to H4 of `plans/ui-shell.md` (local). Seven commits on `v0.0.3`. Decisions:
+
+- **A router of our own, on the History API, paths and not hashes.** The plan allowed `wouter`; the owner's open question is answered "none":
+  `web/package.json` has no router and gets none (`router/route.ts` is the pure table, `router/router.ts` the mirror). The plan said hash routes
+  (`#/settings/models`); the task said paths, and the daemon already served `index.html` for a path that is not a file, so the paths are
+  `/chat/<id>`, `/settings/<page>/<item>`, `/tickets/<KEY>`, `/runs/<run>/<task>` and `/<view>`. **A defect found by the test:** the fallback used
+  `ServeDir::not_found_service`, which forces the status to 404, so a deep path was served with the page but with a 404; it is `fallback` now (200),
+  and `/api/...` paths that match no route answer 404 JSON through the API router's own fallback (`server.rs`, `web_tests`).
+- **The store stays the owner of the state**; the router subscribes to it and writes the address. A change that makes another place pushes an
+  entry, one that only fills an empty part of the place (the first conversation at load, the default settings page, the next conversation after
+  a delete: `quiet()`) replaces. So no caller of `setView`, `openSession` or `showView` changed. `placeId` and `placeSub` carry a settings item, a
+  ticket key, a run and a task; Tickets and Runs read them instead of their own state (a Back or a pasted address opens the same item).
+- **The token never reaches an address the router writes**: `captureToken` still runs first, stores the token and removes the whole fragment with
+  `replaceState`; the old `#view=..&section=..&session=..` fragments are read once and replaced by their path. Check: the history of the page has no
+  entry with the token (`Page.getNavigationHistory`).
+- **Back closes the overlay first by the app's own Back, not by a history entry per overlay** (the plan pushed one entry while a dialog is open).
+  An entry per open menu costs an entry per menu opened and races with a pick that navigates (pick "Project folders in Settings": the menu
+  closes and pushes while its own Back would pop the new entry). `useOverlay(open, close)` is one line in each of `Menu`, `Sheet`, `Dialog`,
+  `Dropdown`, `AttachMenu`, the model menu, the watch popup, the lightbox and the drawer. A browser's own Back (not the app window's buttons)
+  closes every overlay and changes the place together.
+- **The mouse's side buttons** act on `mouseup` and `pointerup` (headless Chrome sends only pointer events for them), once per press, and their
+  `mousedown`, `pointerdown` and `auxclick` are stopped in the capture phase: a menu took the press for a click outside and closed itself before
+  Back could, which then went back a place as well. Scroll is kept per entry for `[data-scroll-root]` and put back after a Back.
+- **A browser skips the history entries a page makes without a user gesture** (the history-manipulation intervention). Every push here follows a click or
+  a key; the headless suites therefore click with real mouse events where they count entries.
+- **Layout**: the plain views already had a `.page` class (three conflicting definitions across the parts): it became the one frame
+  (`components/page/Page.tsx`, `styles/shell.css`, last in the cascade), 960 px, `wide` 1600 px, centered by its padding, the only scroller; the
+  settings `SectionPage` got the same column for its header and body (the header was a flex item that shrank and sat 225 px right of the cards at 1920).
+  `FormRow` and `Card` are the existing `Row` and `GroupCard`. Pane layouts (Runs, Tickets, Voice) are capped at 1600 and centered.
+- **No native select**: `settings/Select.tsx` takes a select's `<option>` children and an `onChange` that reads `e.target.value` and draws the
+  `Dropdown`; 33 call sites changed one tag, and the settings jump is a `Dropdown`. The trigger has `value`, the options `data-value`.
+- **The matrix** (`scripts/shell_matrix_lib.py`, `shell-matrix.py`): 276 findings before, 0 after. It runs on the daemon stand-in when the owner's daemon holds
+  port 7878, so Security and System are measured with empty answers; 2560 px was not added (the task listed four sizes).
+- **Conversations**: the S42 row menu was extended (Rename, Move to project, Archive; Attach folder and Detach stay), not duplicated. Daemon: `archived`
+  and `renamed` in `SessionMeta` (`serde(default)`), `PUT /api/sessions/:id/title` and `/archive` (request types with `deny_unknown_fields`), 409 for
+  archiving or deleting a conversation with a running turn (itself or a subagent), 404 for deleting an unknown one (it was 204). `renamed` keeps both the
+  quick title and the model's, also one already on its way (`apply_title`).
+- **Delete with undo**: the row is hidden at once, a toast with Undo stays 10 s, and the daemon deletes when the toast ends or is closed (the toast's
+  own hold rule applies). **Closing the window during the 10 s completes the delete**: `pagehide` sends the pending `DELETE`s with `fetch(..., {keepalive})`;
+  the owner asked for it, undo only exists in the window that showed the toast, and the daemon deletes in one call, so nothing is half done. `kagent.undo-ms`
+  shortens the time for the suites (one check runs the real ten seconds). The plan's 30 day trash was dropped for the toast.
+- **Tests that changed on purpose**: `test-sidebar-web.py` (168): the header holds the toggle, Back and Forward, KAgent, Stop all and the voice chip, the keyboard
+  order has Back (enabled: the mic opened the voice view) after the toggle, and the widget's permission picker is a dropdown; `test-tickets-web.py`
+  (89), `test-runs-web.py` (109), `test-usage-web.py` (105) and `test-screen-watch-web.py` (62) pick in the dropdown (`dd_set`, `dd_values` of the lib) where they set a select's value.
+  Counts did not change. With the owner's daemon on 7878 the stand-in answers the routes the mock does not (see the earlier note).
+- **Not built**: multi-select, the `sessions` tool's `archive` and `move`, a trash folder, 2560 px, `/project/<name>` and `/time/<date>` addresses (there is no such view).
+
 ## F. Progress
 
 - [x] S0 compile drafts
