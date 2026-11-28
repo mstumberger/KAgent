@@ -287,9 +287,12 @@ pub struct Web {
 
 impl Web {
     /// The tools as the daemon runs them: the system resolver for the guard, the real
-    /// engines and the key store of this home.
-    pub fn new(settings: SettingsCell, config_dir: &Path) -> Self {
-        Self::with(settings, Arc::new(BraveKeyStore::for_config(config_dir)), Arc::new(Guard::new(Arc::new(SystemResolver))), Engines::default())
+    /// engines, the key store of this home, and the reader on `<data>/reader-profile`
+    /// (it goes through the same guard).
+    pub fn new(settings: SettingsCell, config_dir: &Path, data_dir: &Path) -> Self {
+        let egress: Arc<dyn Egress> = Arc::new(Guard::new(Arc::new(SystemResolver)));
+        let reader = reader::Reader::for_daemon(data_dir, egress.clone());
+        Self::with(settings, Arc::new(BraveKeyStore::for_config(config_dir)), egress, Engines::default()).with_reader(reader)
     }
 
     /// The tools over other parts: the key store, the egress and the engines of a test.

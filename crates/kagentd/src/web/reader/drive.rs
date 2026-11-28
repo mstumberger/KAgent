@@ -4,7 +4,8 @@
 //! a download. Events are answered while the driver waits for an answer (the socket of
 //! `cdp::Session` is read through `send` and `recv`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{json, Value};
@@ -12,6 +13,7 @@ use tokio::time::Instant;
 
 use super::challenge::is_challenge;
 use crate::browser::cdp::{self, Session};
+use crate::web::guard::{Egress, Refusal};
 use crate::web::page_reader::ReaderError;
 use crate::web::MAX_BODY;
 
@@ -42,6 +44,14 @@ struct Snapshot {
 
 struct Driver {
     session: Session,
+    /// The egress every request of the page goes through (web.md section 8).
+    egress: Arc<dyn Egress>,
+    /// What the egress said of an origin during this read: `None` is allowed.
+    decisions: HashMap<String, Option<Refusal>>,
+    /// The frame of the page: a blocked document of another frame is not the page's refusal.
+    main_frame: String,
+    /// The main document, or a redirect of it, was refused: why, and whether after a redirect.
+    blocked_document: Option<(Refusal, bool)>,
     loaded: bool,
     inflight: HashSet<String>,
     /// The status of the last main document.
@@ -52,15 +62,16 @@ fn failed(what: impl std::fmt::Display) -> ReaderError {
     ReaderError::Failed(what.to_string())
 }
 
-/// Read `url` in the first tab of the browser on `port`. `challenge_wait` is how long a human-check page may take to clear.
-pub async fn read(port: u16, url: &str, challenge_wait: Duration) -> Result<Read, ReaderError> {
+/// Read `url` in the first tab of the browser on `port`; every request of the page goes
+/// through `egress`. `challenge_wait` is how long a human-check page may take to clear.
+pub async fn read(port: u16, url: &str, egress: Arc<dyn Egress>, challenge_wait: Duration) -> Result<Read, ReaderError> {
     let tabs = cdp::tabs(port).await.map_err(failed)?;
     let tab = match tabs.first() {
         Some(tab) => tab.clone(),
         None => cdp::new_tab(port, "about:blank").await.map_err(failed)?,
     };
     let session = Session::connect(&tab).await.map_err(failed)?;
-    let mut driver = Driver { session, loaded: false, inflight: HashSet::new(), status: None };
+    let mut driver = Driver { session, egress, decisions: HashMap::new(), main_frame: String::new(), blocked_document: None, loaded: false, inflight: HashSet::new(), status: None };
     let result = driver.run(url, challenge_wait).await;
     // A window the page opened is closed, and the tab is left empty for the next read.
     for other in cdp::tabs(port).await.unwrap_or_default().iter().filter(|t| t.id != tab.id) {
@@ -74,9 +85,16 @@ impl Driver {
     async fn run(&mut self, url: &str, challenge_wait: Duration) -> Result<Read, ReaderError> {
         self.call("Page.enable", json!({})).await?;
         self.call("Network.enable", json!({})).await?;
+        // Every request pauses until the egress has judged it: the navigation, each redirect, each subresource.
+        self.call("Fetch.enable", json!({"patterns": [{"urlPattern": "*"}]})).await?;
         // Downloads are denied; the call is deprecated in newer browsers and may be unknown.
         let _ = self.call("Page.setDownloadBehavior", json!({"behavior": "deny"})).await;
-        let nav = self.call("Page.navigate", json!({"url": url})).await?;
+        let nav = self.call("Page.navigate", json!({"url": url})).await;
+        if let Some((refusal, redirected)) = self.blocked_document.take() {
+            return Err(ReaderError::Refused { refusal, redirected });
+        }
+        let nav = nav?;
+        self.main_frame = nav.get("frameId").and_then(Value::as_str).unwrap_or_default().to_string();
         if nav.get("isDownload").and_then(Value::as_bool) == Some(true) {
             return Err(failed("the address is a download, which the reader never takes"));
         }
@@ -97,6 +115,9 @@ impl Driver {
             }
             self.wait_quiet().await?;
             snap = self.snapshot().await?;
+        }
+        if let Some((refusal, redirected)) = self.blocked_document.take() {
+            return Err(ReaderError::Refused { refusal, redirected });
         }
         if snap.url.starts_with("chrome-error:") {
             return Err(failed("the page could not be loaded"));
@@ -142,6 +163,7 @@ impl Driver {
         let text = |pointer: &str| params.and_then(|p| p.pointer(pointer)).and_then(Value::as_str).unwrap_or_default().to_string();
         match event.get("method").and_then(Value::as_str) {
             Some("Page.loadEventFired") => self.loaded = true,
+            Some("Fetch.requestPaused") => self.judge(event).await,
             // A dialog is dismissed, never accepted.
             Some("Page.javascriptDialogOpening") => {
                 let _ = self.session.send("Page.handleJavaScriptDialog", json!({"accept": false})).await;
@@ -157,6 +179,49 @@ impl Driver {
             }
             _ => {}
         }
+    }
+
+    /// A request of the page, paused: on if the egress admits its address, else failed.
+    async fn judge(&mut self, event: &Value) {
+        let params = event.get("params");
+        let text = |pointer: &str| params.and_then(|p| p.pointer(pointer)).and_then(Value::as_str).unwrap_or_default().to_string();
+        let (id, url) = (text("/requestId"), text("/request/url"));
+        match self.refusal_for(&url).await {
+            None => {
+                let _ = self.session.send("Fetch.continueRequest", json!({"requestId": id})).await;
+            }
+            Some(refusal) => {
+                // The page itself, or a redirect of it (its first request has no redirected id of its own).
+                let is_main = text("/resourceType") == "Document" && (self.main_frame.is_empty() || text("/frameId") == self.main_frame);
+                if is_main && self.blocked_document.is_none() {
+                    self.blocked_document = Some((refusal, params.is_some_and(|p| p.get("redirectedRequestId").is_some())));
+                }
+                let _ = self.session.send("Fetch.failRequest", json!({"requestId": id, "errorReason": "BlockedByClient"})).await;
+            }
+        }
+    }
+
+    /// Why this request may not go: the same rules as every web request (web.md section 1),
+    /// and only http, https and what stays in the browser (`data:`, `blob:`, `about:`).
+    async fn refusal_for(&mut self, url: &str) -> Option<Refusal> {
+        let parsed = match reqwest::Url::parse(url) {
+            Ok(parsed) => parsed,
+            Err(_) => return Some(Refusal::Scheme(url.chars().take(80).collect())),
+        };
+        if matches!(parsed.scheme(), "data" | "blob" | "about") {
+            return None;
+        }
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return Some(Refusal::Scheme(url.chars().take(80).collect()));
+        }
+        // The judgement depends on the origin only: a page asks the same address many times.
+        let origin = format!("{}://{}", parsed.scheme(), parsed.authority());
+        if let Some(known) = self.decisions.get(&origin) {
+            return known.clone();
+        }
+        let decision = self.egress.admit(url).await.err();
+        self.decisions.insert(origin, decision.clone());
+        decision
     }
 
     async fn wait_loaded(&mut self) -> Result<(), ReaderError> {
