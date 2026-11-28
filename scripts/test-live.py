@@ -591,7 +591,8 @@ async def main():
             and state["setups"][1]["setup"]["sessionResumption"].get("handle") == "H2")
 
         # ---------------------------------------------------------------- auto mode: the tool set
-        api("PUT", "/api/settings", {"voice": {"brain": "auto"}})
+        # The look test above narrowed the groups to `tasks`; the auto checks are about the default ones.
+        api("PUT", "/api/settings", {"voice": {"brain": "auto", "toolGroups": ["desktop", "tasks", "system"]}})
         session = api("POST", "/api/sessions", {"title": "auto test"})["id"]
         state["setups"].clear()
         await live_session(session, "auto", wait_script)
