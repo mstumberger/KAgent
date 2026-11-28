@@ -18,6 +18,7 @@ import Hooks from "./sections/Hooks";
 import TasksSection from "./sections/Tasks";
 import Telegram from "./sections/Telegram";
 import CalendarSection from "./sections/Calendar";
+import LocalModels from "./sections/LocalModels";
 
 export type SectionGroup = "Basics" | "Agent capabilities" | "Channels";
 
@@ -67,6 +68,15 @@ export const SECTIONS: Section[] = [
     keywords: ["provider", "API key", "chat model", "fallback", "vision", "fast", "temperature", "tokens", "Gemini", "Ollama"],
     icon: "box",
     component: ModelsSection,
+  },
+  {
+    id: "local-models",
+    title: "Local models",
+    group: "Basics",
+    description: "What this machine can run, the models KAgent recommends for each job, and a Download button. They run in Ollama.",
+    keywords: ["ollama", "gpu", "vram", "download", "gemma", "qwen", "llama", "vision", "embedding", "offline", "local"],
+    icon: "bot",
+    component: LocalModels,
   },
   {
     id: "voice",

@@ -16,7 +16,7 @@ export function captureToken(): string | null {
   if (sess) initialSession = sess[1];
   const view = window.location.hash.match(/view=([a-z]+)/);
   if (view) initialView = view[1];
-  const section = window.location.hash.match(/section=([a-z]+)/);
+  const section = window.location.hash.match(/section=([a-z-]+)/);
   if (section) initialSection = section[1];
   if (m) {
     localStorage.setItem(TOKEN_KEY, m[1]);

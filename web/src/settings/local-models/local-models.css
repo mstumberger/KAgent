@@ -1,0 +1,189 @@
+/* The Local models section: the machine card, one list per job, the downloads. Shared controls
+   keep their rules in controls.css. */
+.lm-gpu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.lm-gpu-name {
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.lm-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--rim);
+}
+
+.lm-bar-used {
+  background: color-mix(in srgb, var(--signal) 70%, transparent);
+}
+
+.lm-bar-free {
+  background: color-mix(in srgb, var(--ok) 70%, transparent);
+}
+
+.lm-nogpu {
+  color: var(--signal);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.lm-help pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rim);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+
+.lm-help p {
+  margin: 6px 0;
+}
+
+.lm-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.lm-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rim);
+  min-width: 0;
+}
+
+.lm-row:last-child {
+  border-bottom: 0;
+}
+
+.lm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.lm-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lm-name {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.lm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.lm-meta code {
+  font-family: var(--mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+.lm-note,
+.lm-fitnote {
+  margin: 0;
+}
+
+.lm-error {
+  margin: 4px 0 0;
+  color: var(--bad);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.lm-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.lm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.lm-pull {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.lm-progress {
+  width: 140px;
+  height: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--rim);
+  overflow: hidden;
+}
+
+.lm-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ice);
+}
+
+.lm-others {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lm-others li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.lm-none {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .lm-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .lm-side {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .lm-actions,
+  .lm-pull {
+    justify-content: flex-start;
+  }
+}

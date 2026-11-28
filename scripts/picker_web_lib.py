@@ -1,5 +1,5 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43) and test-vision-web.py (S46)."""
-import asyncio, base64, json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
+"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42), test-work-web.py (S43), test-vision-web.py (S46) and test-local-models-web.py (S47)."""
+import asyncio, base64, json, os, re, urllib.parse, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
 
@@ -37,6 +37,9 @@ READS = []
 # The images of the mock (S46): the bytes of each upload by session and id, and the uploads in order as (session, size).
 IMAGES = {}
 UPLOADS = []
+# The local models page (S47; set with `reset(local=<the view of GET /api/local-models>)`): the view the mock answers and changes
+# as the page downloads, cancels, removes and sets a model. Empty: the routes fall through to the daemon.
+LOCAL = {}
 
 
 # The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
@@ -61,6 +64,8 @@ def reset(**kw):
         for iid, b64 in stored.items():
             data = base64.b64decode(b64)
             IMAGES.setdefault(sid, {})[iid] = (data, *png_size(data))
+    LOCAL.clear()
+    LOCAL.update(json.loads(json.dumps(kw["local"])) if kw.get("local") else {})
     TASKS.clear()
     TASKS.update({k: [dict(t) for t in v] for k, v in kw.get("tasks", {}).items()})
     OUTPUT.clear()
@@ -82,6 +87,44 @@ def meta(sid, extra=None):
          "todo": [], "planning": False, "approvedPlan": None, "model": None, "reasoningLevel": None, "project": None, "pinned": False}
     m.update(extra or {})
     return m
+
+
+def local_models(method, path, body):
+    """The local models routes of the mock (S47): None when the path is not one, else (status, body). Every change is in CALLS."""
+    ref_of = lambda m: m.get("ref")
+    if path == "/api/local-models" and method == "GET":
+        return 200, LOCAL
+    if path == "/api/local-models/pull" and method == "POST":
+        CALLS.append(f"POST {path} {json.dumps(body)}")
+        m = next((x for x in LOCAL["recommended"] if x["id"] == body.get("id")), None)
+        if not m:
+            return 400, {"error": {"code": "invalid_input", "message": "not on the list"}}
+        LOCAL["pulls"] = [p for p in LOCAL["pulls"] if p["id"] != m["id"]] + [{"id": m["id"], "state": "pulling", "doneMb": 0, "totalMb": m["sizeMb"]}]
+        return 202, {"id": m["id"], "pulls": LOCAL["pulls"]}
+    mc = re.fullmatch(r"/api/local-models/pull/(.+)", path)
+    if mc and method == "DELETE":
+        CALLS.append(f"DELETE {path}")
+        LOCAL["pulls"] = [p for p in LOCAL["pulls"] if p["id"] != urllib.parse.unquote(mc.group(1))]
+        return 204, b""
+    mr = re.fullmatch(r"/api/local-models/(.+)", path)
+    if mr and method == "DELETE":
+        CALLS.append(f"DELETE {path}")
+        m = next((x for x in LOCAL["recommended"] if x["id"] == urllib.parse.unquote(mr.group(1))), None)
+        if m and m["usedFor"]:
+            return 409, {"error": {"code": "conflict", "message": f"{m['id']} is still set as {', '.join(m['usedFor'])} in Settings"}}
+        if m:
+            m.update(installed=False, installedId=None, ref=None)
+        return 204, b""
+    return None
+
+
+def local_settings(body):
+    """A `PUT /api/settings` that names a model (the "Use for ..." buttons) changes `usedFor` of the mock's view."""
+    for key in ("chatModel", "fastModel", "fallbackModel", "visionModel"):
+        if key in (body or {}):
+            CALLS.append(f"PUT /api/settings {json.dumps(body)}")
+            for m in LOCAL["recommended"]:
+                m["usedFor"] = [u for u in m["usedFor"] if u != key] + ([key] if m.get("ref") and m["ref"] == body[key] else [])
 
 
 def folder_refusal(path):
@@ -226,6 +269,16 @@ class Mock(BaseHTTPRequestHandler):
             return self.send(200, {"reads": READS})
         if path == "/__opened":
             return self.send(200, {"opened": OPENED})
+        if path == "/__local":
+            # The mock's view changes while the page runs (a download makes progress): merged into the view.
+            LOCAL.update(body)
+            return self.send(200, {"ok": True})
+        if LOCAL and path.startswith("/api/local-models"):
+            out = local_models(method, path, body)
+            if out:
+                return self.send(out[0], out[1], "application/json")
+        if LOCAL and path == "/api/settings" and method == "PUT":
+            local_settings(body)
         if path == "/api/state":
             status, data, _ = daemon("GET", "/api/state")
             state = json.loads(data)
@@ -437,6 +490,11 @@ def reads():
     return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__reads").read())["reads"]
 
 
+def local(**body):
+    """Change the local models view of the mock while the page runs (S47)."""
+    urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__local", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
 def calls():
     return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__calls").read())["calls"]
 
@@ -501,7 +559,7 @@ class Env:
             await self.page.send(f"{domain}.enable")
         return self
 
-    async def open(self, theme, query="", ready=None, init="", **cfg):
+    async def open(self, theme, query="", ready=None, init="", hash="", **cfg):
         """Load the window in `theme` (kagent.theme) with the mock reset to `cfg`; `init` runs before the page's own scripts.
         The stored state of the window (localStorage) is cleared on each call except the theme; `/ws` is the fake of FAKE_WS."""
         reset(**cfg)
@@ -513,7 +571,7 @@ class Env:
         source = (f"try {{ if (sessionStorage.getItem('open') !== '{self._n}') {{ sessionStorage.setItem('open', '{self._n}'); localStorage.clear(); localStorage.setItem('kagent.theme','{theme}'); }} }} catch (e) {{}} "
                   f"{FAKE_WS} {init}")
         self._init = (await page.send("Page.addScriptToEvaluateOnNewDocument", source=source))["identifier"]
-        await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{query}#token=abc123")
+        await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{query}#token=abc123{hash}")
         ready = ready or (".widget-status" if "overlay" in query or "compact" in query else "#sidebar-toggle")
         await page.until(f"!!document.querySelector('{ready}') && !document.body.innerText.includes('No token')", f"the page ({theme}, {query})")
         await asyncio.sleep(0.5)
