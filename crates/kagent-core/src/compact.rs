@@ -258,6 +258,15 @@ pub fn is_capacity_error(e: &str) -> bool {
     .any(|m| e.contains(m))
 }
 
+/// The provider cannot be reached at all (notices.md class `down`): connection refused, a DNS
+/// failure, a timeout before any byte, a 502/504 from a gateway. A break in the middle of an
+/// answer (reading the body) is not that: it stays an error of the turn.
+pub fn is_unreachable_error(e: &str) -> bool {
+    let lower = e.to_lowercase();
+    let mid_answer = ["decoding response body", "reading response body", "stream"].iter().any(|m| lower.contains(m));
+    !mid_answer && crate::agent::notice::ErrorClass::of(e) == crate::agent::notice::ErrorClass::Down
+}
+
 mod loop_side;
 
 #[cfg(test)]

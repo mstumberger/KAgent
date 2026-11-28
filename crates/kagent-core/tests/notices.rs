@@ -70,3 +70,35 @@ async fn no_recovery_without_a_previous_error() {
     assert!(turn(&mut r, "one").await.is_empty());
     assert!(turn(&mut r, "two").await.is_empty());
 }
+
+/// v0.0.3 A2: a provider that cannot be reached at all is left for the fallback, with the class `down`.
+#[tokio::test]
+async fn a_provider_that_cannot_be_reached_falls_back_with_the_class_down() {
+    for error in [
+        "error sending request for url (http://localhost:11434/): connection refused",
+        "error sending request: dns error: failed to lookup address information",
+        "request timed out",
+        "HTTP 502 Bad Gateway",
+        "HTTP 504 Gateway Timeout",
+    ] {
+        let mut r = rig_of(vec![Err(error.into()), ok()]).await;
+        let notices = turn(&mut r, "hi").await;
+        assert_eq!(notices.len(), 1, "{error}");
+        assert_eq!(notices[0].2.as_deref(), Some("provider:fake:down"), "{error}");
+        assert!(notices[0].1.contains("cannot be reached - answering with fake::backup"), "{}", notices[0].1);
+        assert_eq!(r.model.model_refs.lock().unwrap().len(), 2, "{error}: the fallback answered");
+    }
+    // 503 is still busy.
+    let mut r = rig_of(vec![Err("503 Service Unavailable".into()), ok()]).await;
+    assert_eq!(turn(&mut r, "hi").await[0].2.as_deref(), Some("provider:fake:busy"));
+}
+
+#[tokio::test]
+async fn an_error_of_the_class_other_and_a_break_in_the_answer_stay_without_fallback() {
+    for error in ["something odd happened", "error decoding response body: operation timed out"] {
+        let mut r = rig_of(vec![Err(error.into()), ok()]).await;
+        let SendOutcome::Started { handle, .. } = r.agent.send(&r.session, "hi".into(), Default::default()).await.unwrap() else { panic!("a turn starts") };
+        assert_eq!(handle.wait().await.status, TurnStatus::Failed, "{error}");
+        assert_eq!(r.model.model_refs.lock().unwrap().len(), 1, "{error}: no fallback");
+    }
+}

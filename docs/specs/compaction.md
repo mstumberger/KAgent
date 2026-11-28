@@ -28,6 +28,10 @@ with a summary that is kept with the session.
   once; only then switch to `fallbackModel`. The compaction is everything before the
   last user message; with `compaction.enabled=false`, nothing to summarize, or a failed
   summary, the fallback comes at once.
+- A provider that cannot be reached at all (connection refused, a DNS failure, a timeout
+  before any byte, HTTP 502/504; a 503 is `busy` as before): no compaction (it would not
+  help), the fallback at once, with the notice class `down` (`notices.md`). A break in the
+  middle of an answer, and class `other`, stay without fallback.
 
 ## 2. What is summarized
 
