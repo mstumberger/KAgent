@@ -13,14 +13,14 @@ use kagent_core::protocol::{Message, ToolCall, Via};
 
 use super::approve::{self, Answer};
 use super::confirm::{Repeats, Step, VoiceConfirm};
-use super::{brain, protocol};
+use super::{brain, noise, protocol};
 use crate::screen::live as look;
 use crate::AppState;
 
 /// A tool call of the live model, off the audio loop: an approval can take a minute.
 /// `own` is the call's token (registered under `id` by the audio loop): the server can cancel this one call.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::FunctionCall, id: String, own: CancellationToken, out: mpsc::UnboundedSender<Value>, tool_tx: mpsc::UnboundedSender<Value>, cancel: CancellationToken, calls: Arc<brain::Calls>, confirm: Arc<VoiceConfirm>, repeats: Arc<Repeats>) {
+pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::FunctionCall, id: String, own: CancellationToken, out: mpsc::UnboundedSender<Value>, tool_tx: mpsc::UnboundedSender<Value>, cancel: CancellationToken, calls: Arc<brain::Calls>, confirm: Arc<VoiceConfirm>, repeats: Arc<Repeats>, heard: String) {
     tokio::spawn(async move {
         let _ = out.send(json!({"type": "tool", "callId": id, "name": c.name, "state": "started"}));
         // Enforced, not only hidden: a tool not declared to this live model does not run.
@@ -46,6 +46,7 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
                 let _ = out.send(json!({"type": "tool", "callId": call.id, "name": c.name, "state": state}));
                 let _ = tool_tx.send(protocol::tool_response(&[(&c.id, &c.name, response)]));
             };
+            let noise_question = if is_screen { None } else { noise::question(&heard, &assessment) };
             if is_screen {
                 // Refused before it is asked: a locked screen, and an approval card of this session that waits.
                 if let Some(why) = look::refusal(look::is_locked().await, look::open_cards(st.agent.broker().pending().iter().map(|a| a.session_id.as_str()), &session)) {
@@ -58,9 +59,11 @@ pub(super) fn spawn_tool(st: Arc<AppState>, session: String, c: protocol::Functi
                     Step::Ask(response) => return refuse("awaiting voice confirmation", response),
                     Step::Refused(response) => return refuse("denied", response),
                 }
-            } else if ask {
-                match confirm.step(&c.name, &c.args, &assessment, Instant::now()) {
-                    Step::Run => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
+            } else if ask || noise_question.is_some() {
+                // A call that follows only a noise fragment is asked out loud in every mode (agent-loop.md A.2).
+                match confirm.step_saying(&c.name, &c.args, &assessment, Instant::now(), noise_question.as_deref()) {
+                    Step::Run if ask => answer_card_by_voice(st.clone(), session.clone(), call.id.clone(), out.clone()),
+                    Step::Run => {}
                     Step::Ask(response) => return refuse("awaiting voice confirmation", response),
                     Step::Refused(response) => return refuse("denied", response),
                 }

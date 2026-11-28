@@ -282,3 +282,25 @@ seconds into the owner's only terminal (a running Claude Code session). `full` l
   negation ("don't stop watching"). The phrases: "stop watching", "stop the (screen) watch", "cancel the watch", "nehaj gledati",
   "nehaj opazovati", "ustavi opazovanje", "prenehaj opazovati". It does nothing while no watch runs.
 - `screen_watch start` is an `always_ask` call, so from voice it is asked out loud in every mode (section 12).
+
+## 13. A call after a noise fragment (agent-loop.md A.2, 2026-11-28)
+
+Why: the live transcript turns background noise into short sentences in other languages
+("Sie sollen das Fruehstueck selbst bezahlen.", "Oh, que. Oh, que. Oh, que.", "Ya es
+tarde.", a Devanagari fragment) and the model acted on them although the instruction
+says to ignore them.
+
+- `live/noise.rs`: `not_sl_en(text)` is true only when the text is surely neither
+  Slovenian nor English (more than half of the letters outside Latin script; or foreign
+  words, at least half of the words and more than the Slovenian and English common ones).
+  When unsure it is false: normal speech is never held.
+- A call that is not read-only and follows only such a transcript (the owner's words of
+  the turn in progress) does not run: the model gets `needs_confirmation` with the `say`
+  "I heard something that may not be you: "<text>". Do you want me to do this:
+  <summary>? Say yes to go ahead, or no." in every permission mode. The owner's next
+  words answer it as in section 12 (a destructive or root call still needs "confirm").
+  A read-only call, a turn with no transcript and the `screen` look are not held.
+- The `LISTENING` sentence says "an action that follows only such a fragment is asked
+  out loud first" instead of "never type, send or act on it".
+- Tests: `noise.rs` (the table, the held call, yes and no), `scripts/test-live.py` (a
+  noise fragment, then a call: asked, no card).
