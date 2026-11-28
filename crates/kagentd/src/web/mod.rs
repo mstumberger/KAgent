@@ -11,6 +11,8 @@ pub(crate) mod http;
 pub(crate) mod search;
 mod chain;
 mod page_reader;
+mod transport;
+pub use transport::{charset_of, Answer, Request, Transport};
 pub(crate) mod reader;
 pub(crate) mod settings;
 
@@ -18,9 +20,8 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
-use futures::StreamExt;
 use kagent_core::tool::Tool;
-use reqwest::{Method, Url};
+use reqwest::Url;
 
 use crate::settings::Settings;
 use fetch::{Cache, WebFetch};
@@ -96,146 +97,6 @@ pub(crate) fn reason(code: u16) -> &'static str {
     }
 }
 
-/// A request of one of the web tools.
-pub struct Request<'a> {
-    pub method: Method,
-    pub url: &'a str,
-    /// Added to the URL, encoded.
-    pub query: Vec<(&'static str, &'a str)>,
-    /// Sent as `application/x-www-form-urlencoded`.
-    pub form: Vec<(&'static str, &'a str)>,
-    /// Headers beyond the one every request carries (Brave's key is one).
-    pub headers: Vec<(&'static str, String)>,
-}
-
-impl<'a> Request<'a> {
-    pub fn get(url: &'a str) -> Self {
-        Self::new(Method::GET, url)
-    }
-
-    pub fn post_form(url: &'a str, form: Vec<(&'static str, &'a str)>) -> Self {
-        Self { form, ..Self::new(Method::POST, url) }
-    }
-
-    fn new(method: Method, url: &'a str) -> Self {
-        Self { method, url, query: Vec::new(), form: Vec::new(), headers: Vec::new() }
-    }
-}
-
-/// How the tools talk to the web. Every request goes through the egress first; it
-/// carries no cookie and no credential beyond the headers named, follows no redirect
-/// by itself (the tools follow by hand, hop by hop), and ends within `timeout`.
-#[derive(Clone)]
-pub struct Transport {
-    pub egress: Arc<dyn Egress>,
-    pub user_agent: String,
-    pub accept: String,
-    pub timeout: Duration,
-}
-
-impl Transport {
-    /// One request. The addresses the egress resolved are pinned into the client of
-    /// this request (`Guard`): the name is not looked up a second time.
-    pub async fn send(&self, req: Request<'_>) -> Result<Answer, Fail> {
-        let addresses = self.egress.admit(req.url).await.map_err(|refusal| Fail::Refused { refusal, redirected: false })?;
-        let url = Url::parse(req.url).map_err(|_| Fail::Refused { refusal: Refusal::Scheme(req.url.chars().take(80).collect()), redirected: false })?;
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(reqwest::header::ACCEPT, reqwest::header::HeaderValue::from_str(&self.accept).map_err(|_| Fail::Network("the Accept header could not be made".into()))?);
-        let mut builder = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(self.timeout)
-            .user_agent(self.user_agent.as_str())
-            .default_headers(headers);
-        let host = url.host_str().unwrap_or_default().to_string();
-        if !addresses.is_empty() {
-            builder = builder.resolve_to_addrs(&host, &addresses);
-        }
-        let client = builder.build().map_err(|e| Fail::Network(format!("the HTTP client could not be made ({e})")))?;
-        let mut request = client.request(req.method, url);
-        if !req.query.is_empty() {
-            request = request.query(&req.query);
-        }
-        if !req.form.is_empty() {
-            request = request.form(&req.form);
-        }
-        for (name, value) in &req.headers {
-            request = request.header(*name, value.as_str());
-        }
-        let response = request.send().await.map_err(|e| network(e, Some(&host)))?;
-        Ok(Answer { status: response.status().as_u16(), headers: response.headers().clone(), response })
-    }
-}
-
-/// A failure of the connection in a few words (the library's message repeats the URL).
-fn network(error: reqwest::Error, host: Option<&str>) -> Fail {
-    let who = host.unwrap_or("the host");
-    if error.is_timeout() {
-        Fail::Network(format!("{who} did not answer in time"))
-    } else if error.is_connect() {
-        Fail::Network(format!("could not connect to {who}"))
-    } else {
-        Fail::Network(format!("{who}: {}", error.without_url()))
-    }
-}
-
-/// What a request came back with. The body is read on demand, so a type the tools do
-/// not want costs nothing.
-pub struct Answer {
-    pub status: u16,
-    headers: reqwest::header::HeaderMap,
-    response: reqwest::Response,
-}
-
-impl Answer {
-    /// The type of the `Content-Type`, lowercased and without its parameters (`text/html`); empty when there is none.
-    pub fn media_type(&self) -> String {
-        media_type(self.content_type().unwrap_or_default())
-    }
-
-    pub fn content_type(&self) -> Option<&str> {
-        self.header("content-type")
-    }
-
-    pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(name).and_then(|value| value.to_str().ok())
-    }
-
-    /// The length the server announced, when it did.
-    pub fn announced_len(&self) -> Option<u64> {
-        self.response.content_length()
-    }
-
-    /// The whole body, at most `cap` bytes: more is an error, and the stream is dropped there.
-    pub async fn body(self, cap: usize) -> Result<Vec<u8>, Fail> {
-        if self.response.content_length().is_some_and(|len| len > cap as u64) {
-            return Err(Fail::TooLarge(cap));
-        }
-        let mut body = Vec::new();
-        let mut stream = self.response.bytes_stream();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| network(e, None))?;
-            if body.len() + chunk.len() > cap {
-                return Err(Fail::TooLarge(cap));
-            }
-            body.extend_from_slice(&chunk);
-        }
-        Ok(body)
-    }
-}
-
-/// The type of a `Content-Type`, lowercased and without its parameters (`text/html`).
-pub fn media_type(content_type: &str) -> String {
-    content_type.split(';').next().unwrap_or_default().trim().to_ascii_lowercase()
-}
-
-/// The charset a `Content-Type` names.
-pub fn charset_of(content_type: &str) -> Option<String> {
-    let at = content_type.to_ascii_lowercase().find("charset=")? + "charset=".len();
-    let rest = content_type.get(at..)?;
-    let end = rest.find([';', ' ', '\t']).unwrap_or(rest.len());
-    Some(rest[..end].trim_matches(|c| c == '"' || c == '\'').to_string())
-}
-
 /// A number the model sent, kept inside `low..=high`; none gives the default.
 pub fn clamp(value: Option<u64>, low: u64, high: u64, default: u64) -> u64 {
     value.map(|v| v.clamp(low, high)).unwrap_or(default)
@@ -283,16 +144,18 @@ pub struct Web {
     reader: Option<Arc<dyn page_reader::PageReader>>,
     /// The reader itself, for the routes of Settings -> Web (web.md section 9).
     pub(crate) reader_admin: Option<Arc<reader::Reader>>,
+    /// Where notices go (a human check, web.md section 9).
+    events: Option<tokio::sync::broadcast::Sender<kagent_core::protocol::AgentEvent>>,
 }
 
 impl Web {
     /// The tools as the daemon runs them: the system resolver for the guard, the real
     /// engines, the key store of this home, and the reader on `<data>/reader-profile`
     /// (it goes through the same guard).
-    pub fn new(settings: SettingsCell, config_dir: &Path, data_dir: &Path) -> Self {
+    pub fn new(settings: SettingsCell, config_dir: &Path, data_dir: &Path, events: tokio::sync::broadcast::Sender<kagent_core::protocol::AgentEvent>) -> Self {
         let egress: Arc<dyn Egress> = Arc::new(Guard::new(Arc::new(SystemResolver)));
         let reader = reader::Reader::for_daemon(data_dir, egress.clone());
-        Self::with(settings, Arc::new(BraveKeyStore::for_config(config_dir)), egress, Engines::default()).with_reader(reader)
+        Self::with(settings, Arc::new(BraveKeyStore::for_config(config_dir)), egress, Engines::default()).with_reader(reader).with_events(events)
     }
 
     /// The tools over other parts: the key store, the egress and the engines of a test.
@@ -306,6 +169,7 @@ impl Web {
             chain: chain::Chain::default(),
             reader: None,
             reader_admin: None,
+            events: None,
         }
     }
 
@@ -320,6 +184,20 @@ impl Web {
     pub fn with_page_reader(mut self, reader: Arc<dyn page_reader::PageReader>) -> Self {
         self.reader = Some(reader);
         self
+    }
+
+    pub fn with_events(mut self, events: tokio::sync::broadcast::Sender<kagent_core::protocol::AgentEvent>) -> Self {
+        self.events = Some(events);
+        self
+    }
+
+    /// A page asks for a human check and did not clear: the owner is told, with a button
+    /// that opens the reader's window on the page (web.md section 9).
+    pub(crate) fn note_challenge(&self, url: &str) {
+        let Some(events) = &self.events else { return };
+        let host = Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_else(|| "A site".into());
+        let text = format!("{host} asks for a human check. Open it, pass the check once and close the window: the next read of the site rides that session.");
+        let _ = events.send(kagent_core::protocol::AgentEvent::keyed_notice("warn", text, format!("reader:check:{host}")).with_action("Open it", "/api/web/reader/open", serde_json::json!({ "url": url })));
     }
 
     pub(crate) fn page_reader(&self) -> Option<Arc<dyn page_reader::PageReader>> {
@@ -384,6 +262,7 @@ impl Web {
 
 #[cfg(test)]
 mod tests {
+    use super::transport::media_type;
     use super::*;
 
     #[test]

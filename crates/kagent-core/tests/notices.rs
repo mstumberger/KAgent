@@ -17,7 +17,7 @@ async fn turn(r: &mut Rig, text: &str) -> Vec<Notice> {
     assert_eq!(handle.wait().await.status, TurnStatus::Completed);
     let mut out = Vec::new();
     while let Ok(ev) = r.events.try_recv() {
-        if let AgentEvent::Notice { level, text, key, session_id, kind } = ev {
+        if let AgentEvent::Notice { level, text, key, session_id, kind, .. } = ev {
             out.push((level, text, key, session_id, kind));
         }
     }

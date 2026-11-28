@@ -252,7 +252,7 @@ async fn run() -> anyhow::Result<()> {
     let settings_cell = Arc::new(std::sync::OnceLock::new());
     registry.register(Arc::new(screen::Screen::new(providers.clone(), settings_cell.clone(), &paths.data)));
     // The web tools (web.md): they read settings.search from the same cell.
-    let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config, &paths.data));
+    let web = Arc::new(web::Web::new(settings_cell.clone(), &paths.config, &paths.data, events.clone()));
     registry.register(web.fetch_tool());
     registry.register(web.search_tool());
     // Google Calendar (calendar.md): the tools are registered now and find the module once it exists.

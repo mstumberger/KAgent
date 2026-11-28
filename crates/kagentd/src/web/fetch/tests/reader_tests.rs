@@ -101,3 +101,24 @@ async fn without_a_reader_the_plain_answer_stands_and_the_note_comes_once() {
     let out = call(&tool, json!({"url": fake.url("/shell"), "render": true})).await;
     assert!(out.content.contains("the reader is off (Settings -> Web)"), "{}", out.content);
 }
+
+/// A human check that does not clear is a notice with a button that opens the reader's window (web.md section 9).
+#[tokio::test]
+async fn a_human_check_is_a_notice_with_an_open_it_button() {
+    use kagent_core::protocol::AgentEvent;
+    let fake = site().await;
+    let (events, mut seen) = tokio::sync::broadcast::channel(8);
+    let reader = FakePageReader::failing(ReaderError::Challenge("https://x.example/cdn-cgi/challenge".into()));
+    let web = Arc::new(Arc::try_unwrap(with_reader(&fake, json!({}), Some(reader))).ok().unwrap().with_events(events));
+    let url = fake.url("/challenge");
+    let out = call(&web.fetch_tool(), json!({"url": url})).await;
+    assert!(out.content.starts_with("not done: this site asks for a human check"), "{}", out.content);
+    let AgentEvent::Notice { level, text, key, kind, action, .. } = seen.try_recv().unwrap() else { panic!("a notice") };
+    assert_eq!((level.as_str(), key.as_deref(), kind.as_deref()), ("warn", Some("reader:check:127.0.0.1"), Some("error")), "it stays until closed");
+    assert!(text.starts_with("127.0.0.1 asks for a human check."), "{text}");
+    let action = action.unwrap();
+    assert_eq!((action.label.as_str(), action.path.as_str(), action.body.clone()), ("Open it", "/api/web/reader/open", json!({"url": url})));
+    let wire = serde_json::to_value(AgentEvent::keyed_notice("warn", "t", "k").with_action("Open it", "/api/web/reader/open", json!({"url": "https://a.example/"}))).unwrap();
+    assert_eq!(wire["action"], json!({"label": "Open it", "path": "/api/web/reader/open", "body": {"url": "https://a.example/"}}));
+    assert!(serde_json::to_value(AgentEvent::notice("info", "t")).unwrap().get("action").is_none(), "a notice without a button has none");
+}
