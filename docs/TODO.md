@@ -140,3 +140,5 @@ first three are done first.
   routed by the API its list names (replacing the six split entries); the cost each
   answer reports counted on the Usage card. Its free models answer only inside
   OpenCode's own client and are shown as such, not worked around.
+  OpenRouter (already in the catalog) gets the same treatment: models, prices and
+  free models from its own list, and its key's credit and limit on the Usage card.
