@@ -111,3 +111,10 @@ first three are done first.
   git, GitHub, Jira and Confluence, calendars and Slack chats (read from Slack's
   local store, summarised by a local model only). A "Time" view with the day
   editor and the month report. Raw activity stays on the machine.
+- [ ] Market watch (optional): a watchlist of stocks and coins with prices and news
+  from feeds; each news item is clustered, matched to the watchlist, classified and
+  given an urgency by editable rules (tell the owner now, soon, or in a digest), with
+  its sources kept as evidence; the owner's own rules ("tell me when X is 20 % under
+  its 90-day high") fire as alerts with measured history of that asset. Alerts on
+  Telegram, the desktop and by voice; a Markets view; a block in the morning report.
+  No orders are placed, no trading keys are held, and nothing is predicted.
