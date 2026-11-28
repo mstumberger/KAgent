@@ -11,6 +11,7 @@ mod drive;
 pub mod http;
 mod manage;
 pub mod sites;
+pub mod sweep;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
