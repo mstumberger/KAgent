@@ -714,3 +714,30 @@ Spec: `vision.md`. Items 1 to 8 are `[auto]` (scripted models, fakes on loopback
    screen answers "the screen is locked" with no frame.
 9. The owner: paste a screenshot of an error into a chat and ask what it says; by voice, "look at my
    screen, what is this dialog?"; say yes once and look again without being asked.
+
+## S47 Recommended local models
+1. **[auto]** The probe (`kagent-core platform::gpu`): `nvidia-smi` output of one card (recorded on the owner's RTX 3060), two
+   cards (the larger wins), a card that says `N/A`, a name with a comma, garbage; the amdgpu sysfs files (bytes, the largest AMD
+   card, other vendors skipped, connector entries skipped); `MemTotal`; no card is `None`.
+2. **[auto]** The list and the rules (`local_models/fit.rs`): `config/local-models.json` parses with `deny_unknown_fields`, ids are
+   unique, only speech models are not downloadable; the fit at its edges (85 %, 100 %, no card: half of RAM); the table for 12 GB,
+   8 GB, 4 GB and no card; the owner's language wins among the models that fit; a chat model without tools is never the
+   recommended Brain.
+3. **[auto]** The machine answer against a fake Ollama (`local_models/tests.rs`): reachable with its version, the card, RAM, the
+   installed models with their jobs, `:latest` read as the listed id, the fit and the "in use by other programs" line, no card,
+   Ollama not reachable as a state, the base address from the Ollama provider, the tool's text (and that it pulls nothing).
+4. **[auto]** Downloads (`local_models/tests_pull.rs`, the fake streams Ollama's lines): an id outside the list and a speech model are
+   400 and Ollama is not asked; a pull adds the Ollama provider from its template, the row is on with the roles of its jobs
+   (`chat` with `supportsImage` for vision, none for an embedding) and nothing is made the Brain, fallback or vision model; the
+   role check accepts it as the vision model; progress is the sum of the layers and events come at most twice a second; the
+   disk check (one MB short is 409 with both numbers, exactly enough passes, unknown passes); one pull at a time with the
+   others queued, in order; cancel of a running pull closes the stream, of a queued one leaves the queue; a failed stream and a
+   stream that ends early keep their error on the row, Retry replaces it, Dismiss removes it; Ollama down is 409 with what to
+   do and adds no provider; a model Ollama already has only gets its row; remove is 409 while a setting names the model and
+   deletes it from Ollama and the providers otherwise.
+5. **[auto]** `scripts/test-local-models-web.py` (58 checks): each fit chip, Recommended first, a running download with
+   progress from the event, Cancel, a waiting and a failed row with Retry, "Use for vision" and "Use as fallback" (the saved
+   keys), Remove with its confirmation, the 4 GB, no-card and no-Ollama states; dark and light at 1200x820 and 700x500;
+   screenshots in `/tmp/kagent-s47-shots/`.
+6. The owner: open Settings -> Local models; with a card that has room, press Download on Gemma 3 4B and watch the bar; when it
+   is done press "Use for vision"; ask for a look at a screenshot in a chat.

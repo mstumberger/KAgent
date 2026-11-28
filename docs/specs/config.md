@@ -392,3 +392,21 @@ so a meta file from before loads.
 - S42: a subagent has the `project` of its parent and is never pinned. The browser
   remembers the sidebar, not the daemon: localStorage `kagent.sidebar` =
   `{"view": "projects" | "recent", "collapsed": boolean, "closed": ["<path>", ...]}`.
+
+## 13. config/local-models.json (S47, shipped, read-only)
+
+The list of recommended local models (`local-models.md` section 2), compiled into the daemon with
+`include_str!` and parsed with `deny_unknown_fields`, so a typo fails the first start and the unit test.
+
+```json
+{"schemaVersion": 1, "models": [
+  {"id": "gemma3:4b", "name": "Gemma 3 4B", "jobs": ["vision", "chat"], "sizeMb": 3300, "vramMb": 4500,
+   "context": 8192, "tools": false, "languages": ["en", "sl"], "note": "...", "engine": "ollama"}]}
+```
+
+`id` is unique and, for `engine: "ollama"`, the name Ollama pulls. `jobs` is a non-empty list of `chat`,
+`vision`, `embedding`, `stt`. `vramMb` is what the model needs loaded with `context`. `tools` is whether it
+calls tools reliably. `engine` is `ollama` (downloadable) or `whisper` (listed only, no Download). The sizes
+and memory numbers are hand-kept estimates, checked against Ollama's library when the list is updated with a
+release. No new key in `settings.json`: the page saves `chatModel`, `fallbackModel` and `visionModel`, which
+exist.
