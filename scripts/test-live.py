@@ -290,6 +290,18 @@ async def confirm_by_voice(ws, conn, got):
     await asyncio.sleep(0.3)
 
 
+async def noise(ws, conn, got):
+    """live mode (voice.md section 13): a changing call after only a noise fragment is asked out loud; after speech it runs."""
+    await hear(ws, "Ya es tarde.")
+    await call(ws, "n1", "tasks", {"action": "delete", "id": "none"})
+    await until_message(ws, got, response("n1"), "the question of n1")
+    state["cards_after_n1"] = len(api("GET", "/api/state")["pendingApprovals"])
+    await done(ws)  # the turn is over: the next words are a new turn
+    await hear(ws, "Delete that task please.")
+    await call(ws, "n2", "tasks", {"action": "delete", "id": "none"})
+    await until_message(ws, got, response("n2"), "the answer of n2")
+
+
 async def look(ws, conn, got):
     """live mode (vision.md section 3): the first look is asked out loud, the yes covers the later ones."""
     # 1. The model calls `screen`: nothing is captured, the owner is asked.
@@ -328,7 +340,7 @@ async def voiceroll(ws, conn, got):
             got.append(received(json.loads(raw)))
 
 
-SCRIPTS = {"look": look, "voiceroll": voiceroll, "legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "auto": quiet, "nochat": quiet}
+SCRIPTS = {"look": look, "voiceroll": voiceroll, "legacy": legacy, "routed": routed, "confirm": confirm_by_voice, "noise": noise, "auto": quiet, "nochat": quiet}
 
 
 async def fake_gemini(ws):
@@ -547,6 +559,16 @@ async def main():
             state["tool_responses"].get("c5", {}).get("status") == "ok"
             and any(role == "tool" and "denied" not in c for role, c, _, _ in stored)
             and not api("GET", "/api/state")["pendingApprovals"])
+
+        # ---------------------------------------------------------------- a call after a noise fragment (voice.md section 13)
+        session = api("POST", "/api/sessions", {"title": "noise test"})["id"]
+        state["setups"].clear(); state["recv"].clear(); state["tool_responses"].clear()
+        await live_session(session, "noise", wait_script)
+        held, spoken = state["tool_responses"].get("n1", {}), state["tool_responses"].get("n2", {})
+        checks["noise: a changing call after a fragment in another language is asked out loud, with no card"] = (
+            held.get("status") == "needs_confirmation" and held.get("say", "").startswith('I heard something that may not be you: "Ya es tarde."')
+            and state.get("cards_after_n1") == 0)
+        checks["noise: the same call after Slovenian or English speech is not held"] = spoken.get("status") not in (None, "needs_confirmation")
 
         # ---------------------------------------------------------------- look at my screen (vision.md section 3)
         api("PUT", "/api/settings", {"voice": {"brain": "live", "toolGroups": ["tasks"]}})  # no desktop group: screen is declared all the same

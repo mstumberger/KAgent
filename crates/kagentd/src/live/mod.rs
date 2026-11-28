@@ -10,6 +10,7 @@
 pub mod approve;
 pub mod brain;
 mod confirm;
+mod noise;
 pub mod context;
 pub(crate) mod instruction;
 pub mod protocol;
@@ -147,6 +148,8 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     // Calls the engine would ask about are asked out loud first (voice.md section 12).
     let voice_confirm = Arc::new(confirm::VoiceConfirm::default());
     let repeats = Arc::new(confirm::Repeats::default());
+    // What the owner said this turn: a changing call that follows only a noise fragment is asked first (noise.rs).
+    let heard = Arc::new(noise::Heard::default());
     let mut voice = st.settings.read().unwrap().live_voice.clone();
     let mut handle: Option<String> = None;
     let (mut user_buf, mut asst_buf) = (String::new(), String::new());
@@ -160,6 +163,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
     // A turn the brain turn wrote to the session (`routed`, or `auto` with `think`) is not stored twice.
     macro_rules! close_turn {
         () => {
+            heard.clear();
             if routed || calls.take_think_used() {
                 user_buf.clear();
                 asst_buf.clear();
@@ -244,6 +248,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             Some("text") => {
                                 let text = v.get("text").and_then(Value::as_str).unwrap_or("");
                                 user_buf.push_str(text);
+                                heard.push(text);
                                 if !send_up(&mut up_tx, UpMsg::Text(protocol::text_input(text).to_string().into())).await {
                                     continue 'conn;
                                 }
@@ -333,6 +338,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                             }
                             ServerEvent::UserTranscript(t) => {
                                 user_buf.push_str(&t);
+                                heard.push(&t);
                                 st.calendar.hear(&t);
                                 // "Stop watching" ends the screen watch without a model call (voice-control.md section 4).
                                 if st.screen_watch.hear(&t) {
@@ -374,7 +380,7 @@ async fn run(st: Arc<AppState>, socket: WebSocket, session: Option<String>) -> a
                                     } else {
                                         let own = cancel.child_token();
                                         calls.start_tool(id.clone(), own.clone());
-                                        tool_call::spawn_tool(st.clone(), session.clone(), c, id, own, out.clone(), tool_tx.clone(), cancel.clone(), calls.clone(), voice_confirm.clone(), repeats.clone());
+                                        tool_call::spawn_tool(st.clone(), session.clone(), c, id, own, out.clone(), tool_tx.clone(), cancel.clone(), calls.clone(), voice_confirm.clone(), repeats.clone(), heard.text());
                                     }
                                 }
                             }

@@ -112,7 +112,7 @@ impl VoiceConfirm {
         step
     }
 
-    fn step_saying(&self, tool: &str, args: &Value, a: &CallAssessment, now: Instant, say: Option<&str>) -> Step {
+    pub fn step_saying(&self, tool: &str, args: &Value, a: &CallAssessment, now: Instant, say: Option<&str>) -> Step {
         let key = key(tool, args);
         let mut pending = self.pending.lock().unwrap();
         if let Some(p) = pending.as_ref().filter(|p| p.key == key && now.duration_since(p.asked_at) <= VALID_FOR) {
