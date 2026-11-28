@@ -59,11 +59,27 @@ The owner writes tickets, and a planner creates them as children of the ticket i
 was started for.
 _Avoid_: issue, task (a task is a scheduled reminder or automation), todo
 
+**Plan**:
+The list of tasks a planner returns for a run, each with what "done" means and what it depends on. The owner approves it before any implementer starts.
+
+**Task (of a run)**:
+One unit of work in a run's plan. It is also a ticket, a child of the run's ticket. The word alone still means a scheduled task.
+_Avoid_: step (a step is a part of a workflow's definition)
+
+**Step**:
+One part of a workflow's definition: a role with its worker, model and rules.
+
+**Gate**:
+A point of a workflow where the owner must approve before it goes on (the plan).
+
+**Mailbox**:
+The messages the orchestrator sends to a worker of a run, each with a receipt: queued, delivered or expired.
+
 **Round**:
 One pass of implementing a task and reviewing it.
 
 **Board**:
-The view that shows a project's tickets, the runs working on them and their workers.
+The view that shows a project's runs, their tasks and their workers. The sidebar entry is called Runs.
 
 ## Voice
 
