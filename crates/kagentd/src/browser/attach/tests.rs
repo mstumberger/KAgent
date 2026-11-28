@@ -273,7 +273,7 @@ async fn the_tool_on_the_owners_browser() {
     assert_eq!(fake.methods.lock().unwrap().iter().filter(|m| *m == "Target.closeTarget").count(), 1);
     // launch does not exist here; the other refusals are as in the own window.
     let launch = run(&b, json!({"action": "launch"})).await;
-    assert_eq!(launch.content, format!("{LINE}\nlaunch is not available: this is the owner's running browser"));
+    assert_eq!(launch.content, format!("{LINE}\nlaunch is not available: this is the owner's running browser. Use open with a url to open a tab in it"));
     assert!(run(&b, json!({"action": "open"})).await.is_error, "an open without an address");
     let missing = run(&b, json!({"action": "read", "tab": "nowhere"})).await;
     assert!(missing.is_error && missing.content.contains("no tab matches 'nowhere'"), "{}", missing.content);

@@ -107,6 +107,7 @@ impl Tool for WhatChanged {
         for (ts, text) in events.iter().rev().take(150).collect::<Vec<_>>().into_iter().rev() {
             out.push_str(&format!("{}  {text}\n", ts.format("%m-%d %H:%M")));
         }
+        out.push_str(&crate::util::more_note(events.len(), 150, "the oldest events are left out; ask for fewer hours"));
         let failed = exec(&ctx, &["systemctl", "--failed", "--no-legend", "--plain", "--no-pager"]).run().await.map(|r| r.stdout).unwrap_or_default();
         if !failed.trim().is_empty() {
             out.push_str("\n## currently failed services\n");

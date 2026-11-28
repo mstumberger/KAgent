@@ -119,6 +119,7 @@ impl Tool for SecurityReport {
             let est = run(&ctx, &["ss", "-tpnH", "state", "established"]).await;
             out.push_str(&est.lines().take(40).collect::<Vec<_>>().join("\n"));
             out.push('\n');
+            out.push_str(&crate::util::more_note(est.lines().count(), 40, "network_info listening or `shell` with ss shows all"));
         }
         Ok(ToolOutput::ok(out))
     }

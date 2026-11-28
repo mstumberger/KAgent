@@ -1,6 +1,9 @@
 //! The tools over the subagents and the wait of `agent_run`: `agent_wait` and `agent_list` speak of the children of their session; `agent_stop` cancels a running child and a queued one; `background: false` waits for the answer, then lets the child go on. Part of `tests/subagents`.
 
 use super::rig::*;
+
+/// agent-loop.md B.2 question 2: a stop is a request, not "stopped".
+const STOPPED: &str = "stop requested: a waiting subagent never starts, a running one ends at its next step; agent_list shows its state";
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -55,7 +58,7 @@ async fn agent_stop_cancels_a_running_child_and_a_queued_one() {
     assert_eq!(statuses(&r, &waiting), [ChildStatus::Queued]);
 
     // A queued child: cancelled, and never started. The others are not touched.
-    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": waiting})).await, ("stopped".to_string(), ToolCallStatus::Ok));
+    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": waiting})).await, (STOPPED.to_string(), ToolCallStatus::Ok));
     // The log of the rig is filled by a task of its own: wait for the event, then read.
     wait_status(&r, &waiting, ChildStatus::Cancelled).await;
     assert_eq!(statuses(&r, &waiting), [ChildStatus::Queued, ChildStatus::Cancelled]);
@@ -64,11 +67,11 @@ async fn agent_stop_cancels_a_running_child_and_a_queued_one() {
     assert_eq!(statuses(&r, &last), [ChildStatus::Queued]);
 
     // A running child: its turn is cancelled; the slot it frees goes to the next in turn.
-    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": first})).await, ("stopped".to_string(), ToolCallStatus::Ok));
+    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": first})).await, (STOPPED.to_string(), ToolCallStatus::Ok));
     wait_status(&r, &first, ChildStatus::Cancelled).await;
     wait_status(&r, &last, ChildStatus::Running).await;
     assert_eq!(statuses(&r, &waiting), [ChildStatus::Queued, ChildStatus::Cancelled], "the cancelled one stays where it is");
-    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": last})).await, ("stopped".to_string(), ToolCallStatus::Ok));
+    assert_eq!(run_tool(&r, &r.session, "agent_stop", json!({"id": last})).await, (STOPPED.to_string(), ToolCallStatus::Ok));
     wait_status(&r, &last, ChildStatus::Cancelled).await;
     until(10, "the cancelled turns ended", || finished(&r, &first) == 1 && finished(&r, &last) == 1).await;
 

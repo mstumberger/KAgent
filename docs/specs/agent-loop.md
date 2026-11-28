@@ -178,7 +178,116 @@ nothing was changed"); a bare "ok" or "done" for something that was only queued.
 
 ### B.3 The review
 
-See section B.4 (filled in by the review pass).
+All 90 tools of the registry (`GET /api/tools` on a running daemon: 49 of `kagent-core`, the rest
+of the daemon) were read against the four questions, by the places where each result is
+made (`ToolOutput::ok`, `error`, `json` and the helpers that build them). `ok` means the
+question passes and the result text is not changed. The three voice-path results of
+`live/tool_call.rs` (`needs_confirmation`, `denied`, `duplicate`) are not tools: they have
+their own wording since section 12 of `voice.md`; the voice copy of a result is cut at
+6000 characters with the same note as a tool.
+
+Fixed, 13 tools (the other 77 pass): ui, message, search_files, package, windows, kernel_info,
+security_report, what_changed, sessions, clipboard, agent_stop, browser, read_file; and one path
+that is not a tool, the voice copy of a result. Each fixed path has a test on its result text
+(`ui.rs`, `message.rs`, `files.rs`, `change.rs`, `sessions.rs`, `util.rs`,
+`tests/subagents/tools.rs`, `browser/attach/tests.rs`).
+
+Two helpers keep the wording of a cut result the same: `util::more_note(total, shown, how)`
+("... 5 more not shown (<how>)") for a list, and `util::cut_with_note(text, max, how)`
+("[cut: N of M characters not shown (<how>)]") for a text.
+
+| Tool | 1 error as empty | 2 done before the effect | 3 refusal says what next | 4 cut says how to get the rest | Change |
+|---|---|---|---|---|---|
+| `agent_list` | ok | ok | ok | ok | - |
+| `agent_run` | ok | ok | ok | ok | - |
+| `agent_stop` | ok | fixed | ok | ok | "stopped" became "stop requested: ... ends at its next step" (the cancel is only a request) |
+| `agent_wait` | ok | ok | ok | ok | - |
+| `audio` | ok | ok | ok | ok | - |
+| `audio_control` | ok | ok | ok | ok | - |
+| `bluetooth` | ok | ok | ok | ok | - |
+| `bluetooth_control` | ok | ok | ok | ok | - |
+| `boot_analysis` | ok | ok | ok | ok | - |
+| `browser` | ok | ok | fixed | ok | `launch` refusal names `open` with a url |
+| `calendar_change` | ok | ok | ok | ok | - |
+| `calendar_events` | ok | ok | ok | ok | - |
+| `calendar_report` | ok | ok | ok | ok | - |
+| `clipboard` | ok | ok | ok | fixed | `get` over 8000 characters says what was cut |
+| `crashes` | ok | ok | ok | ok | - |
+| `disk_health` | ok | ok | ok | ok | - |
+| `disk_info` | ok | ok | ok | ok | - |
+| `display` | ok | ok | ok | ok | - |
+| `doctor` | ok | ok | ok | ok | - |
+| `drivers` | ok | ok | ok | ok | - |
+| `edit_file` | ok | ok | ok | ok | - |
+| `focus_context` | ok | ok | ok | ok | - |
+| `hardware` | ok | ok | ok | ok | - |
+| `input` | ok | ok | ok | ok | "<action> done": the keys were delivered to the window the card named |
+| `journal` | ok | ok | ok | ok | - |
+| `kernel_info` | ok | ok | ok | fixed | modules over 500 say so and name `filter` |
+| `kernel_module` | ok | ok | ok | ok | - |
+| `lan_devices` | ok | ok | ok | ok | - |
+| `list_alerts` | ok | ok | ok | ok | - |
+| `list_changes` | ok | ok | ok | ok | - |
+| `list_dir` | ok | ok | ok | ok | - |
+| `load_skill` | ok | ok | ok | ok | - |
+| `local_models` | ok | ok | ok | ok | - |
+| `measure` | ok | ok | ok | ok | - |
+| `media` | ok | ok | ok | ok | - |
+| `memory_forget` | ok | ok | ok | ok | - |
+| `memory_get` | ok | ok | ok | ok | - |
+| `memory_save` | ok | ok | ok | ok | - |
+| `memory_search` | ok | ok | ok | ok | - |
+| `message` | ok | ok | fixed | ok | `send` refused as `not_done` with the next step (A.3) |
+| `network_info` | ok | ok | ok | ok | - |
+| `notify` | ok | ok | ok | ok | "notification shown" is the whole effect |
+| `open` | ok | ok | ok | ok | - |
+| `open_in_editor` | ok | ok | ok | ok | - |
+| `package` | fixed | ok | ok | fixed | a failed search is an error, not "no packages found"; search and info lists cut with a note |
+| `place_search` | ok | ok | ok | ok | - |
+| `plan_enter` | ok | ok | ok | ok | - |
+| `plan_exit` | ok | ok | ok | ok | "Plan rejected: ... Revise" and "approved" say which |
+| `power` | ok | ok | ok | ok | - |
+| `power_profile` | ok | ok | ok | ok | - |
+| `process_list` | ok | ok | ok | ok | - |
+| `process_signal` | ok | ok | ok | ok | - |
+| `projects` | ok | ok | ok | ok | - |
+| `read_file` | ok | ok | fixed | ok | the credential refusal says to ask the owner |
+| `router_block_ip` | ok | ok | ok | ok | - |
+| `router_lists` | ok | ok | ok | ok | - |
+| `router_log` | ok | ok | ok | ok | - |
+| `router_status` | ok | ok | ok | ok | JSON of the router state |
+| `router_unblock_ip` | ok | ok | ok | ok | - |
+| `screen` | ok | ok | ok | ok | - |
+| `screen_watch` | ok | ok | ok | ok | `start` says what is watched and that the owner will be told |
+| `search_files` | ok | ok | ok | fixed | a list cut at `max_results` says how many there are and how to get the rest (was "N matches" of the cut list) |
+| `security_report` | ok | ok | ok | fixed | connections over 40 say so |
+| `session_search` | ok | ok | ok | ok | - |
+| `sessions` | ok | ok | ok | fixed | `list` over 30 and `read` over 20000 characters say what was cut and how to get the rest |
+| `settings` | ok | ok | ok | ok | `set` returns each changed key with old and new value; a failed patch says "nothing was changed" |
+| `shell` | ok | ok | ok | ok | background: the JSON names the taskId; the foreground result has stdout, stderr and the exit code |
+| `skill_delete` | ok | ok | ok | ok | - |
+| `skill_save` | ok | ok | ok | ok | - |
+| `sysctl` | ok | ok | ok | ok | - |
+| `system_info` | ok | ok | ok | ok | - |
+| `system_power` | ok | ok | ok | ok | `reboot requested` / `scheduled in N minutes` already say it is not done yet |
+| `systemd` | ok | ok | ok | ok | - |
+| `task_output` | ok | ok | ok | ok | - |
+| `task_stop` | ok | ok | ok | ok | - |
+| `tasks` | ok | ok | ok | ok | `run` and `cancel` already say "runs at the next pass" and "asked to cancel" |
+| `terminal` | ok | ok | ok | ok | "sent to" says it was typed, not that the command finished |
+| `todo_read` | ok | ok | ok | ok | - |
+| `todo_write` | ok | ok | ok | ok | the list is returned in full (the silent replace was fixed in v0.0.2) |
+| `trace` | ok | ok | ok | ok | - |
+| `traffic_top` | ok | ok | ok | ok | - |
+| `ui` | ok | fixed | ok | fixed | `show` answers `shown`: "the <page> page was opened in the UI. Nothing was changed." (was "show settings sent to the open UI"); `snapshot` text cut with a note |
+| `undo_change` | ok | ok | ok | ok | the text says whether the undo applied or failed, with the change id |
+| `web_fetch` | ok | ok | ok | ok | the page text is cut at `max_chars` with its own note |
+| `web_search` | ok | ok | ok | ok | - |
+| `what_changed` | ok | ok | ok | fixed | events over 150 say so |
+| `widget_show` | ok | ok | ok | ok | the marker line says where to put it; the panel exists when the marker is in the answer |
+| `wifi` | ok | ok | ok | ok | - |
+| `windows` | ok | ok | ok | fixed | a list over 80 windows says so |
+| `write_file` | ok | ok | ok | ok | - |
 
 ## C. Notes from the daemon into a running turn
 
