@@ -24,11 +24,13 @@ async def main():
     reset()
     home = tempfile.mkdtemp(prefix="kagent-s41-web-")
     env = dict(os.environ, KAGENT_HOME=home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1")
-    proc = subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{home}/daemon.log", "wb"))
+    # The owner's daemon on port 7878 is never started or stopped by a test: a stand-in answers instead (picker_web_lib.py).
+    STUB["on"] = port_busy()
+    proc = None if STUB["on"] else subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{home}/daemon.log", "wb"))
     chrome = None
     results = {}
     try:
-        for _ in range(100):
+        for _ in range(0 if STUB["on"] else 100):
             if os.path.exists(f"{home}/config/token"):
                 TOKEN["v"] = open(f"{home}/config/token").read().strip()
                 try:

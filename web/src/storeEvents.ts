@@ -2,6 +2,7 @@
 // getStore().ts, which holds the state and its actions.
 import { api, initialSection, initialSession, initialView, type StateView } from "./api";
 import { events, type AgentEvent } from "./events";
+import { notify, pushNotice } from "./components/toasts";
 import { applyMeta, applySettings, getStore, openSession, patch, refreshModels, refreshSessions, refreshSkills, refreshState, showView } from "./store";
 
 const set = patch;
@@ -43,7 +44,7 @@ export function handleEvent(ev: AgentEvent) {
       running.delete(ev.sessionId);
       set({ running, streaming: { ...getStore().streaming, [ev.sessionId]: "" }, reasoning: { ...getStore().reasoning, [ev.sessionId]: "" } });
       // A failed turn otherwise leaves the chat silent.
-      if (ev.status === "failed" && ev.error) set({ notice: `Turn failed: ${ev.error.slice(0, 300)}` });
+      if (ev.status === "failed" && ev.error) notify(`Turn failed: ${ev.error.slice(0, 300)}`, "error", ev.sessionId);
       // Reload the finished history of the open chat. Another session's turn (a subagent's,
       // a task's) ends without opening that session here.
       if (ev.sessionId === getStore().activeSession) void openSession(ev.sessionId);
@@ -87,7 +88,7 @@ export function handleEvent(ev: AgentEvent) {
       else void refreshState();
       break;
     case "notice":
-      set({ notice: ev.text });
+      pushNotice(ev);
       break;
     case "tasksChanged":
     case "taskRun":

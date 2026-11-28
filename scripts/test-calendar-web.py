@@ -12,6 +12,7 @@ ROOT = os.getcwd()
 DIST = f"{ROOT}/web/dist"
 SHOTS = "/tmp/kagent-s45-shots"
 PORT, CDP = 18801, 9333
+from picker_web_lib import STUB, port_busy, stub  # noqa: E402
 DAEMON = "http://127.0.0.1:7878"
 OWNER = "owner@example.com"
 MODE = {"name": "off", "paired": True, "hasKey": True, "opened": [], "calls": []}
@@ -28,6 +29,8 @@ LAST = {"at": "2026-11-27T07:45:00+01:00", "sent": ["telegram", "spoken"],
 
 
 def daemon(method, path, body=None):
+    if STUB["on"]:
+        return stub(method, path, body)
     req = urllib.request.Request(DAEMON + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": f"Bearer {TOKEN['v']}", "Content-Type": "application/json"})
     try:
@@ -182,11 +185,13 @@ async def main():
         os.remove(f"{SHOTS}/{f}")
     home = tempfile.mkdtemp(prefix="kagent-s45-web-")
     env = dict(os.environ, KAGENT_HOME=home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1")
-    proc = subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{home}/daemon.log", "wb"))
+    # The owner's daemon on port 7878 is never started or stopped by a test: a stand-in answers instead (picker_web_lib.py).
+    STUB["on"] = port_busy()
+    proc = None if STUB["on"] else subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{home}/daemon.log", "wb"))
     chrome = None
     results = {}
     try:
-        for _ in range(100):
+        for _ in range(0 if STUB["on"] else 100):
             if os.path.exists(f"{home}/config/token"):
                 TOKEN["v"] = open(f"{home}/config/token").read().strip()
                 try:

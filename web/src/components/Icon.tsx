@@ -37,6 +37,13 @@ const P: Record<string, string> = {
   more: "M5 12h.01 M12 12h.01 M19 12h.01",
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M21 21l-4.3-4.3",
   sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4",
+  // Notices (notices.md) and the work panel (work-windows.md).
+  alert: "M12 3 2 20h20L12 3z M12 10v5 M12 18h.01",
+  info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 11v5 M12 8h.01",
+  bot: "M5 8h14v11H5z M12 8V4 M9 13h.01 M15 13h.01 M3 13v3 M21 13v3",
+  terminal: "M4 5h16v14H4z M7 10l3 2-3 2 M12 15h5",
+  list: "M9 6h12 M9 12h12 M9 18h12 M4 6h.01 M4 12h.01 M4 18h.01",
+  arrowDown: "M12 5v14 M6 13l6 6 6-6",
   moon: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z",
 };
 

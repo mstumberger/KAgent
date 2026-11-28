@@ -9,6 +9,7 @@ import { readPrefs, type SidebarView } from "./components/sidebar/prefs";
 import { voice } from "./voice/controller";
 import { resolveView, type View } from "./nav";
 import * as picker from "./picker";
+import { notify } from "./components/toasts";
 import { agentsApi, type ChildView, type SessionInfo, type SessionRow } from "./settings/subagents/api";
 
 export interface Store {
@@ -20,7 +21,6 @@ export interface Store {
   running: Set<string>;
   approvals: ApprovalRequest[];
   state: StateView | null;
-  notice: string | null;
   view: View;
   /** The open settings page (`settings/registry.ts`); "" until the settings page decides. */
   settingsSection: string;
@@ -64,7 +64,6 @@ let store: Store = {
   running: new Set(),
   approvals: [],
   state: null,
-  notice: null,
   view: "chat",
   settingsSection: "",
   reasoning: {},
@@ -117,7 +116,7 @@ export async function refreshState() {
     patch({ state, approvals: state.pendingApprovals, running: new Set(state.running) });
     voice.setSettingsVolume(state.settings.voice?.volume ?? 100);
   } catch (e) {
-    patch({ notice: `state failed: ${String(e)}` });
+    notify(`state failed: ${String(e)}`);
   }
 }
 
@@ -174,7 +173,7 @@ export async function setSessionModel(id: string, body: Partial<picker.Choice>) 
     applyMeta(id, meta);
     picker.remember({ model: meta.model ?? null, reasoningLevel: meta.reasoningLevel ?? null });
   } catch (e) {
-    patch({ notice: `Model not changed: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Model not changed: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }
 }
@@ -188,7 +187,7 @@ export async function saveTodo(id: string, items: TodoItem[]) {
     const r = await putTodo(id, items);
     patch({ todos: { ...store.todos, [id]: r.items } });
   } catch (e) {
-    patch({ notice: `Todo list not saved: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Todo list not saved: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }
 }
@@ -208,7 +207,7 @@ export async function setPlan(id: string, active: boolean) {
     const r = await postPlan(id, active);
     patch({ planning: { ...store.planning, [id]: r.planning } });
   } catch (e) {
-    patch({ notice: `Plan not ${active ? "started" : "cancelled"}: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Plan not ${active ? "started" : "cancelled"}: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }
 }
@@ -224,7 +223,7 @@ export async function sendMessage(text: string, plan = false) {
   if (!id || !line) return;
   // The session of a subagent is read-only (agents.md section 6); the daemon refuses too.
   if (store.metas[id]?.origin === "subagent") {
-    patch({ notice: "The session of a subagent is read-only: its answer arrives in the session that started it." });
+    notify("The session of a subagent is read-only: its answer arrives in the session that started it.", "info");
     return;
   }
   const folder = projectArg(line);
@@ -239,9 +238,9 @@ async function attachByCommand(id: string, path: string) {
   try {
     const meta = await putProject(id, path || null);
     applyMeta(id, meta);
-    patch({ notice: meta.project ? `Project: ${meta.project}` : "Project detached" });
+    notify(meta.project ? `Project: ${meta.project}` : "Project detached", "info");
   } catch (e) {
-    patch({ notice: e instanceof Error ? e.message : String(e) });
+    notify(e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -251,9 +250,9 @@ export async function compactSession() {
   if (!id) return;
   try {
     const result = await requestCompaction(id);
-    patch({ notice: `Compacted: ${result.keptMessages} recent messages kept, the rest is a summary.` });
+    notify(`Compacted: ${result.keptMessages} recent messages kept, the rest is a summary.`, "info");
   } catch (e) {
-    patch({ notice: `Compaction failed: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Compaction failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -289,7 +288,7 @@ export async function stopSubagent(sessionId: string, childId: string) {
   try {
     await agentsApi.stop(sessionId, childId);
   } catch (e) {
-    patch({ notice: `Subagent not stopped: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Subagent not stopped: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 

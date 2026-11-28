@@ -1,4 +1,4 @@
-"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41) and test-sidebar-web.py (S42)."""
+"""The mock API, the CDP page driver and the helpers of test-picker-web.py (S41), test-sidebar-web.py (S42) and test-work-web.py (S43)."""
 import asyncio, base64, json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import websockets
@@ -26,6 +26,14 @@ SESSIONS = {}
 DIRS = set()
 PROJECTS = []
 OPENED = []  # the sessions the window read (`GET /api/sessions/:id`), in order
+
+
+# The voice session of the window opens a WebSocket on /live; a stand-in that stays open keeps the voice chip in the title bar.
+FAKE_LIVE = """(() => { const Real = window.WebSocket; window.WebSocket = function (url, ...rest) { if (String(url).includes('/live?')) { const fake = { readyState: 1, send() {}, close() {}, onopen: null }; setTimeout(() => { fake.onopen && fake.onopen(); fake.onmessage && fake.onmessage({ data: JSON.stringify({ type: 'status', status: 'connecting' }) }); }, 20); return fake; } return new Real(url, ...rest); }; window.WebSocket.OPEN = 1; window.WebSocket.CONNECTING = 0; window.WebSocket.CLOSED = 3; window.WebSocket.CLOSING = 2; })();"""
+
+# The window's own event stream (`/ws`) stands in for a socket the page can be fed through: `window.__emit(event)` is what
+# the daemon would send (S43). The voice socket (`/live`) is left to the test that needs it.
+FAKE_WS = """(() => { const Real = window.WebSocket; window.__socks = []; window.WebSocket = function (url, ...rest) { if (String(url).includes('/ws?')) { const fake = { readyState: 1, send() {}, close() {}, onopen: null, onmessage: null, onclose: null }; window.__socks.push(fake); setTimeout(() => fake.onopen && fake.onopen(), 10); return fake; } return new Real(url, ...rest); }; window.WebSocket.OPEN = 1; window.WebSocket.CONNECTING = 0; window.WebSocket.CLOSED = 3; window.WebSocket.CLOSING = 2; window.__emit = (ev) => window.__socks.forEach((s) => s.onmessage && s.onmessage({ data: JSON.stringify(ev) })); })();"""
 
 
 def reset(**kw):
@@ -59,7 +67,57 @@ def folder_refusal(path):
     return None
 
 
+# When the owner's own daemon holds port 7878 the tests must not start (or stop) one: the routes that are not mocked
+# are answered by a small in-memory stand-in instead (state and settings only; everything else is 404).
+STUB = {"on": False, "settings": json.loads('{"schemaVersion":1,"chatModel":"","fastModel":"","knownToolGroups":[],"fallbackModel":"","liveModel":"","liveVoice":"Kore","permissionMode":"ask","rules":[],"toolOverrides":{},"toolGroups":["system","kernel","services","files","shell","hardware","skills","change","desktop","security","trace","tasks","agent","memory","web"],"mcpToolGroups":[],"privilege":"sudo","maxIterations":40,"approvalTimeoutSec":600,"options":{"reasoningLevel":null,"maxOutputTokens":null,"temperature":null},"persona":{"name":"KAgent","address":"","language":"auto"},"startup":{"autostart":true,"greeting":{"enabled":true,"text":""}}}')}
+
+
+def merge(into, patch):
+    for k, v in patch.items():
+        if isinstance(v, dict) and isinstance(into.get(k), dict):
+            merge(into[k], v)
+        else:
+            into[k] = v
+
+
+def stub(method, path, body):
+    j = lambda status, v: (status, json.dumps(v).encode(), "application/json")
+    if path == "/api/state" and method == "GET":
+        return j(200, {"version": "stub", "settings": STUB["settings"], "pendingApprovals": [], "running": [], "chatModelValid": True, "privHelper": "absent", "alertsOpen": 0, "voice": {"thinkMedianMs": None}})
+    if path == "/api/settings" and method == "PUT":
+        merge(STUB["settings"], body or {})
+        return j(200, STUB["settings"])
+    if path == "/api/settings" and method == "GET":
+        return j(200, STUB["settings"])
+    if path == "/api/skills" and method == "GET":
+        return j(200, {"skills": []})
+    if path == "/api/sessions" and method == "GET":
+        return j(200, {"sessions": []})
+    if path == "/api/models" and method == "GET":
+        return j(200, {"chat": [], "fast": [], "vision": [], "live": []})
+    if path == "/api/providers/templates":
+        return j(200, {"templates": []})
+    if path.startswith("/api/alerts") and method == "GET":
+        return j(200, [])
+    if path == "/api/tasks" and method == "GET":
+        return j(200, {"tasks": []})
+    if path == "/api/tasks/templates" and method == "GET":
+        return j(200, {"templates": []})
+    if path == "/api/ui/report":
+        return j(200, {"ok": True})
+    return j(404, {"error": {"code": "not_found", "message": f"{path} (stub)"}})
+
+
+def port_busy(port=7878):
+    import socket
+    with socket.socket() as c:
+        c.settimeout(0.5)
+        return c.connect_ex(("127.0.0.1", port)) == 0
+
+
 def daemon(method, path, body=None):
+    if STUB["on"]:
+        return stub(method, path, body)
     req = urllib.request.Request(DAEMON + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": f"Bearer {TOKEN['v']}", "Content-Type": "application/json"})
     try:
@@ -287,8 +345,12 @@ class Env:
         reset()
         self.home = tempfile.mkdtemp(prefix=f"{self.prefix}-web-")
         env = dict(os.environ, KAGENT_HOME=self.home, KAGENT_NO_TRAY="1", KAGENT_NO_NOTIFY="1")
-        self.proc = subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{self.home}/daemon.log", "wb"))
-        for _ in range(100):
+        STUB["on"] = port_busy()
+        if STUB["on"]:
+            print("NOTE: port 7878 is in use (the owner's daemon): the daemon routes the mock does not answer come from a stand-in", file=sys.stderr)
+        else:
+            self.proc = subprocess.Popen([f"{ROOT}/target/debug/kagentd", "serve"], env=env, stdout=subprocess.DEVNULL, stderr=open(f"{self.home}/daemon.log", "wb"))
+        for _ in range(0 if STUB["on"] else 100):
             if os.path.exists(f"{self.home}/config/token"):
                 TOKEN["v"] = open(f"{self.home}/config/token").read().strip()
                 try:
@@ -317,6 +379,23 @@ class Env:
         for domain in ("Page", "Runtime", "Log"):
             await self.page.send(f"{domain}.enable")
         return self
+
+    async def open(self, theme, query="", ready=None, init="", **cfg):
+        """Load the window in `theme` (kagent.theme) with the mock reset to `cfg`; `init` runs before the page's own scripts.
+        The stored state of the window (localStorage) is cleared on each call except the theme; `/ws` is the fake of FAKE_WS."""
+        reset(**cfg)
+        page = self.page
+        await page.send("Page.navigate", url="about:blank")
+        if getattr(self, "_init", None):
+            await page.send("Page.removeScriptToEvaluateOnNewDocument", identifier=self._init)
+        self._n = getattr(self, "_n", 0) + 1
+        source = (f"try {{ if (sessionStorage.getItem('open') !== '{self._n}') {{ sessionStorage.setItem('open', '{self._n}'); localStorage.clear(); localStorage.setItem('kagent.theme','{theme}'); }} }} catch (e) {{}} "
+                  f"{FAKE_WS} {init}")
+        self._init = (await page.send("Page.addScriptToEvaluateOnNewDocument", source=source))["identifier"]
+        await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{query}#token=abc123")
+        ready = ready or (".widget-status" if "overlay" in query or "compact" in query else "#sidebar-toggle")
+        await page.until(f"!!document.querySelector('{ready}') && !document.body.innerText.includes('No token')", f"the page ({theme}, {query})")
+        await asyncio.sleep(0.5)
 
     async def size(self, w, h):
         await self.page.send("Emulation.setDeviceMetricsOverride", width=w, height=h, deviceScaleFactor=1, mobile=False)

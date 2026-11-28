@@ -95,10 +95,6 @@ header {
 .dot.bad {
   color: var(--danger);
 }
-.notice {
-  color: var(--muted);
-  font-size: 12px;
-}
 .tab {
   border: none;
   background: transparent;

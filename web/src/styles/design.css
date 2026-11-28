@@ -69,7 +69,6 @@ nav { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: r
 header > .tab { border: 1px solid var(--rim); }
 .tab.danger { color: var(--bad); }
 .badge { background: var(--signal); color: #1a1200; border-radius: 999px; padding: 0 6px; margin-left: 5px; font-size: 11px; font-weight: 600; }
-.notice { color: var(--signal); }
 
 /* controls */
 button {

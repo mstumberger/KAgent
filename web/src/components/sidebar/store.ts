@@ -4,6 +4,7 @@
 import { getProjects, putPin, putProject, type SessionMeta } from "../../sessionApi";
 import { applyMeta, deleteSession, getStore, newSession, openSession, patch, setView } from "../../store";
 import type { View } from "../../nav";
+import { notify } from "../toasts";
 import { DRAWER_BELOW, writePrefs, type SidebarView } from "./prefs";
 
 const narrow = () => typeof window.matchMedia === "function" && window.matchMedia(`(max-width: ${DRAWER_BELOW - 1}px)`).matches;
@@ -43,7 +44,7 @@ export async function createSession(project?: string) {
     await newSession(project);
     patch({ view: "chat", sidebarDrawer: false, sheet: null });
   } catch (e) {
-    patch({ notice: `Session not created: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`Session not created: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -72,7 +73,7 @@ export async function setPinned(id: string, pinned: boolean) {
   try {
     applyMeta(id, await putPin(id, pinned));
   } catch (e) {
-    patch({ notice: `${pinned ? "Not pinned" : "Not unpinned"}: ${e instanceof Error ? e.message : String(e)}` });
+    notify(`${pinned ? "Not pinned" : "Not unpinned"}: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
