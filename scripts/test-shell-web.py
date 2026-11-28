@@ -208,12 +208,24 @@ async def router(env, results, theme):
     await env.size(1200, 820)
 
 
+async def matrix(env, results):
+    """The matrix of every page at every size, dark and light: any finding fails (shell.md section 3)."""
+    found = await M.run_matrix(env, "/tmp/kagent-v003-shell-shots/after")
+    bad = {k: v for k, v in found.items() if v}
+    for (theme, page, size), fs in sorted(bad.items()):
+        for f in fs[:3]:
+            print(f"FINDING {theme} {page} {size}: {f['kind']} {f['at'][:60]} | {f['detail'][:80]}")
+    results[f"the matrix of {len(found)} cells (every page, every size, dark and light) has no finding"] = not bad
+
+
 async def main():
     results = {}
     async with Env("kagent-shell-test", SHOTS) as env:
         for theme in ("dark", "light"):
             await router(env, results, theme)
-        errors = [e for e in env.page.errors if "404" not in e]
+        await matrix(env, results)
+        # The 404s are routes of the stand-in; the 409 is the refusal of a delete the suite asked for.
+        errors = [e for e in env.page.errors if "404" not in e and "409" not in e]
         results["no console errors"] = not errors
         if errors:
             print("ERRORS", errors[:5])

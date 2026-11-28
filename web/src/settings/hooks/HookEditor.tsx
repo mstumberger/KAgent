@@ -6,6 +6,7 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Toggle } from "../ui";
 import { EVENTS, takesMatcher, type Hook, type HookEventName } from "./api";
 import { MAX_TIMEOUT_MS, MIN_TIMEOUT_MS, bodyOf, draftErrors, type Draft } from "./draft";
+import Select from "../Select";
 
 interface Props {
   initial: Draft;
@@ -26,7 +27,7 @@ export default function HookEditor({ initial, enabled, tools, busy, serverError,
   const [find, setFind] = useState("");
   const errors = tried ? draftErrors(draft) : {};
   const set = (field: "command" | "args" | "shell" | "timeoutMs") => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft((d) => ({ ...d, [field]: e.target.value }));
-  const changeEvent = (e: ChangeEvent<HTMLSelectElement>) => {
+  const changeEvent = (e: { target: { value: string } }) => {
     const event = e.target.value as HookEventName;
     // A tool matcher is for the two tool events only.
     setDraft((d) => ({ ...d, event, matcher: takesMatcher(event) ? d.matcher : [] }));
@@ -57,13 +58,13 @@ export default function HookEditor({ initial, enabled, tools, busy, serverError,
       )}
       <label className="ui-field">
         <span className="ui-field-label">Event</span>
-        <select value={draft.event} aria-label="Hook event" onChange={changeEvent}>
+        <Select value={draft.event} aria-label="Hook event" onChange={changeEvent}>
           {EVENTS.map((e) => (
             <option key={e.name} value={e.name}>
               {e.name}
             </option>
           ))}
-        </select>
+        </Select>
         <span className="hint">
           {info?.when} {info?.decides}
         </span>

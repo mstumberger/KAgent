@@ -9,6 +9,7 @@ import type { SectionProps } from "../registry";
 import { GroupCard, Row, SectionPage, Toggle } from "../ui";
 import { useSettingPatch } from "../useSettingPatch";
 import { groupAbout, groupLabel } from "../groups";
+import Select from "../Select";
 
 const ORB = "kagent.orb";
 /** The live model that thinks longer before it speaks (voice.md section 8). */
@@ -80,22 +81,22 @@ export default function VoiceSection({ title, description }: SectionProps) {
     <SectionPage title={title} description={description}>
       <GroupCard title="Live session" description="What listens and speaks while you talk to KAgent.">
         <Row label="Live model" hint="A Gemini *-live model. Add a Gemini provider in Models first.">
-          <select aria-label="Live model" value={liveModel} onChange={(e) => void save("liveModel", e.target.value)}>
+          <Select aria-label="Live model" value={liveModel} onChange={(e) => void save("liveModel", e.target.value)}>
             <option value="">(none)</option>
             {liveModels.map((m) => (
               <option key={m.ref} value={m.ref}>
                 {line(m.ref)}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
         {liveModel.endsWith(EXTENDED) && <p className="hint ui-note">{liveModel}: {EXTENDED_HINT}.</p>}
         <Row label="Voice" hint="The voice that reads the answers.">
-          <select aria-label="Voice" value={liveVoice} onChange={(e) => void save("liveVoice", e.target.value)}>
+          <Select aria-label="Voice" value={liveVoice} onChange={(e) => void save("liveVoice", e.target.value)}>
             {[liveVoice, ...voices.filter((v) => v !== liveVoice)].map((v) => (
               <option key={v}>{v}</option>
             ))}
-          </select>
+          </Select>
         </Row>
         <Row label="Volume" hint="How loud KAgent speaks. Not the system volume.">
           <input
@@ -121,11 +122,11 @@ export default function VoiceSection({ title, description }: SectionProps) {
           <span className="hint">{dragging ?? voice?.volume ?? 100}%</span>
         </Row>
         <Row label="Look" hint="The orb on the Voice tab.">
-          <select aria-label="Look" value={look} onChange={(e) => setLook(e.target.value as OrbTheme)}>
+          <Select aria-label="Look" value={look} onChange={(e) => setLook(e.target.value as OrbTheme)}>
             {ORB_THEMES.map((t) => (
               <option key={t}>{t}</option>
             ))}
-          </select>
+          </Select>
         </Row>
         <Row label="Pause media" hint="Music and videos pause while a voice session is open.">
           <Toggle label="Pause media" checked={voice?.pauseMedia ?? true} onChange={(v) => void save("voice", { pauseMedia: v })} />

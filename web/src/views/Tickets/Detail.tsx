@@ -6,6 +6,7 @@ import { openSession } from "../../store";
 import { errorMessage, type Change, type Link, type LinkKind, type Ticket, type TState, type Priority } from "./api";
 import TicketChanges from "./TicketChanges";
 import { PRIORITIES, PRIORITY_LABEL, STATES, STATE_LABEL } from "./model";
+import Select from "../../settings/Select";
 
 interface Props {
   ticket: Ticket;
@@ -112,35 +113,35 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
       <div className="tk-grid">
         <label className="tk-field" htmlFor="tk-state">
           <span>State</span>
-          <select id="tk-state" value={t.state} onChange={(e) => void save({ state: e.target.value as TState })}>
+          <Select id="tk-state" value={t.state} onChange={(e) => void save({ state: e.target.value as TState })}>
             {STATES.map((s) => (
               <option key={s} value={s}>{STATE_LABEL[s]}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="tk-field" htmlFor="tk-priority">
           <span>Priority</span>
-          <select id="tk-priority" value={t.priority} onChange={(e) => void save({ priority: e.target.value as Priority })}>
+          <Select id="tk-priority" value={t.priority} onChange={(e) => void save({ priority: e.target.value as Priority })}>
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="tk-field" htmlFor="tk-assignee">
           <span>Assignee</span>
-          <select id="tk-assignee" value={t.assignee ?? ""} onChange={(e) => void save({ assignee: e.target.value || null })}>
+          <Select id="tk-assignee" value={t.assignee ?? ""} onChange={(e) => void save({ assignee: e.target.value || null })}>
             <option value="">Nobody</option>
             <option value="owner">Me</option>
-          </select>
+          </Select>
         </label>
         <label className="tk-field" htmlFor="tk-parent">
           <span>Parent</span>
-          <select id="tk-parent" value={t.parent ?? ""} onChange={(e) => void save({ parent: e.target.value || null })}>
+          <Select id="tk-parent" value={t.parent ?? ""} onChange={(e) => void save({ parent: e.target.value || null })}>
             <option value="">None</option>
             {parents.map((p) => (
               <option key={p.key} value={p.key}>{p.key} {p.title.slice(0, 40)}</option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       <div className="tk-field">
@@ -212,11 +213,11 @@ export default function Detail({ ticket: t, siblings, projectName, onChange, onD
           </div>
         ))}
         <div className="tk-addlink">
-          <select aria-label="Link kind" value={linkKind} onChange={(e) => setLinkKind(e.target.value as LinkKind)}>
+          <Select aria-label="Link kind" value={linkKind} onChange={(e) => setLinkKind(e.target.value as LinkKind)}>
             {LINK_KINDS.map((k) => (
               <option key={k.id} value={k.id}>{k.label}</option>
             ))}
-          </select>
+          </Select>
           <input
             type="text"
             aria-label="Link value"

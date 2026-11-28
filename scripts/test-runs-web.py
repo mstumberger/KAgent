@@ -8,7 +8,7 @@ page the events the daemon would send (`window.__emit`). Dark and light at 1200x
 go to /tmp/kagent-v003-runs-shots/. Run from the repo root with KAGENT_DIST set to a build of web/ (`npx vite build --outDir <dir>`)."""
 import asyncio, datetime, json, sys
 import picker_web_lib as lib
-from picker_web_lib import Env, calls, report, set_run
+from picker_web_lib import Env, calls, dd_values, report, set_run
 
 P1, P2 = "/home/me/code/kagent", "/home/me/code/web-ui"
 T0 = "2026-11-28T09:00:00Z"
@@ -251,9 +251,11 @@ async def new_checks(env, results, theme):
     t = f"{theme} 1200x820"
     await opened(env, theme)
     await page.js("[...document.querySelectorAll('.rn-head button')].find(b => b.textContent === 'New run').click()")
-    await page.until("!!document.querySelector('form.rn-new') && document.querySelectorAll('form.rn-new select option').length >= 2", "the form")
-    await page.until("document.querySelectorAll('.rn-roles li').length === 3 && !!document.querySelector('form.rn-new select').value", "the workers of the first workflow")
-    form = await page.js("({workflows: [...document.querySelector('form.rn-new select').options].map(o => o.value), desc: document.querySelector('form.rn-new .rn-none').textContent, roles: [...document.querySelectorAll('.rn-roles li')].map(l => l.textContent.slice(0, 20)), project: document.querySelectorAll('form.rn-new select')[1].value, start: document.querySelector('form.rn-new button[type=submit]').disabled})")
+    await page.until("!!document.querySelector('form.rn-new') && document.querySelectorAll('form.rn-new .dd-trigger').length === 2", "the form")
+    await page.until("document.querySelectorAll('.rn-roles li').length === 3 && !!document.querySelector('form.rn-new .dd-trigger').value", "the workers of the first workflow")
+    workflows = await dd_values(page, "form.rn-new .dd-trigger")
+    form = await page.js("({workflows: [], desc: document.querySelector('form.rn-new .rn-none').textContent, roles: [...document.querySelectorAll('.rn-roles li')].map(l => l.textContent.slice(0, 20)), project: document.querySelectorAll('form.rn-new .dd-trigger')[1].value, start: document.querySelector('form.rn-new button[type=submit]').disabled})")
+    form["workflows"] = workflows
     results[f"{t}: New run lists the workflows with their description and the workers of each role"] = form["workflows"] == ["plan-implement-review", "plan-only"] and form["desc"].startswith("A planner splits the job, an implementer") and len(form["roles"]) == 3
     results[f"{t}: the project is the one of the open conversation, and Start is off until a goal is typed"] = form["project"] == P1 and form["start"] is True
     await page.shot(f"new-run-{theme}")

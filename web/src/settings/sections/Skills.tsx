@@ -12,6 +12,7 @@ import { FILTERS, SOURCE_LABEL, ago, inFilter, keyOf } from "../skills/shared";
 import "../skills/skills.css";
 import { Badge, EmptyState, SectionPage, Toggle } from "../ui";
 import { useSettingPatch } from "../useSettingPatch";
+import Select from "../Select";
 
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -124,13 +125,13 @@ export default function Skills({ title, description }: SectionProps) {
         <div className="pv-nav" role="listbox" aria-label="Skills">
           <div className="sk-toolbar">
             <input aria-label="Search skills" placeholder="Search skills" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value as (typeof FILTERS)[number])}>
+            <Select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value as (typeof FILTERS)[number])}>
               {FILTERS.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {loadError && (
             <p className="sk-error" role="alert">

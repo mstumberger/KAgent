@@ -760,6 +760,30 @@ class Page:
         return r
 
 
+async def dd_open(page, trigger_sel):
+    """Open the list of a Dropdown (the themed select of the settings screen) with a real click on its trigger."""
+    x, y = await page.center(trigger_sel)
+    await page.send("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
+    await page.send("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", clickCount=1)
+    await page.until("!!document.querySelector('.dd-list')", f"the list of {trigger_sel}")
+
+
+async def dd_set(page, trigger_sel, value):
+    """Choose the option whose value is `value` in the Dropdown of `trigger_sel`."""
+    await dd_open(page, trigger_sel)
+    await page.js(f"[...document.querySelectorAll('.dd-list [role=option]')].find(o => o.dataset.value === {json.dumps(value)}).click()")
+    await page.until("!document.querySelector('.dd-list')", "the list closed by the pick")
+
+
+async def dd_values(page, trigger_sel):
+    """The values of the options of a Dropdown (its list is opened and closed)."""
+    await dd_open(page, trigger_sel)
+    values = await page.js("[...document.querySelectorAll('.dd-list [role=option]')].map(o => o.dataset.value)")
+    await page.key("Escape", "Escape", 27)
+    await page.until("!document.querySelector('.dd-list')", "the list closed")
+    return values
+
+
 def set_task(**body):
     """Change a task of the mock while the page runs: `id`, and `text` (its output), `status`, `exitCode`."""
     urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__output", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()

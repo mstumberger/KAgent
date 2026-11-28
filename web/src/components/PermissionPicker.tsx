@@ -5,6 +5,7 @@ import { api } from "../api";
 import { refreshState, useStore } from "../store";
 import Icon from "./Icon";
 import Menu from "./Menu";
+import Select from "../settings/Select";
 
 const LEVELS: { id: string; label: string; hint: string }[] = [
   { id: "read-only", label: "Read-only", hint: "Looks only: every change is refused" },
@@ -80,13 +81,13 @@ export default function PermissionPicker({ compact = false }: { compact?: boolea
   return (
     <label className={`perm perm-${mode}${compact ? " compact" : ""}`} title={`Permission: ${current.hint}`}>
       <span className="perm-dot" aria-hidden="true" />
-      <select aria-label="Permission level" value={mode} onChange={(e) => void set(e.target.value)}>
+      <Select aria-label="Permission level" value={mode} onChange={(e) => void set(e.target.value)}>
         {LEVELS.map((l) => (
           <option key={l.id} value={l.id}>
             {l.label}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

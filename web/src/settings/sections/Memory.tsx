@@ -13,6 +13,7 @@ import { ago } from "../skills/shared";
 import type { SectionProps } from "../registry";
 import { Badge, EmptyState, GroupCard, Row, SectionPage, Toggle } from "../ui";
 import { useSettingPatch } from "../useSettingPatch";
+import Select from "../Select";
 
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -175,13 +176,13 @@ export default function Memory({ title, description }: SectionProps) {
         <nav className="pv-nav" aria-label="Topic memories">
           <div className="mem-toolbar">
             <input aria-label="Search memories" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value as (typeof FILTERS)[number])}>
+            <Select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value as (typeof FILTERS)[number])}>
               {FILTERS.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {rows.length === 0 && <div className="hint pv-nav-empty">{memories.length === 0 ? "No memories yet" : "Nothing matches"}</div>}
           {rows.map((m) => {
