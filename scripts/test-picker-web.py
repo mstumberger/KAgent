@@ -79,6 +79,11 @@ async def main():
             await size(1200, 820)
             for theme in ("dark", "light"):
                 t = theme
+                # v0.0.3 A5: a stored effort the answering model does not offer is not shown on the trigger
+                await open_page(theme, session={"model": "anthropic::claude-haiku-4-5", "reasoningLevel": "high"})
+                results[f"{t}: a stored effort the model does not offer has no tag on the trigger"] = await page.js(f"{TRIGGER_TEXT} === 'claude-haiku-4-5' && !document.querySelector('.mm-effort-tag')")
+                await open_page(theme, session={"model": "anthropic::claude-opus-4-6", "reasoningLevel": "high"})
+                results[f"{t}: an effort the model offers keeps its tag"] = await page.js(f"{TRIGGER_TEXT} === 'claude-opus-4-6 · high'")
                 await open_page(theme, session={"model": None})
                 results[f"{t}: the header has no model dot"] = await page.js("!document.querySelector('header .dot')")
                 results[f"{t}: the trigger names the default model, without its models/ prefix"] = await page.js(f"{TRIGGER_TEXT} === 'gemini-3.8-flash'")

@@ -232,7 +232,8 @@ export default function ModelMenu({ sessionId, onOpenChange }: { sessionId: stri
   });
 
   const name = c.none ? "No model" : label(c.chosen ?? c.chatModel);
-  const effort = c.level && !c.none ? c.level : "";
+  // The tag is the level the answering model offers: a stored level it does not list is not shown (picker.md section 5.1).
+  const effort = c.level && c.pos > 0 && !c.none ? c.level : "";
   const tip = `Model and effort (Ctrl+M): ${name}${effort ? ` · ${effort}` : ""}${c.missing ? ` - ${why}` : ""}`;
   return (
     <div ref={root} className="mm">

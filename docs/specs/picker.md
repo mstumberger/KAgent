@@ -177,7 +177,9 @@ The composer gets two rows, the pattern of ZCode's `V4ComposerToolbar`:
 
 The trigger is a pill button 28 px high (padding `0 10px`, `--glass-2`, 1 px rim,
 a radius of 999 px, font 12.5 px): a chevron of 14 px that turns when the menu is open,
-the model, and the effort in `--dim` after a middle dot when the session has one. The
+the model, and the effort in `--dim` after a middle dot when the session has one and the
+model that answers offers it (a stored level that model does not list is not shown; the
+widget's chip follows the same rule). The
 model is the id of its ref without a leading `models/` (models.md 7.8; no request is
 needed for it); at most 220 px, cut with an ellipsis. Below 900 px of viewport width the
 name is hidden and the button is 28 x 28 px with the text in its `title`.
