@@ -406,6 +406,7 @@ impl ProviderStore {
             "name": p.name,
             "templateId": p.template_id,
             "enabled": p.enabled,
+            "local": crate::local::is_local_url(&p.api.base_url),
             "api": p.api,
             "apiKeyMasked": mask_key(&p.api_key),
             "hasKey": !p.api_key.is_empty(),

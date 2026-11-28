@@ -102,13 +102,15 @@ pub fn update(store: &ProviderStore, settings: &Settings, id: &str, body: &Value
 }
 
 /// `GET /api/models` (models.md section 4): `chat`, `fast` and `vision` list the
-/// models with role `chat`, `live` those with role `live`. Enabled models only.
+/// models with role `chat`, `live` those with role `live`. Enabled models only. Each row says whether its
+/// provider is `local` and whether the model is `free` (chooser.md section 2).
 pub fn model_lists(store: &ProviderStore) -> Value {
     let mut out: BTreeMap<&str, Vec<Value>> = [("chat", Vec::new()), ("fast", Vec::new()), ("live", Vec::new()), ("vision", Vec::new())].into_iter().collect();
-    let names: BTreeMap<String, String> = store.providers().providers.into_iter().map(|(id, p)| (id, p.name)).collect();
+    let names: BTreeMap<String, (String, bool)> = store.providers().providers.into_iter().map(|(id, p)| (id, (p.name, kagent_providers::is_local_url(&p.api.base_url)))).collect();
     for (pid, model, config) in store.enabled_models() {
-        let provider_name = names.get(&pid).cloned().unwrap_or_else(|| pid.clone());
-        let view = || json!({"id": model.id, "name": model.name, "ref": format!("{pid}::{}", model.id), "providerId": pid, "providerName": provider_name, "config": config});
+        let (provider_name, local) = names.get(&pid).cloned().unwrap_or_else(|| (pid.clone(), false));
+        let free = kagent_providers::local::is_free_id(&model.id);
+        let view = || json!({"id": model.id, "name": model.name, "ref": format!("{pid}::{}", model.id), "providerId": pid, "providerName": provider_name, "local": local, "free": free, "config": config});
         if model.roles.iter().any(|r| r == "chat") {
             for role in ["chat", "fast", "vision"] {
                 out.get_mut(role).expect("a list above").push(view());

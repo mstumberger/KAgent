@@ -149,6 +149,8 @@ export interface ProviderView {
   name: string;
   templateId: string;
   enabled: boolean;
+  /** The provider is on this machine or network: the daemon decides (chooser.md section 2). */
+  local?: boolean;
   api: { type: string; baseUrl: string; headers: Record<string, string> };
   apiKeyMasked: string;
   hasKey: boolean;
