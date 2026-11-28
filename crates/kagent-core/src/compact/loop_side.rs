@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 
 use tokio_util::sync::CancellationToken;
 
+use crate::agent::notice::{provider_key, provider_of, ErrorClass};
 use crate::agent::state::SessionState;
 use crate::agent::{Agent, AgentConfig};
 use crate::compact::{before_last_user, is_capacity_error, should_compact, stored_index, summarize, summary_message, CompactError, CompactView, CompactionConfig, History, Plan, Step, Trigger, MIN_MANUAL_MESSAGES};
@@ -135,7 +136,11 @@ impl Agent {
     /// The rest of the turn goes to `fallbackModel`: the chat model is overloaded or out of quota (429/503), or its key is broken.
     fn switch_to_fallback(&self, session_id: &str, config: &mut AgentConfig, error: &anyhow::Error) {
         tracing::warn!(session_id, "chat model {} unavailable ({error:#}); falling back to {}", config.model_ref, config.fallback_model_ref);
-        let _ = self.events.send(AgentEvent::Notice { level: "warn".into(), text: fallback_notice(&config.model_ref, &config.fallback_model_ref, &format!("{error:#}")) });
+        let error_text = format!("{error:#}");
+        let provider = provider_of(&config.model_ref);
+        let key = provider_key(provider, ErrorClass::of(&error_text));
+        self.failing.failed(&config.model_ref, key.clone());
+        let _ = self.events.send(AgentEvent::keyed_notice("warn", fallback_notice(&config.model_ref, &config.fallback_model_ref, &error_text), key).in_session(session_id));
         config.model_ref = config.fallback_model_ref.clone();
         config.context_tokens = config.fallback_context_tokens;
         config.options.max_output_tokens = config.fallback_max_output;
@@ -148,15 +153,7 @@ impl Agent {
 /// answer (models.md section 5): out of quota when the error says 429 or "quota", a
 /// rejected key as before, busy otherwise.
 pub(crate) fn fallback_notice(model: &str, fallback: &str, error: &str) -> String {
-    let error = error.to_lowercase();
-    let why = if error.contains("429") || error.contains("quota") {
-        "is out of quota"
-    } else if error.contains("key") {
-        "rejected the API key (Providers)"
-    } else {
-        "is busy"
-    };
-    format!("{model} {why} - answering with {fallback}")
+    format!("{model} {} - answering with {fallback}", ErrorClass::of(error).why())
 }
 
 /// The model that summarizes (compaction.md section 3): `fastModel` when it is set, else the chat model.

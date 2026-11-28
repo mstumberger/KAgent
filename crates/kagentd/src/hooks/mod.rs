@@ -47,10 +47,7 @@ impl Teller {
 
     fn failed(&self, id: &str, event: Event, why: &str) {
         tracing::warn!(hook = id, event = event.name(), "hook failed: {why}");
-        let _ = self.events.send(AgentEvent::Notice {
-            level: "warn".into(),
-            text: format!("Hook '{id}' ({}) failed: {why}. The agent goes on without it.", event.name()),
-        });
+        let _ = self.events.send(AgentEvent::keyed_notice("warn", format!("Hook '{id}' ({}) failed: {why}. The agent goes on without it.", event.name()), format!("hook:{id}")));
     }
 }
 

@@ -24,6 +24,7 @@ mod config;
 pub mod hooks;
 pub mod title;
 pub(crate) mod state;
+pub mod notice;
 mod picker;
 pub mod project;
 mod spawn;
@@ -67,6 +68,8 @@ pub struct Agent {
     pub(crate) children: children::Children,
     /// The daemon's hooks of the loop, and the context they added (`hooks.rs`).
     pub(crate) hooks: hooks::HookState,
+    /// Providers that failed and have not answered since (`notice.rs`).
+    pub(crate) failing: notice::Failing,
 }
 
 impl Agent {
@@ -88,6 +91,7 @@ impl Agent {
             compaction: Mutex::new(None),
             children: Default::default(),
             hooks: hooks::HookState::new(deps.hooks),
+            failing: Default::default(),
         })
     }
 
@@ -300,6 +304,10 @@ impl Agent {
                 }
             }
             let response = response?;
+            // A provider that failed answers again: its error toast closes (notices.md section 1).
+            if let Some(recovery) = self.failing.answered(&config.model_ref) {
+                let _ = self.events.send(recovery.in_session(session_id));
+            }
             usage.input_tokens += response.usage.input_tokens;
             usage.output_tokens += response.usage.output_tokens;
             // The provider's count of the prompt calibrates the estimate (compaction.md section 6).

@@ -188,7 +188,7 @@ impl Calendar {
         });
         if tell {
             tracing::warn!("calendar: Google no longer accepts the connection");
-            let _ = self.events.send(AgentEvent::Notice { level: "warn".into(), text: "Google Calendar needs to be connected again (Settings -> Calendar).".into() });
+            let _ = self.events.send(AgentEvent::keyed_notice("warn", "Google Calendar needs to be connected again (Settings -> Calendar).", "calendar:reconnect"));
         }
     }
 
