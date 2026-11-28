@@ -162,7 +162,7 @@ first three are done first.
   need JavaScript or a session, and when a site asks for a human check the owner
   passes it once in a visible window. Browser attach stays for acting and testing.
   Built: R1-R3 on `v0.0.3` (the search chain, the reader, the human check and Settings -> Web); see `docs/IMPLEMENTATION.md` section E.
-- [ ] Listen on start, and a spoken greeting: two switches in Settings -> Voice (both
+- [x] Listen on start, and a spoken greeting: two switches in Settings -> Voice (both
   off by default). "Listen on start": after login KAgent opens its window (or the
   widget) and starts a live voice session by itself. "Greet me out loud": the
   greeting that is a desktop notification today is also spoken once, at the start of
@@ -171,3 +171,4 @@ first three are done first.
   or "stop listening" ends it, it stops by itself after a set time without speech
   (default 10 minutes), and it does not start on the lock screen. These switches are
   changed on the screen only, never by the agent.
+  Built on `v0.0.3` (`docs/specs/voice.md` section 14; the reader sweep of `web.md` section 8 came with it); see `docs/IMPLEMENTATION.md` section E.

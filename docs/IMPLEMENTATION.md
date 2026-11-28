@@ -3450,6 +3450,40 @@ Stages H1 to H4 of `plans/ui-shell.md` (local). Seven commits on `v0.0.3`. Decis
   Counts did not change. With the owner's daemon on 7878 the stand-in answers the routes the mock does not (see the earlier note).
 - **Not built**: multi-select, the `sessions` tool's `archive` and `move`, a trash folder, 2560 px, `/project/<name>` and `/time/<date>` addresses (there is no such view).
 
+### Session 2026-11-28 (v0.0.3: listen on start, a spoken greeting, the reader sweep; `specs/voice.md` section 14, `web.md` section 8)
+
+- **The marker is the whole security of the start.** The daemon makes 64 hex characters (two v4 UUIDs), holds them in memory, opens the window with
+  `?app&listen=<marker>` and accepts them once, for 2 minutes, at `POST /api/voice/listen-start` (constant-time compare; a wrong marker does not use
+  up the right one; a refusal is `{start: false}` with status 200, so a stale link leaves no console error). The page (`web/src/voice/listenStart.ts`)
+  takes `listen` out of the address before it asks, so a reload presents nothing. Nothing else starts the microphone from an address.
+- **The older `?autostart` is still there** (tray "Listen" with no window, `scripts/kagent-overlay.sh --talk`, `test-work-web.py`): the owner's own click
+  starts it, and it is not the login path. It is a flag in an address that starts the microphone, which is what the marker was made to avoid;
+  moving the tray path to a marker too is an open question for the owner.
+- **After login** is "the daemon started within 5 minutes of the graphical session": `XDG_SESSION_ID`, else `loginctl show-user <uid> -p Display`, then
+  `show-session -p Timestamp --value`, read as local time (`login.rs`, pure, tested with samples). When it cannot be told it does not start. Known
+  edge: `Restart=on-failure` of the unit within those 5 minutes of a login starts a second time (the greeting is said again).
+- **A window that is already open is never taken over**: nothing starts (the usual start-widget code then adopts it). With Listen on start on, the
+  window opens even with `startWidget` off (as the full layout). While the session is locked nothing opens, for up to 10 minutes; after that the usual
+  start-widget behaviour runs.
+- **The idle end** is checked on the 10 s watchdog tick of `live/mod.rs`, so it is exact to 10 s; the owner's speech is each non-empty piece of the
+  input transcript and each typed text. The detail "no speech for N minutes" is in the `idle` status. The session is the first `/live` connection
+  within 60 s of the marker's use (`ListenStart::claim`); the tray's tooltip reads `ListenStart::at_login`. The chip and the pulsing tray icon already
+  show a running session: no new indicator.
+- **"Stop listening"** is a phrase the daemon hears itself (`listen_start/stop.rs`, in the session started at login only), because no such phrase
+  existed and the card promises it; it is not a command in any other session. This is a seventh commit beyond the six the work item listed.
+- **The greeting** is built when the session is claimed (the hour it is said) and sent at the first `setupComplete` as one `[SAY]` turn with the
+  morning report that waits (`spoken_turn`); a report that is built after that second is spoken by the usual rule in the next session. A microphone
+  that is refused is one toast from the page and no retry.
+- **Settings**: `voice.listenOnStart`, `voice.listenOnStartIdleMinutes` (1..120, validated on patch and load) and `startup.greeting.spoken` are protected
+  keys; `FREE_KEYS` of the key walk now names the free keys of `voice` and `startup.greeting` one by one (a prefix would have listed them as both).
+  `live/mod.rs` had grown past 400 lines: its small helpers moved to `live/session.rs`.
+- **The sweep** (`web/reader/sweep.rs`) matches a process whose command is a Chromium-family browser (last path part holds brave, chrome, chromium, msedge
+  or microsoft-edge) and holds exactly `--user-data-dir=<data>/reader-profile` (a trailing slash allowed), that is not this daemon and not below it. It
+  runs awaited at start (TERM, KILL after 3 s) so nothing is read before it. Its real-process test starts two dummies (a symlink named `chromium` to
+  python3, one on the reader profile, one on another) and ends only the first.
+- **Not verified**: a real login, a real microphone, the lock screen and `loginctl` on this machine's session (only its text format is tested), and
+  `scripts/test-live.py` (port 7878 is the owner's daemon). The greeting turn and the idle end are unit-tested at their pure parts.
+
 ## F. Progress
 
 - [x] S0 compile drafts
