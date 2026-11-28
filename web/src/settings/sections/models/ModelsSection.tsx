@@ -2,7 +2,8 @@
 // one of them on the right, in one card; the defaults under it.
 import { useEffect, useState } from "react";
 import Icon from "../../../components/Icon";
-import { api, type ModelView, type NewProvider, type ProviderView, type Template } from "../../../api";
+import { api, type NewProvider, type ProviderView, type Template } from "../../../api";
+import type { PickerModel } from "../../../picker";
 import { useStore } from "../../../store";
 import type { SectionProps } from "../../registry";
 import { EmptyState, SectionPage } from "../../ui";
@@ -18,7 +19,7 @@ export default function ModelsSection({ title, description }: SectionProps) {
   const { report } = useSettingPatch();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [providers, setProviders] = useState<ProviderView[]>([]);
-  const [chat, setChat] = useState<ModelView[]>([]);
+  const [chat, setChat] = useState<PickerModel[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [working, setWorking] = useState(false);
@@ -27,7 +28,7 @@ export default function ModelsSection({ title, description }: SectionProps) {
   // Everything is read again when `round` moves: after a provider changed.
   useEffect(() => {
     void api.get<{ templates: Template[] }>("/api/providers/templates").then((t) => setTemplates(t.templates));
-    void api.get<Record<string, ModelView[]>>("/api/models").then((m) => setChat(m.chat ?? []));
+    void api.get<Record<string, PickerModel[]>>("/api/models").then((m) => setChat(m.chat ?? []));
     void api.get<{ providers: ProviderView[] }>("/api/providers").then((p) => {
       setProviders(p.providers);
       setSelectedId((cur) => (p.providers.some((x) => x.id === cur) ? cur : (p.providers[0]?.id ?? null)));

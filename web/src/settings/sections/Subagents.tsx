@@ -9,7 +9,8 @@ import { Badge, Confirm, EmptyState, Field, GroupCard, ListDetail, SectionPage }
 import { useDraft } from "../useDraft";
 import { useSettingPatch } from "../useSettingPatch";
 import { agentsApi, type AgentList, type AgentProfileView, type InvalidProfile, type ProfileBody, type SubagentsSettings } from "../subagents/api";
-import { draftOf, emptyDraft, type ModelRef } from "../subagents/draft";
+import { draftOf, emptyDraft } from "../subagents/draft";
+import type { PickerModel } from "../../picker";
 import ProfileEditor from "../subagents/ProfileEditor";
 import "../subagents/subagents.css";
 
@@ -82,7 +83,7 @@ export default function Subagents({ title, description }: SectionProps) {
   const [working, setWorking] = useState(false);
   const [serverError, setServerError] = useState<string | undefined>();
   const [confirmDelete, setConfirmDelete] = useState<{ name: string; label: string } | null>(null);
-  const [models, setModels] = useState<ModelRef[]>([]);
+  const [models, setModels] = useState<PickerModel[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
 
   // Read on opening, after a change made here (`round`).
@@ -107,7 +108,7 @@ export default function Subagents({ title, description }: SectionProps) {
   // The models and the tool groups the form offers.
   useEffect(() => {
     let open = true;
-    void api.get<Record<string, { ref: string; name?: string }[]>>("/api/models").then(
+    void api.get<Record<string, PickerModel[]>>("/api/models").then(
       (m) => {
         if (open) setModels(m.chat ?? []);
       },

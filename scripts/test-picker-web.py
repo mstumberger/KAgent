@@ -5,15 +5,20 @@ A real kagentd (temporary KAGENT_HOME, port 7878) answers everything except the 
 picker (GET /api/state, GET /api/models, GET /api/providers and the session routes), which a small
 proxy mocks in memory: no provider is ever reached. Screenshots go to /tmp/kagent-s41-shots/.
 Run from the repo root after `cargo build` and `npm run build` in web/."""
-import asyncio, json, os, shutil, subprocess, sys, tempfile, threading, time, urllib.request
+import asyncio, json, os, re, shutil, subprocess, sys, tempfile, threading, time, urllib.request
 from http.server import ThreadingHTTPServer
 import websockets
 from picker_web_lib import *
 from picker_web_lib import TOKEN  # noqa: F401
 
 ACTIVE = "document.activeElement"
-ROWS = "[...document.querySelectorAll('.mm-list [role=option]')]"
-ROW = lambda name: f"{ROWS}.find(r => r.querySelector('.pop-text').textContent === {json.dumps(name)})"
+# v0.0.3: the menu's list is the model chooser (chooser.md): the Default row, and the models of ONE provider at a time. ROW(name)
+# opens the provider of the model first (a click on its row), then finds the row, so a check can name any model as before.
+PROVIDER_OF = {"claude-opus-4-6": "anthropic", "claude-haiku-4-5": "anthropic", "gemini-3.8-flash": "gemini"}
+ROWS = "[...document.querySelectorAll('.mc-model, .mc-none')]"
+ROW = lambda name: (f"/*P:{PROVIDER_OF[name]}*/{ROWS}.find(r => r.querySelector('.mc-mname')?.childNodes[0].textContent.trim() === {json.dumps(name)})"
+                    if name in PROVIDER_OF else "document.querySelector('.mc-none')")
+SEARCH = "document.querySelector('.mc-search input')"
 TRIGGER_TEXT = "[...document.querySelectorAll('.mm-trigger .mm-name, .mm-trigger .mm-effort-tag')].map(e => e.textContent).join(' ')"
 
 
@@ -54,6 +59,16 @@ async def main():
         tab = next(t for t in tabs if t["type"] == "page")
         async with websockets.connect(tab["webSocketDebuggerUrl"], max_size=2**26) as ws:
             page = Page(ws)
+            # An expression with ROW(name) in it names the provider of that model in a /*P:id*/ marker: the provider is opened first
+            # (React draws the models after the click, not inside it), then the expression runs.
+            plain_js = page.js
+
+            async def js_with_provider(expr):
+                for pid in dict.fromkeys(re.findall(r"/\*P:([a-z]+)\*/", expr)):
+                    await plain_js(f"document.querySelector('.mc-provider[data-provider={pid}]')?.click()")
+                    await asyncio.sleep(0.08)
+                return await plain_js(expr)
+            page.js = js_with_provider
             reader = asyncio.create_task(page.reader())
             for domain in ("Page", "Runtime", "Log"):
                 await page.send(f"{domain}.enable")
@@ -64,7 +79,7 @@ async def main():
             async def open_page(theme, query="", remember=None, **cfg):
                 reset(**cfg)
                 await page.send("Page.navigate", url="about:blank")
-                mem = f"localStorage.setItem('kagent.picker', {json.dumps(json.dumps(remember))});" if remember else "localStorage.removeItem('kagent.picker');"
+                mem = (f"localStorage.setItem('kagent.picker', {json.dumps(json.dumps(remember))});" if remember else "localStorage.removeItem('kagent.picker');") + "localStorage.removeItem('kagent.chooser.recent');"
                 await page.send("Page.addScriptToEvaluateOnNewDocument", source=f"try {{ localStorage.setItem('kagent.theme','{theme}'); {mem} }} catch (e) {{}}")
                 configure(**cfg)
                 await page.send("Page.navigate", url=f"http://127.0.0.1:{PORT}/{query}#token=abc123")
@@ -95,10 +110,12 @@ async def main():
                 results[f"{t}: Ctrl+M opens the menu"] = True
                 results[f"{t}: aria: haspopup listbox, expanded"] = await page.js("(() => { const b = document.querySelector('.mm-trigger'); return b.getAttribute('aria-haspopup') === 'listbox' && b.getAttribute('aria-expanded') === 'true' && b.getAttribute('aria-controls') === document.querySelector('.mm-pop').id; })()")
                 results[f"{t}: the check sits on Default (no choice), its second line names the default model"] = await page.js(f"(() => {{ const r = {ROW('Default')}; return !!r.querySelector('.pop-check') && r.querySelector('.pop-hint').textContent === 'gemini-3.8-flash' && r.getAttribute('aria-selected') === 'true'; }})()")
-                results[f"{t}: one group per provider, headings from providerName"] = await page.js("[...document.querySelectorAll('.pop-head')].map(h => h.textContent).join('|') === 'Anthropic|Google Gemini'")
-                results[f"{t}: the image icon shows where the model reads images, with its title"] = await page.js(f"(() => {{ return !!{ROW('claude-opus-4-6')}.querySelector('.mm-image[title=\"Reads images\"]') && !{ROW('claude-haiku-4-5')}.querySelector('.mm-image') && !!{ROW('gemini-3.8-flash')}.querySelector('.mm-image'); }})()")
+                results[f"{t}: one provider per row of the first level, from providerName"] = await page.js("[...document.querySelectorAll('.mc-pname')].map(h => h.textContent).join('|') === 'Anthropic|Google Gemini'")
+                results[f"{t}: the image icon shows where the model reads images, with its title"] = (
+                    await page.js(f"!!{ROW('claude-opus-4-6')}.querySelector('.mm-image[title=\"Reads images\"]') && !{ROW('claude-haiku-4-5')}.querySelector('.mm-image')")
+                    and await page.js(f"!!{ROW('gemini-3.8-flash')}.querySelector('.mm-image')"))
                 results[f"{t}: the slider is hidden: the default model offers no efforts"] = await page.js("!document.querySelector('.mm-effort')")
-                results[f"{t}: the cursor row is the only row in the tab order"] = await page.js(f"{ROWS}.filter(r => r.tabIndex === 0).length === 1 && {ROWS}.filter(r => r.tabIndex === 0)[0] === document.activeElement")
+                results[f"{t}: the search box has the focus and names the cursor row (the chooser, not a roving list)"] = await page.js(f"{ACTIVE} === {SEARCH} && !!document.getElementById({SEARCH}.getAttribute('aria-activedescendant'))")
                 results[f"{t}: the menu is above the trigger, its left edge on the trigger's"] = await page.js("(() => { const p = document.querySelector('.mm-pop').getBoundingClientRect(), b = document.querySelector('.mm-trigger').getBoundingClientRect(); return p.bottom <= b.top && Math.abs(p.left - b.left) < 2 && p.width >= 259; })()")
                 await page.shot(f"menu-default-{t}")
                 # slash picker is suspended while the menu is open
@@ -138,10 +155,10 @@ async def main():
                 results[f"{t}: the trigger shows the effort in dim after a middle dot"] = await page.js(f"{TRIGGER_TEXT} === 'claude-opus-4-6 · medium' && document.querySelector('.mm-effort-tag') !== null")
                 results[f"{t}: the stop is named at the right and the menu stays open"] = await page.js("document.querySelector('.mm-stop').textContent === 'medium' && !!document.querySelector('.mm-pop') && document.querySelector('.mm-effort input').value === '2'")
                 await page.shot(f"menu-effort-{t}")
-                # Tab: list -> slider -> Manage models
-                await page.js(f"{ROWS}.find(r => r.tabIndex === 0).focus()")
+                # Tab: the chooser (its last chip) -> slider -> Manage models
+                await page.js("document.querySelector('.mc-chip[data-chip=reasoning]').focus()")
                 await page.key("Tab", "Tab", 9)
-                results[f"{t}: Tab goes from the list to the slider, then to Manage models"] = await page.js(f"{ACTIVE}.type === 'range'")
+                results[f"{t}: Tab goes from the chooser to the slider, then to Manage models"] = await page.js(f"{ACTIVE}.type === 'range'")
                 await page.key("Tab", "Tab", 9)
                 results[f"{t}: ... Manage models"] = await page.js(f"{ACTIVE}.classList.contains('mm-manage')")
                 await page.key("Tab", "Tab", 9, 8)
@@ -171,37 +188,44 @@ async def main():
             await page.js("document.querySelector('.mm-trigger').focus()")
             await page.key("ArrowDown", "ArrowDown", 40)
             await page.until("!!document.querySelector('.mm-pop')", "ArrowDown opens")
-            results["keys: ArrowDown on the trigger opens the menu with the focus on the current row"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'claude-haiku-4-5'")
+            results["keys: ArrowDown on the trigger opens the menu with the focus in the search box, the cursor on the current provider"] = await page.js(f"{ACTIVE} === {SEARCH} && document.querySelector('.mc-provider.active').dataset.provider === 'anthropic' && {SEARCH}.getAttribute('aria-activedescendant') === document.querySelector('.mc-provider.active').id")
             await page.key("ArrowDown", "ArrowDown", 40)
-            results["keys: Down moves the cursor over the next row, skipping the heading"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'gemini-3.8-flash'")
+            results["keys: Down moves the cursor over the next provider"] = await page.js("document.querySelector('.mc-provider.active').dataset.provider === 'gemini'")
             await page.key("Home", "Home", 36)
-            results["keys: Home goes to the first row"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'Default'")
+            results["keys: Home goes to the first provider"] = await page.js("document.querySelector('.mc-provider.active').dataset.provider === 'anthropic'")
             await page.key("ArrowUp", "ArrowUp", 38)
-            results["keys: Up from the first row wraps to the last, End agrees"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'gemini-3.8-flash'")
+            results["keys: Up from the first provider goes to the Default row"] = await page.js("document.querySelector('.mc-none').classList.contains('cursor')")
+            await page.key("ArrowDown", "ArrowDown", 40)
             await page.key("End", "End", 35)
-            results["keys: End goes to the last row"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'gemini-3.8-flash'")
-            await page.key("c", "KeyC", 67, 0, "c")
-            results["keys: a typed letter jumps to the first row after the cursor that starts with it"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'claude-opus-4-6'")
-            await asyncio.sleep(0.8)
-            await page.key("c", "KeyC", 67, 0, "c")
-            results["keys: the typed letters are forgotten after 700 ms (c again goes on to the next)"] = await page.js(f"{ACTIVE}.querySelector('.pop-text').textContent === 'claude-haiku-4-5'")
+            results["keys: End goes to the last provider"] = await page.js("document.querySelector('.mc-provider.active').dataset.provider === 'gemini'")
+            await page.send("Input.insertText", text="opus")
+            await asyncio.sleep(0.2)
+            results["keys: typed letters search (the models narrow to opus)"] = await page.js("[...document.querySelectorAll('.mc-model')].length === 1 && document.querySelector('.mc-model').textContent.includes('claude-opus-4-6')")
+            await page.js(f"{SEARCH}.select()")
+            await page.key("Backspace", "Backspace", 8)
+            await page.js("document.querySelector('.mc-provider[data-provider=anthropic]').click()")
+            await page.key("ArrowRight", "ArrowRight", 39)
+            await page.key("ArrowDown", "ArrowDown", 40)
             await page.key("Enter", "Enter", 13)
             await page.until(f"{TRIGGER_TEXT} === 'claude-haiku-4-5' && !document.querySelector('.mm-pop')", "Enter picks")
             results["keys: Enter picks and closes; the focus is on the trigger"] = await page.js(f"{ACTIVE} === document.querySelector('.mm-trigger')")
             await page.key(" ", "Space", 32)
             await page.until("!!document.querySelector('.mm-pop')", "Space opens")
             await page.key("ArrowDown", "ArrowDown", 40)
-            await page.key(" ", "Space", 32, 0, " ")
-            await page.until(f"{TRIGGER_TEXT} === 'gemini-3.8-flash'", "Space picks")
-            results["keys: Space on the trigger opens, Space on a row picks"] = True
+            await page.key("ArrowRight", "ArrowRight", 39)
+            await page.key("Enter", "Enter", 13)
+            await page.until(f"{TRIGGER_TEXT} === 'gemini-3.8-flash'", "Enter picks the first model of Gemini")
+            results["keys: Space on the trigger opens, Enter on a model picks"] = True
             # mouse
             await page.js("document.querySelector('.mm-trigger').click()")
             await page.until("!!document.querySelector('.mm-pop')", "open for the mouse")
-            x, y = await page.center(".mm-list [role=option]:nth-of-type(4)")
+            await page.js("document.querySelector('.mc-provider[data-provider=anthropic]').click()")
+            await asyncio.sleep(0.1)
+            x, y = await page.center(".mc-model:nth-of-type(2)")
             await page.mouse("mouseMoved", x, y)
             await asyncio.sleep(0.2)
-            results["mouse: hover moves the cursor"] = await page.js(f"{ROWS}.findIndex(r => r.classList.contains('cursor')) === 2")
-            x, y = await page.center(".mm-pop .pop-head")
+            results["mouse: hover moves the cursor"] = await page.js("[...document.querySelectorAll('.mc-model')].findIndex(r => r.classList.contains('cursor')) === 1")
+            x, y = await page.center(".mm-pop .mc-chips")
             await page.mouse("mousePressed", x, y)
             await page.mouse("mouseReleased", x, y)
             results["mouse: a press inside the popup on anything but a row does nothing"] = await menu_open() and len(calls()) == 0 or await menu_open()
@@ -221,9 +245,9 @@ async def main():
             results["gone: the trigger is in the signal colour with the reason in its title"] = await page.js("(() => { const b = document.querySelector('.mm-trigger'); return b.classList.contains('gone') && b.title.includes('switched off'); })()")
             await page.js("document.querySelector('.mm-trigger').click()")
             await page.until("!!document.querySelector('.mm-pop')", "open gone")
-            results["gone: its row is above Default, disabled, with the reason and a check"] = await page.js(f"(() => {{ const rows = {ROWS}; return rows[0].getAttribute('aria-disabled') === 'true' && rows[0].querySelector('.pop-text').textContent === 'gone-model' && rows[0].querySelector('.pop-hint').textContent === 'model switched off' && !!rows[0].querySelector('.pop-check') && rows[1].querySelector('.pop-text').textContent === 'Default'; }})()")
+            results["gone: its row is above Default, disabled, with the reason and a check"] = await page.js("(() => { const k = document.querySelector('.mc-kept'); return k.classList.contains('off') && k.querySelector('.pop-text').textContent === 'gone-model' && k.querySelector('.pop-hint').textContent === 'model switched off' && !!k.querySelector('.pop-check') && !document.querySelector('.mc-none .pop-check') && k.compareDocumentPosition(document.querySelector('.mc-none')) & Node.DOCUMENT_POSITION_FOLLOWING; })()")
             before = len(calls())
-            await page.js(f"{ROWS}[0].click()")
+            await page.js("document.querySelector('.mc-kept').click()")
             await asyncio.sleep(0.2)
             results["gone: a click on it does nothing"] = len(calls()) == before and await menu_open()
             await page.shot("menu-gone-dark")
@@ -267,7 +291,7 @@ async def main():
                 results[f"700x500 {theme}: the trigger is a 28 x 28 button with the text in its title"] = await page.js("(() => { const b = document.querySelector('.mm-trigger'), r = b.getBoundingClientRect(); return Math.round(r.width) === 28 && Math.round(r.height) === 28 && b.title.includes('claude-opus-4-6') && b.title.includes('high') && getComputedStyle(b.querySelector('.mm-name')).display === 'none'; })()")
                 await page.ctrl_m()
                 await page.until("!!document.querySelector('.mm-pop')", "narrow menu")
-                results[f"700x500 {theme}: the menu fits the window"] = await page.js("(() => { const p = document.querySelector('.mm-pop').getBoundingClientRect(); return p.left >= 0 && p.right <= window.innerWidth && p.top >= 0 && p.height <= window.innerHeight * 0.6 + 2; })()")
+                results[f"700x500 {theme}: the menu fits the window"] = await page.js("(() => { const p = document.querySelector('.mm-pop').getBoundingClientRect(); return p.left >= 0 && p.right <= window.innerWidth && p.top >= 0 && p.height <= window.innerHeight * 0.8 + 2; })()")
                 await page.shot(f"menu-700x500-{theme}")
 
             # ================================================================ the widget (340x460)

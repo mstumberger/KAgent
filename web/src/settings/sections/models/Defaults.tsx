@@ -1,15 +1,16 @@
 // Defaults (models.md section 7.6): which chat model answers, steps in, does the
-// short jobs and reads the screen; then the temperature. The effort is chosen per
+// short jobs and reads the screen (each is picked in the model chooser, chooser.md); then the temperature. The effort is chosen per
 // conversation in the composer (picker.md). The
 // live model is chosen in the Voice section.
 import type { FormEvent } from "react";
-import type { ModelView, ProviderView } from "../../../api";
+import type { ProviderView } from "../../../api";
+import ChooserField from "../../../components/chooser/ChooserField";
+import type { PickerModel } from "../../../picker";
 import { useStore } from "../../../store";
-import Dropdown from "../../Dropdown";
 import { Field, GroupCard, Row } from "../../ui";
 import { useDraft } from "../../useDraft";
 import { useSettingPatch } from "../../useSettingPatch";
-import { modelOptions, unusableWhy } from "./present";
+import { unusableWhy } from "./present";
 
 type Pick = { label: string; key: "chatModel" | "fallbackModel" | "fastModel" | "visionModel"; none: string; hint: string };
 
@@ -20,7 +21,7 @@ const PICKS: Pick[] = [
   { label: "Vision", key: "visionModel", none: "(auto: the first Gemini flash model)", hint: 'Reads the screen for "what does this say?"' },
 ];
 
-export default function Defaults({ chat, providers }: { chat: ModelView[]; providers: ProviderView[] }) {
+export default function Defaults({ chat, providers }: { chat: PickerModel[]; providers: ProviderView[] }) {
   const settings = useStore().state?.settings;
   const { save } = useSettingPatch();
   const [temperature, setTemperature, temperatureDirty] = useDraft({ value: settings?.options?.temperature ?? null });
@@ -35,11 +36,14 @@ export default function Defaults({ chat, providers }: { chat: ModelView[]; provi
     <GroupCard title="Defaults" description="Which model does which job. Only a model with the chat role can be chosen; one that cannot be used says why.">
       {PICKS.map(({ label, key, none, hint }) => {
         const current = settings?.[key] ?? "";
+        // The vision job offers only models that read images (the daemon refuses the others).
+        const models = key === "visionModel" ? chat.filter((m) => m.config.supportsImage) : chat;
         const why = current ? unusableWhy(current, providers) : null;
+        const keptHint = (ref: string) => unusableWhy(ref, providers) ?? (key === "visionModel" ? "does not read images" : "not in the list");
         return (
           <Row key={key} label={label} hint={hint}>
             <div className="dd-cell">
-              <Dropdown ariaLabel={label} value={current} options={modelOptions(chat, providers, current, none)} onChange={(value) => void save(key, value)} />
+              <ChooserField ariaLabel={label} models={models} value={current} none={{ label: none }} keptHint={keptHint} onChange={(value) => void save(key, value)} />
               {why && <span className="ui-inline-bad">{why}</span>}
             </div>
           </Row>

@@ -12,9 +12,11 @@ DAEMON = "http://127.0.0.1:7878"
 TOKEN = {"v": ""}
 
 
-def model(pid, pname, mid, levels=(), image=False):
-    return {"id": mid, "name": mid, "ref": f"{pid}::{mid}", "providerId": pid, "providerName": pname,
-            "config": {"enabled": True, "contextWindow": 200000, "maxOutputTokens": 8000, "supportsToolCall": True, "supportsImage": image,
+def model(pid, pname, mid, levels=(), image=False, local=None, free=None, ctx=200000, tools=True):
+    """A model of GET /api/models; `local` and `free` are the flags of the chooser (chooser.md section 2), left out when None."""
+    flags = {k: v for k, v in (("local", local), ("free", free)) if v is not None}
+    return {"id": mid, "name": mid, "ref": f"{pid}::{mid}", "providerId": pid, "providerName": pname, **flags,
+            "config": {"enabled": True, "contextWindow": ctx, "maxOutputTokens": 8000, "supportsToolCall": tools, "supportsImage": image,
                        "reasoningLevels": list(levels), "reasoningPatches": {}, "supportsLive": False, "liveProtocol": None, "requestPatch": None, "roles": ["chat"]}}
 
 
@@ -40,6 +42,8 @@ UPLOADS = []
 # The local models page (S47; set with `reset(local=<the view of GET /api/local-models>)`): the view the mock answers and changes
 # as the page downloads, cancels, removes and sets a model. Empty: the routes fall through to the daemon.
 LOCAL = {}
+# The model keys the page saved with PUT /api/settings (chooser.md section 1), in order, as JSON text.
+SETTING_PUTS = []
 # The screen watch (S48; set with `reset(watch=<the watch of GET /api/screen-watch>, watch_model=<GET /api/screen-watch/model>)`):
 # the watch the daemon would report (None: none runs), and the model line of the settings card.
 WATCH = {}
@@ -67,6 +71,7 @@ def reset(**kw):
         for iid, b64 in stored.items():
             data = base64.b64decode(b64)
             IMAGES.setdefault(sid, {})[iid] = (data, *png_size(data))
+    SETTING_PUTS.clear()
     LOCAL.clear()
     LOCAL.update(json.loads(json.dumps(kw["local"])) if kw.get("local") else {})
     WATCH.clear()
@@ -269,6 +274,10 @@ class Mock(BaseHTTPRequestHandler):
             if "text" in body:
                 OUTPUT[body["id"]] = body["text"]
             return self.send(200, {"ok": True})
+        if path == "/__settingputs":
+            return self.send(200, {"puts": SETTING_PUTS})
+        if path == "/api/settings" and method == "PUT" and any(k in (body or {}) for k in ("chatModel", "fallbackModel", "fastModel", "visionModel")):
+            SETTING_PUTS.append(json.dumps(body))
         if path == "/__uploads":
             return self.send(200, {"uploads": UPLOADS})
         if path == "/__reads":
@@ -522,6 +531,10 @@ def local(**body):
 def watch(**body):
     """Change the screen watch of the mock while the page runs (S48); no arguments: it ended."""
     urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/__watch", data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json"})).read()
+
+
+def setting_puts():
+    return json.loads(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/__settingputs").read())["puts"]
 
 
 def calls():

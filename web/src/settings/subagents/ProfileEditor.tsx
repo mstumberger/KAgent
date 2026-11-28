@@ -4,7 +4,9 @@
 // above the form.
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import type { ProfileBody } from "./api";
-import { MAX_ITERATIONS, MAX_PROMPT, bodyOf, draftErrors, emptyDraft, type Draft, type ModelRef } from "./draft";
+import ChooserField from "../../components/chooser/ChooserField";
+import type { PickerModel } from "../../picker";
+import { MAX_ITERATIONS, MAX_PROMPT, bodyOf, draftErrors, emptyDraft, type Draft } from "./draft";
 import { groupAbout, groupLabel } from "../groups";
 
 interface Props {
@@ -13,7 +15,7 @@ interface Props {
   editing?: boolean;
   /** The names that exist: the daemon answers 409 for a built-in one. */
   taken: string[];
-  models: ModelRef[];
+  models: PickerModel[];
   /** The tool groups a profile may name. */
   groups: string[];
   busy: boolean;
@@ -38,8 +40,6 @@ export default function ProfileEditor({ initial, editing = false, taken, models,
     if (Object.keys(draftErrors(draft, taken, editing)).length > 0) return;
     await onSave(draft.name.trim(), bodyOf(draft));
   };
-  // A model set in the file that the providers no longer list stays selectable, so it is seen.
-  const picks = draft.model && !models.some((m) => m.ref === draft.model) ? [{ ref: draft.model }, ...models] : models;
 
   return (
     <form className="ui-form sb-editor" onSubmit={(e) => void submit(e)} noValidate>
@@ -67,18 +67,12 @@ export default function ProfileEditor({ initial, editing = false, taken, models,
           </span>
         )}
       </label>
-      <label className="ui-field">
+      <div className="ui-field">
         <span className="ui-field-label">Model</span>
-        <select value={draft.model} aria-label="Profile model" onChange={set("model")}>
-          <option value="">The chat model</option>
-          {picks.map((m) => (
-            <option key={m.ref} value={m.ref}>
-              {m.name ? `${m.name} (${m.ref})` : m.ref}
-            </option>
-          ))}
-        </select>
+        {/* A model set in the file that the providers no longer list is the current row, so it is seen. */}
+        <ChooserField ariaLabel="Profile model" models={models} value={draft.model} none={{ label: "The chat model" }} keptHint={() => "the providers no longer list it"} onChange={(model) => setDraft((d) => ({ ...d, model }))} />
         <span className="hint">A small local model fits research; the chat model is the default.</span>
-      </label>
+      </div>
       <div className="ui-field">
         <span className="ui-field-label">Tool groups</span>
         <div className="chips" role="group" aria-label="Tool groups">

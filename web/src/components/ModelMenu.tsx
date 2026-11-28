@@ -1,11 +1,12 @@
 // The model picker of the composer (picker.md section 5): a trigger with the model and the
 // effort, and the menu above it. The body of the menu is also the content of the widget's sheet.
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { api, type ProviderView } from "../api";
 import { label } from "../picker";
 import { refreshModels, setSessionModel, showView } from "../store";
 import { unusableWhy } from "../settings/sections/models/present";
 import Icon from "./Icon";
+import ModelChooser from "./chooser/ModelChooser";
 import { useChoice } from "./useChoice";
 import "./popup.css";
 import "./model-menu.css";
@@ -20,18 +21,6 @@ function useWhy(ref: string | null, missing: boolean): string {
   return why;
 }
 
-interface Row {
-  key: string;
-  head?: string;
-  /** `null`: the Default row. */
-  ref?: string | null;
-  text?: string;
-  hint?: string;
-  image?: boolean;
-  off?: boolean;
-  current?: boolean;
-}
-
 interface BodyProps {
   sessionId: string | null;
   /** The menu closes after a pick; the sheet stays open. */
@@ -41,71 +30,21 @@ interface BodyProps {
   onEscape?: () => void;
 }
 
-/** The rows, effort and "Manage models" of the menu (picker.md section 5.2). */
+/** The chooser, the effort and "Manage models" of the menu (picker.md section 5.2, chooser.md). */
 export function ModelBody({ sessionId, onPicked, onClose, onEscape }: BodyProps) {
   const c = useChoice(sessionId);
   const why = useWhy(c.chosen, c.missing);
   const listId = useId();
-  const list = useRef<HTMLDivElement>(null);
-  const typed = useRef({ text: "", timer: 0 });
   const [draft, setDraft] = useState<number | null>(null);
 
-  const rows: Row[] = [{ key: "default", ref: null, text: "Default", hint: c.chatModel ? label(c.chatModel) : "none: pick a model", current: !c.chosen }];
-  if (c.missing && c.chosen) rows.unshift({ key: "gone", ref: c.chosen, text: label(c.chosen), hint: why, off: true, current: true });
-  for (const m of c.models ?? []) {
-    if (!rows.some((r) => r.head === m.providerName)) rows.push({ key: `h-${m.providerId}`, head: m.providerName });
-    rows.push({ key: m.ref, ref: m.ref, text: label(m.ref), image: m.config.supportsImage, current: m.ref === c.chosen });
-  }
-  const pickable = (i: number) => !rows[i].head && !rows[i].off;
-  const [cursor, setCursor] = useState(() => {
-    const at = rows.findIndex((r, i) => r.current && pickable(i));
-    return at >= 0 ? at : rows.findIndex((_, i) => pickable(i));
-  });
-  const step = (from: number, dir: 1 | -1) => {
-    for (let n = 1; n <= rows.length; n++) {
-      const i = (from + dir * n + rows.length * 2) % rows.length;
-      if (pickable(i)) return i;
-    }
-    return from;
-  };
-
-  // The focus goes to the cursor row when the body opens, then follows the cursor while it is in the list:
-  // a hover over a row does not take it from the slider.
-  const opened = useRef(false);
-  useEffect(() => {
-    const at = document.activeElement;
-    if (!opened.current || list.current?.contains(at)) (list.current?.children[cursor] as HTMLElement | undefined)?.focus();
-    opened.current = true;
-  }, [cursor]);
-  useEffect(() => () => window.clearTimeout(typed.current.timer), []);
-
-  const pick = async (i: number) => {
-    const row = rows[i];
-    if (!sessionId || !row || !pickable(i)) return;
+  const pick = async (ref: string | null) => {
+    if (!sessionId) return;
     try {
-      await setSessionModel(sessionId, row.ref === null ? { model: null, reasoningLevel: null } : { model: row.ref });
+      await setSessionModel(sessionId, ref === null ? { model: null, reasoningLevel: null } : { model: ref });
     } catch {
       // the store shows the refusal as a notice
     }
     onPicked?.();
-  };
-  const onKeys = (e: KeyboardEvent) => {
-    const letter = e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") setCursor(step(cursor, e.key === "ArrowDown" ? 1 : -1));
-    else if (e.key === "Home") setCursor(step(-1, 1));
-    else if (e.key === "End") setCursor(step(rows.length, -1));
-    else if (e.key === "Enter" || e.key === " ") void pick(cursor);
-    else if (letter) {
-      typed.current.text += e.key.toLowerCase();
-      window.clearTimeout(typed.current.timer);
-      typed.current.timer = window.setTimeout(() => {
-        typed.current.text = "";
-      }, 700);
-      const hit = Array.from({ length: rows.length }, (_, n) => (cursor + n + 1) % rows.length).find((i) => pickable(i) && (rows[i].text ?? "").toLowerCase().startsWith(typed.current.text));
-      if (hit !== undefined) setCursor(hit);
-      return;
-    } else return;
-    e.preventDefault();
   };
 
   const stops = ["default", ...c.levels];
@@ -125,41 +64,15 @@ export function ModelBody({ sessionId, onPicked, onClose, onEscape }: BodyProps)
         onEscape();
       }}
     >
-      <div ref={list} className="mm-list" role="listbox" id={listId} aria-label="Model" onKeyDown={onKeys}>
-        {rows.map((r, i) =>
-          r.head ? (
-            <div key={r.key} role="presentation" className="pop-head">
-              {r.head}
-            </div>
-          ) : (
-            <div
-              key={r.key}
-              role="option"
-              aria-selected={!!r.current}
-              aria-disabled={r.off || undefined}
-              tabIndex={i === cursor ? 0 : -1}
-              className={`pop-item${i === cursor && !r.off ? " cursor" : ""}${r.off ? " off" : ""}`}
-              onMouseEnter={() => pickable(i) && setCursor(i)}
-              onClick={() => void pick(i)}
-            >
-              <span className="mm-label">
-                <span className="pop-text">{r.text}</span>
-                {r.hint && <span className="pop-hint pop-text">{r.hint}</span>}
-              </span>
-              {r.image && (
-                <span className="mm-image" title="Reads images">
-                  <Icon name="image" size={13} />
-                </span>
-              )}
-              {r.current && (
-                <span className="pop-check">
-                  <Icon name="check" size={16} />
-                </span>
-              )}
-            </div>
-          ),
-        )}
-      </div>
+      <ModelChooser
+        models={c.models ?? []}
+        value={c.chosen}
+        focusRef={c.answering}
+        none={{ label: "Default", hint: c.chatModel ? label(c.chatModel) : "none: pick a model" }}
+        kept={c.missing && c.chosen ? { label: label(c.chosen), hint: why } : undefined}
+        onPick={(ref) => void pick(ref)}
+        onEscape={onEscape}
+      />
       {stops.length > 1 && (
         <>
           <div className="pop-sep" />
