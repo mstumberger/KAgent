@@ -58,6 +58,16 @@ pub fn reasoning_patch(config: &ModelConfig, api: crate::config::ApiType, option
     }
 }
 
+/// The pixels of a message as `(mime, base64)`, in order: only the images the request carries
+/// (`ImageRef::data`, set by the agent for the last messages, vision.md section 2).
+pub fn image_payloads(m: &kagent_core::protocol::Message) -> Vec<(String, String)> {
+    use base64::Engine as _;
+    m.images
+        .iter()
+        .filter_map(|i| i.data.as_ref().map(|d| (i.mime.clone(), base64::engine::general_purpose::STANDARD.encode(d.0.as_slice()))))
+        .collect()
+}
+
 /// Parse tool-call arguments that accumulated as a string; invalid JSON becomes
 /// `{"_raw": "..."}` so schema validation reports it back to the model.
 pub fn parse_tool_arguments(raw: &str) -> Value {
@@ -69,6 +79,14 @@ pub fn parse_tool_arguments(raw: &str) -> Value {
         Ok(v) => v,
         Err(_) => serde_json::json!({ "_raw": raw }),
     }
+}
+
+/// A user message with one PNG of the bytes 1, 2, 3, 4 in the request (`AQIDBA==`), for the adapters' tests.
+#[cfg(test)]
+pub(crate) fn message_with_image(text: &str) -> kagent_core::protocol::Message {
+    use kagent_core::protocol::{ImageRef, Message, Pixels};
+    let image = ImageRef { id: "i1".into(), mime: "image/png".into(), width: 2, height: 2, bytes: 4, description: None, read_by: None, data: Some(Pixels(std::sync::Arc::new(vec![1, 2, 3, 4]))) };
+    Message::user(text).with_images(vec![image])
 }
 
 #[cfg(test)]

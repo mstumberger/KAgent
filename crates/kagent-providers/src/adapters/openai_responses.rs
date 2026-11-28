@@ -25,7 +25,15 @@ pub fn build_body(p: &BodyParams) -> Value {
     let mut input: Vec<Value> = Vec::new();
     for m in p.messages {
         match m.role {
-            Role::User => input.push(json!({"role": "user", "content": [{"type": "input_text", "text": m.content}]})),
+            Role::User => {
+                let mut parts: Vec<Value> = vec![json!({"type": "input_text", "text": m.content})];
+                let images = super::image_payloads(m);
+                if !images.is_empty() && m.content.is_empty() {
+                    parts.clear();
+                }
+                parts.extend(images.into_iter().map(|(mime, data)| json!({"type": "input_image", "image_url": format!("data:{mime};base64,{data}")})));
+                input.push(json!({"role": "user", "content": parts}));
+            }
             Role::Assistant => {
                 if !m.content.is_empty() {
                     input.push(json!({"role": "assistant", "content": [{"type": "output_text", "text": m.content}]}));
@@ -236,5 +244,22 @@ mod tests {
         assert_eq!(out.tool_calls.len(), 1);
         assert_eq!(out.tool_calls[0].id, "c1");
         assert_eq!(out.tool_calls[0].input, json!({"a": 1}));
+    }
+
+    #[test]
+    fn an_image_is_an_input_image_part() {
+        let f = fx();
+        let messages = vec![super::super::message_with_image("what does it say"), super::super::message_with_image("")];
+        let body = build_body(&params(&f, &messages));
+        assert_eq!(
+            body["input"],
+            json!([
+                {"role": "user", "content": [
+                    {"type": "input_text", "text": "what does it say"},
+                    {"type": "input_image", "image_url": "data:image/png;base64,AQIDBA=="}
+                ]},
+                {"role": "user", "content": [{"type": "input_image", "image_url": "data:image/png;base64,AQIDBA=="}]}
+            ])
+        );
     }
 }

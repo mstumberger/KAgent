@@ -42,7 +42,7 @@ impl Agent {
         let mut summary = old.as_ref().map(|(text, upto)| (text.clone(), *upto));
         if let Plan::Summarize { tail_cut } = plan {
             let upto = stored_index(&stored, from, &tail, tail_cut);
-            match self.summarize_into(session_id, state, &summarizer_of(config, &compaction), old.as_ref().map(|(text, _)| text.as_str()), &tail[..tail_cut], upto, cancel).await {
+            match self.summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &compaction), old.as_ref().map(|(text, _)| text.as_str()), &tail[..tail_cut], upto, cancel).await {
                 Ok(text) => summary = Some((text, upto)),
                 Err(e) => tracing::warn!(session_id, "history not summarized, trimming instead: {e:#}"),
             }
@@ -65,7 +65,7 @@ impl Agent {
         let Some(cut) = before_last_user(&tail) else { return Ok(None) };
         let upto = stored_index(&stored, from, &tail, cut);
         let text = self
-            .summarize_into(session_id, state, &summarizer_of(config, &self.compaction_config()), old.as_ref().map(|(text, _)| text.as_str()), &tail[..cut], upto, cancel)
+            .summarize_into(session_id, state, &config.model_ref, &summarizer_of(config, &self.compaction_config()), old.as_ref().map(|(text, _)| text.as_str()), &tail[..cut], upto, cancel)
             .await
             .map_err(|e| format!("{e:#}"))?;
         Ok(Some(CompactView { summary: text, kept_messages: stored.len() - upto }))
@@ -93,8 +93,11 @@ impl Agent {
 
     /// Ask the summarizer and store its answer as the summary of the first `upto` stored
     /// messages, written before any request uses it.
-    async fn summarize_into(&self, session_id: &str, state: &SessionState, model_ref: &str, old: Option<&str>, messages: &[Message], upto: usize, cancel: &CancellationToken) -> anyhow::Result<String> {
-        let text = summarize(self.model.clone(), model_ref, old, messages, cancel.clone()).await?;
+    async fn summarize_into(&self, session_id: &str, state: &SessionState, brain: &str, model_ref: &str, old: Option<&str>, messages: &[Message], upto: usize, cancel: &CancellationToken) -> anyhow::Result<String> {
+        // The images of what is summarized become their descriptions, made now when there is none.
+        let mut messages = messages.to_vec();
+        self.imageless(session_id, &mut messages, brain, cancel).await;
+        let text = summarize(self.model.clone(), model_ref, old, &messages, cancel.clone()).await?;
         {
             let mut meta = state.meta.lock().await;
             let previous = (meta.summary.take(), meta.summary_upto.take());

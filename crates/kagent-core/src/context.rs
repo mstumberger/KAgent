@@ -47,6 +47,14 @@ pub(crate) fn message_chars(m: &Message) -> usize {
     m.content.len()
         + m.tool_calls.iter().map(|c| c.name.len() + c.input.to_string().len() + 16).sum::<usize>()
         + 16
+        + m.images.iter().map(image_chars).sum::<usize>()
+}
+
+/// What an image costs in the estimate: about one token per 750 pixels (at most 1600), and a
+/// token is `CHARS_PER_TOKEN` characters. An image already described is counted as its note.
+fn image_chars(image: &crate::protocol::ImageRef) -> usize {
+    let tokens = ((u64::from(image.width) * u64::from(image.height)) / 750).min(1_600) as usize;
+    tokens * CHARS_PER_TOKEN
 }
 
 /// Token budget left for history once the system prompt, tool specs and the reply are

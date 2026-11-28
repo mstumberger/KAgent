@@ -24,6 +24,8 @@ pub use providers::{
     add_provider, delete_provider, fetch_models, list_models, list_providers, provider_order, provider_templates, test_provider, update_provider,
 };
 pub(crate) use providers::{check_model_roles, named_models};
+#[cfg(test)]
+pub(crate) use providers::add as add_provider_to_store;
 
 fn ok_json(v: Value) -> Response {
     (StatusCode::OK, Json(v)).into_response()
@@ -169,7 +171,14 @@ pub async fn post_message(
     let mut opts = st.skills.turn_opts(&text);
     opts.plan = plan;
     opts.images = images::message_images(st.agent.store(), &id, &image_ids).await?;
-    let outcome = st.agent.send_with(&id, text, via, opts).await.map_err(internal)?;
+    let outcome = match st.agent.send_with(&id, text, via, opts).await {
+        Ok(outcome) => outcome,
+        // The notice has been sent; the answer says the same (vision.md section 2).
+        Err(e) => match e.downcast_ref::<kagent_core::agent::vision::Refused>() {
+            Some(refused) => return Err(HttpError(StatusCode::CONFLICT, "refused", refused.0.clone())),
+            None => return Err(internal(e)),
+        },
+    };
     let body = match outcome {
         SendOutcome::Started { turn_id, .. } => json!({"status": "started", "turnId": turn_id}),
         SendOutcome::Queued => json!({"status": "queued"}),
